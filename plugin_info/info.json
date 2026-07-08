@@ -1,0 +1,30 @@
+{
+  "id": "zendure",
+  "name": "Zendure",
+  "description": "Pilotage direct d'une batterie Zendure Hyper 2000 (sans passer par Home Assistant), avec équilibrage anti-injection en boucle rapide.",
+  "category": "energy",
+  "tags": ["zendure", "batterie", "solaire", "hyper2000", "anti-injection", "autoconsommation"],
+  "author": "nourdineb",
+  "website": "",
+  "version": "0.1.0-dev",
+  "require": {
+    "jeedom": "4.4"
+  },
+  "changelog": "core/config/changelog.txt",
+  "documentation": "https://github.com/",
+  "state": "dev",
+  "level": "advanced",
+  "generic": false,
+  "daemon": true,
+  "daemon_technology": "python3",
+  "isEqLogicIncludable": false,
+  "isEqLogicCopiable": true,
+  "isEqLogicRenameable": true,
+  "isEqLogicDisplayableOnDashboard": true,
+  "isEqLogicDisplayableOnMobile": true,
+  "isEqLogicScenarioElementAvailable": true,
+  "isVisible": true,
+  "isMultiEqLogicCapable": true,
+  "isMultiEqLogicOnSameEquipmentCapable": false,
+  "linkeddevice": true
+}

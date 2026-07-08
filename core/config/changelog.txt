@@ -1,0 +1,5 @@
+= 0.1.0-dev =
+* Structure initiale du plugin (scaffold).
+* Démon Python : abstraction transport Cloud (A) / Local (B), boucle rapide anti-injection.
+* eqLogic Zendure : commandes info/action, listener pince ampèremétrique.
+* Dashboard "Condensé" (v1). Dashboards "Flux" et "Historique" à venir.

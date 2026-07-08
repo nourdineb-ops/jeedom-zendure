@@ -1,0 +1,95 @@
+/* Template "Condensé" — tuile compacte ~410px (addendum §14.3) */
+.zendure-condense {
+    width: 410px;
+    max-width: 100%;
+    background: var(--bg-widget, #1e1e1e);
+    border-radius: 10px;
+    padding: 10px 14px;
+    color: var(--text-widget, #eee);
+    font-size: 13px;
+}
+
+.zendure-condense .zc-header {
+    display: flex;
+    justify-content: space-between;
+    font-weight: 600;
+    margin-bottom: 6px;
+}
+
+.zendure-condense .zc-body {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.zendure-condense .zc-soc-ring {
+    position: relative;
+    width: 72px;
+    height: 72px;
+    flex: 0 0 auto;
+}
+
+.zendure-condense .zc-soc-ring svg {
+    width: 100%;
+    height: 100%;
+    transform: rotate(-90deg);
+}
+
+.zendure-condense .zc-soc-bg {
+    fill: none;
+    stroke: rgba(255, 255, 255, 0.12);
+    stroke-width: 3;
+}
+
+.zendure-condense .zc-soc-fg {
+    fill: none;
+    stroke: #4cd964;
+    stroke-width: 3;
+    stroke-linecap: round;
+}
+
+.zendure-condense.zc-animated .zc-soc-fg {
+    transition: stroke-dasharray 0.6s ease-out;
+}
+
+.zendure-condense .zc-soc-value {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 14px;
+}
+
+.zendure-condense .zc-flux {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    flex: 1 1 auto;
+}
+
+.zendure-condense .zc-flux li {
+    display: flex;
+    justify-content: space-between;
+    padding: 1px 0;
+}
+
+.zendure-condense .zc-intensite {
+    height: 4px;
+    background: rgba(255, 255, 255, 0.12);
+    border-radius: 2px;
+    margin-top: 8px;
+    overflow: hidden;
+}
+
+.zendure-condense .zc-intensite-bar {
+    height: 100%;
+    transition: width 0.4s ease-out, background 0.4s ease-out;
+}
+
+.zendure-condense .zc-footer {
+    margin-top: 6px;
+    text-align: right;
+    opacity: 0.85;
+}
