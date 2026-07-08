@@ -1,0 +1,38 @@
+<!--
+Template "Condensé" (addendum §14.3) : tuile compacte ~410px, anneau SOC,
+4 flux clés en liste, barre d'intensité colorée fine, euros en pied.
+Tokens ##XXX## remplacés côté PHP par zendure::toHtmlCondense()
+(core/class/zendure.class.php). Une seule animation légère (anneau SOC),
+respecte ##ANIMATIONS_CLASS##.
+-->
+<div class="zendure-condense ##ANIMATIONS_CLASS##" data-eqid="##EQ_ID##">
+    <div class="zc-header">
+        <span class="zc-name">##NAME##</span>
+        <span class="zc-mode">##MODE##</span>
+    </div>
+
+    <div class="zc-body">
+        <div class="zc-soc-ring" style="--zc-soc:##SOC##">
+            <svg viewBox="0 0 36 36">
+                <path class="zc-soc-bg" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                <path class="zc-soc-fg" stroke-dasharray="##SOC##, 100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+            </svg>
+            <div class="zc-soc-value">##SOC##%</div>
+        </div>
+
+        <ul class="zc-flux">
+            <li><span class="zc-flux-label">☀ {{Solaire}}</span><span class="zc-flux-value">##SOLAR_W## W</span></li>
+            <li><span class="zc-flux-label">⇅ {{Réseau}}</span><span class="zc-flux-value">##GRID_W## W</span></li>
+            <li><span class="zc-flux-label">⌂ {{Maison}}</span><span class="zc-flux-value">##HOUSE_W## W</span></li>
+            <li><span class="zc-flux-label">⇥ {{Injecté}}</span><span class="zc-flux-value">##INJECTED_W## W</span></li>
+        </ul>
+    </div>
+
+    <div class="zc-intensite">
+        <div class="zc-intensite-bar" style="width:##INTENSITE_PCT##%;background:##INTENSITE_COLOR##"></div>
+    </div>
+
+    <div class="zc-footer">
+        <span>{{Gain jour}} : ##GAIN_JOUR## €</span>
+    </div>
+</div>
