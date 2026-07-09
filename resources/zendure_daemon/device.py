@@ -9,6 +9,7 @@ import logging
 from typing import Optional
 
 from regulation.anti_injection import AntiInjectionConfig, AntiInjectionRegulator
+from telemetry_map import translate_properties
 from transport.base import TelemetryFrame, Transport
 from transport.factory import build_transport
 
@@ -45,7 +46,15 @@ class Device:
             self._transport.set_output_limit(new_limit)
 
     def _on_telemetry(self, frame: TelemetryFrame) -> None:
-        self._callback.send_event(self.eq_id, dict(frame))
+        # La trame report Zendure vient sous {"properties": {...}} (et parfois packData) ;
+        # callback.php attend un dict plat {logicalId: valeur} (cf. core/php/callback.php).
+        # Sans ce dépaquetage/traduction, aucune commande info n'était jamais mise à jour.
+        properties = dict(frame).get("properties", {})
+        if not properties:
+            return
+        values = translate_properties(properties)
+        if values:
+            self._callback.send_event(self.eq_id, values)
 
     def _on_connection_change(self, connected: bool) -> None:
         self._callback.send_event(self.eq_id, {"transport_connected": connected})
