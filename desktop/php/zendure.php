@@ -70,28 +70,50 @@ $eqLogics = eqLogic::byType($plugin->getId());
         </div>
     </div>
 
-    <div class="col-lg-9 col-md-9 col-sm-12 col-xs-12">
-        <div class="alert alert-info">
-            {{Un eqLogic Zendure = un Hyper 2000. Multi-équipement : créer un 2e eqLogic sans recoder (addendum §13).}}
+    <div class="col-lg-9 col-md-9 col-sm-12 col-xs-12 eqLogic" style="display: none;">
+        <div class="input-group pull-right" style="display:inline-flex">
+            <span class="input-group-btn">
+                <!-- Les balises <a></a> sont volontairement fermées à la ligne suivante pour éviter les espaces entre les boutons. Ne pas modifier -->
+                <a class="btn btn-sm btn-default eqLogicAction roundedLeft" data-action="configure"><i class="fas fa-cogs"></i><span class="hidden-xs"> {{Configuration avancée}}</span>
+                </a><a class="btn btn-sm btn-default eqLogicAction" data-action="copy"><i class="fas fa-copy"></i><span class="hidden-xs"> {{Dupliquer}}</span>
+                </a><a class="btn btn-sm btn-success eqLogicAction" data-action="save"><i class="fas fa-check-circle"></i> {{Sauvegarder}}
+                </a><a class="btn btn-sm btn-danger eqLogicAction roundedRight" data-action="remove"><i class="fas fa-minus-circle"></i> {{Supprimer}}
+                </a>
+            </span>
         </div>
 
-        <form class="form-horizontal" id="div_eqLogic">
-            <fieldset>
-                <legend>{{Général}}</legend>
-                <div class="form-group">
-                    <label class="col-cm-2 control-label">{{Nom}}</label>
-                    <div class="col-cm-4">
-                        <input class="eqLogicAttr form-control" data-l1key="name" />
-                    </div>
-                    <label class="col-cm-2 control-label">{{Activer}}</label>
-                    <div class="col-cm-2">
-                        <input type="checkbox" class="eqLogicAttr" data-l1key="isEnable" checked />
-                    </div>
-                </div>
-            </fieldset>
+        <ul class="nav nav-tabs" role="tablist">
+            <li role="presentation"><a href="#" class="eqLogicAction" aria-controls="home" role="tab" data-toggle="tab" data-action="returnToThumbnailDisplay"><i class="fas fa-arrow-circle-left"></i></a></li>
+            <li role="presentation" class="active"><a href="#tab_general" aria-controls="home" role="tab" data-toggle="tab"><i class="fas fa-cog"></i> {{Zendure}}</a></li>
+            <li role="presentation"><a href="#tab_transport" aria-controls="home" role="tab" data-toggle="tab"><i class="fas fa-plug"></i> {{Transport}}</a></li>
+            <li role="presentation"><a href="#tab_sources" aria-controls="home" role="tab" data-toggle="tab"><i class="fas fa-satellite-dish"></i> {{Sources}}</a></li>
+            <li role="presentation"><a href="#tab_comportement" aria-controls="home" role="tab" data-toggle="tab"><i class="fas fa-balance-scale"></i> {{Comportement}}</a></li>
+            <li role="presentation"><a href="#tab_ihm" aria-controls="home" role="tab" data-toggle="tab"><i class="fas fa-palette"></i> {{IHM}}</a></li>
+        </ul>
 
+        <form class="form-horizontal tab-content" id="div_eqLogic">
+            <div role="tabpanel" class="tab-pane active" id="tab_general">
+                <div class="alert alert-info">
+                    {{Un eqLogic Zendure = un Hyper 2000. Multi-équipement : créer un 2e eqLogic sans recoder (addendum §13).}}
+                </div>
+                <fieldset>
+                    <legend><i class="fas fa-cog"></i> {{Général}}</legend>
+                    <div class="form-group">
+                        <label class="col-cm-2 control-label">{{Nom}}</label>
+                        <div class="col-cm-4">
+                            <input class="eqLogicAttr form-control" data-l1key="name" />
+                        </div>
+                        <label class="col-cm-2 control-label">{{Activer}}</label>
+                        <div class="col-cm-2">
+                            <input type="checkbox" class="eqLogicAttr" data-l1key="isEnable" checked />
+                        </div>
+                    </div>
+                </fieldset>
+            </div>
+
+            <div role="tabpanel" class="tab-pane" id="tab_transport">
             <fieldset>
-                <legend>{{Étage 1 — Transport / connexion}}</legend>
+                <legend><i class="fas fa-plug"></i> {{Transport / connexion}}</legend>
                 <div class="form-group">
                     <label class="col-cm-3 control-label">{{Mode de connexion}}</label>
                     <div class="col-cm-4">
@@ -161,9 +183,11 @@ $eqLogics = eqLogic::byType($plugin->getId());
                     </div>
                 </div>
             </fieldset>
+            </div>
 
+            <div role="tabpanel" class="tab-pane" id="tab_sources">
             <fieldset>
-                <legend>{{Étage 2 — Sources de lecture (jamais d'ID en dur)}}</legend>
+                <legend><i class="fas fa-satellite-dish"></i> {{Sources de lecture (jamais d'ID en dur)}}</legend>
                 <div class="form-group">
                     <label class="col-cm-3 control-label">{{Pince ampèremétrique (intensité)}}</label>
                     <div class="col-cm-5">
@@ -207,9 +231,11 @@ $eqLogics = eqLogic::byType($plugin->getId());
                     </div>
                 </div>
             </fieldset>
+            </div>
 
+            <div role="tabpanel" class="tab-pane" id="tab_comportement">
             <fieldset>
-                <legend>{{Étage 3 — Comportement}}</legend>
+                <legend><i class="fas fa-balance-scale"></i> {{Comportement}}</legend>
                 <div class="form-group">
                     <label class="col-cm-3 control-label">{{Marge anti-injection (W)}}</label>
                     <div class="col-cm-2">
@@ -256,9 +282,11 @@ $eqLogics = eqLogic::byType($plugin->getId());
                     </div>
                 </div>
             </fieldset>
+            </div>
 
+            <div role="tabpanel" class="tab-pane" id="tab_ihm">
             <fieldset>
-                <legend>{{IHM}}</legend>
+                <legend><i class="fas fa-palette"></i> {{IHM}}</legend>
                 <div class="form-group">
                     <label class="col-cm-3 control-label">{{Dashboard}}</label>
                     <div class="col-cm-3">
@@ -274,7 +302,7 @@ $eqLogics = eqLogic::byType($plugin->getId());
                     </div>
                 </div>
             </fieldset>
-
+            </div>
         </form>
     </div>
 </div>
