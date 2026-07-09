@@ -37,6 +37,14 @@ class Transport(ABC):
         """Pousse la limite de puissance d'entrée solaire via le même mécanisme non-flash."""
 
     @abstractmethod
+    def set_mode(self, mode: int) -> None:
+        """Bascule le mode de fonctionnement (1=input/charge, 2=output/décharge), propriété acMode."""
+
+    @abstractmethod
+    def set_soc_min(self, percent: int) -> None:
+        """Pousse le seuil SOC minimum (%), propriété minSoc."""
+
+    @abstractmethod
     def on_telemetry(self, callback: Callable[[TelemetryFrame], None]) -> None:
         """Enregistre le callback appelé à chaque trame de télémétrie reçue."""
 

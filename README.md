@@ -92,13 +92,32 @@ resources/install.sh           venv + pip install
 
 ## Points ouverts (à confirmer avant de figer)
 
-- ~~Structure réelle des topics/payload MQTT du Hyper 2000~~ **Confirmée** contre le
-  code source de l'intégration Home Assistant `zendure_ha` (en production sur ce
-  Hyper 2000) : topics `iot/{productKey}/{deviceId}/properties|function/...`,
-  pilotage de la limite sortie/entrée via `function/invoke` + payload
-  `deviceAutomation` (pas `properties/write`). Implémenté dans `mqtt_transport.py`.
-  Reste à vérifier en conditions réelles : credentials cloud (le flux HA passe par
-  une API cloud tierce non répliquée ici, cf. Chemin B retenu pour la v1).
+- ~~Structure réelle des topics/payload MQTT du Hyper 2000~~ **Confirmée en conditions
+  réelles** (Chemin A, cloud `mqtteu.zen-iot.com`, HA temporairement coupé pour éviter
+  tout conflit de session sur le compte) :
+  - Télémétrie : topic **sans** préfixe `iot/` (`/{productKey}/{deviceId}/properties/report`),
+    alors que les commandes/lectures utilisent le préfixe `iot/`. Souscription double-préfixe
+    implémentée dans `mqtt_transport.py`.
+  - **Validé en direct, effet réel observé sur la télémétrie** : `output_limit` (décharge,
+    `function/invoke`+`deviceAutomation`), `mode`/`acMode` et `soc_min`/`minSoc`
+    (`properties/write`).
+  - **Non résolu** : `input_limit` (charge). La commande est acceptée mais ne déclenche
+    aucune charge réelle — passer en `acMode=1` coupe simplement tous les flux de
+    puissance (solaire, sortie, batterie) sans jamais démarrer la charge, observé sur
+    150s continues. Le payload est pourtant calqué exactement sur `Hyper2000.charge()`
+    de `zendure_ha`. Hypothèses non testées : le tableau `prices` (actuellement plat)
+    joue peut-être un rôle déclencheur, ou une précondition côté device nous échappe.
+    À élucider avant de figer la commande `set_input_limit` / le mode charge du
+    régulateur anti-injection.
+  - `outputLimit` (valeur de config) a dérivé spontanément pendant les tests sans
+    action de notre part (350→285) — ce n'est pas un plafond figé, il y a une logique
+    interne au device pas encore comprise ; ne pas s'y fier comme miroir temps réel,
+    préférer `outputHomePower` pour observer l'effet réel d'une commande.
+  - Credentials cloud réels obtenus via `.storage/zendure_ha.storage` sur l'install HA
+    (compte partagé `zenHa`, lié à un `clientId` précis) — pas une clé par appareil
+    comme supposé initialement. Rejouer ce Chemin A **en parallèle** de HA (même
+    compte) provoque un conflit de session ; à trancher avant la mise en prod finale
+    (couper HA définitivement, ou obtenir des credentials indépendants).
 - ~~Signature exacte de la classe `listener` du core Jeedom~~ **Confirmée et
   corrigée** contre `core/class/listener.class.php` (VM) et l'usage réel dans
   `plugins/alarm` du core — voir `zendure.class.php::registerGridPowerListener`.
