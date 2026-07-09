@@ -84,6 +84,95 @@ class zendure extends eqLogic
         return config::byKey('socketport', 'zendure', 55071);
     }
 
+    private static function daemonPidFile()
+    {
+        return jeedom::getTmpFolder('zendure') . '/deamon.pid';
+    }
+
+    /**
+     * Convention core Jeedom (utilisée par la page racine du plugin pour peupler
+     * automatiquement la section "Démon") : cf. plugins/mqtt2/core/class/mqtt2.class.php
+     * pour la référence. Un seul démon partagé pour tous les eqLogic zendure, comme mqtt2.
+     */
+    public static function deamon_info()
+    {
+        $return = array();
+        $return['log'] = 'zendure_daemon';
+        $return['state'] = 'nok';
+
+        $dependancy = self::dependancy_info();
+        $return['launchable'] = $dependancy['state'] == 'ok' ? 'ok' : 'nok';
+        if ($return['launchable'] != 'ok') {
+            $return['launchable_message'] = __('Merci d\'installer les dépendances avant de démarrer le démon', __FILE__);
+        }
+
+        $pidFile = self::daemonPidFile();
+        if ($return['launchable'] == 'ok' && file_exists($pidFile)) {
+            $pid = trim(file_get_contents($pidFile));
+            if ($pid != '' && @posix_getsid((int) $pid)) {
+                $return['state'] = 'ok';
+            } else {
+                @unlink($pidFile);
+            }
+        }
+        return $return;
+    }
+
+    public static function deamon_start()
+    {
+        self::deamon_stop();
+        $deamonInfo = self::deamon_info();
+        if ($deamonInfo['launchable'] != 'ok') {
+            throw new Exception(__('Veuillez installer les dépendances avant de démarrer le démon', __FILE__));
+        }
+
+        self::writeDaemonConfig();
+
+        $python = realpath(dirname(__FILE__) . '/../../resources/venv/bin/python3');
+        $daemonScript = realpath(dirname(__FILE__) . '/../../resources/zendure_daemon/zendure_daemon.py');
+        $configPath = jeedom::getTmpFolder('zendure') . '/daemon_config.json';
+
+        $cmd = $python . ' ' . $daemonScript;
+        $cmd .= ' --config ' . $configPath;
+        $cmd .= ' --callback ' . network::getNetworkAccess('internal') . '/plugins/zendure/core/php/callback.php';
+        $cmd .= ' --apikey ' . jeedom::getApiKey('zendure');
+        $cmd .= ' --socketport ' . self::socketport();
+        $cmd .= ' --pid ' . self::daemonPidFile();
+        $cmd .= ' --loglevel ' . log::convertLogLevel(log::getLogLevel('zendure'));
+        log::add('zendure', 'info', 'Démarrage du démon Zendure : ' . $cmd);
+        exec($cmd . ' >> ' . log::getPathToLog('zendure_daemon') . ' 2>&1 &');
+
+        $i = 0;
+        while ($i < 30) {
+            $deamonInfo = self::deamon_info();
+            if ($deamonInfo['state'] == 'ok') {
+                break;
+            }
+            sleep(1);
+            $i++;
+        }
+        if ($i >= 30) {
+            log::add('zendure', 'error', __('Impossible de démarrer le démon Zendure, vérifiez les logs', __FILE__), 'unableStartDeamon');
+            return false;
+        }
+        message::removeAll('zendure', 'unableStartDeamon');
+        return true;
+    }
+
+    public static function deamon_stop()
+    {
+        $pidFile = self::daemonPidFile();
+        if (file_exists($pidFile)) {
+            $pid = intval(trim(file_get_contents($pidFile)));
+            if ($pid > 0) {
+                system::kill($pid);
+            }
+            @unlink($pidFile);
+        }
+        system::kill('zendure_daemon.py');
+        system::fuserk(self::socketport());
+    }
+
     /**
      * Écrit le fichier de config JSON consommé par le démon (resources/zendure_daemon/config/loader.py).
      * Appelé à chaque postSave d'un eqLogic zendure : c'est le point d'application central
