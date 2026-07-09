@@ -7,10 +7,6 @@
  * de conception complet (config-over-code, transport Cloud/Local, anti-injection).
  */
 
-if (!defined('__ROOT__')) {
-    throw new Exception('404');
-}
-
 class zendure extends eqLogic
 {
     /*
@@ -131,7 +127,9 @@ class zendure extends eqLogic
 
         self::writeDaemonConfig();
 
-        $python = realpath(dirname(__FILE__) . '/../../resources/venv/bin/python3');
+        // Pas de realpath() sur le python du venv : ça résout le symlink vers l'interpréteur
+        // système et perd le site-packages du venv (paho-mqtt introuvable au lancement).
+        $python = dirname(__FILE__) . '/../../resources/venv/bin/python3';
         $daemonScript = realpath(dirname(__FILE__) . '/../../resources/zendure_daemon/zendure_daemon.py');
         $configPath = jeedom::getTmpFolder('zendure') . '/daemon_config.json';
 
