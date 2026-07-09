@@ -49,6 +49,31 @@ if (!isConnect('admin')) {
     </fieldset>
 
     <fieldset>
+        <legend>{{Tarifs EDF (€/kWh) — communs à tous les équipements Zendure}}</legend>
+        <div class="form-group">
+            <label class="col-cm-3 control-label">{{Prix HP / HC}}</label>
+            <div class="col-cm-2">
+                <input type="number" step="0.001" class="configKey form-control" data-l1key="prix_hp" />
+            </div>
+            <div class="col-cm-2">
+                <input type="number" step="0.001" class="configKey form-control" data-l1key="prix_hc" />
+            </div>
+        </div>
+        <div class="form-group">
+            <label class="col-cm-3 control-label">{{Prix Tempo Bleu/Blanc/Rouge}}</label>
+            <div class="col-cm-2">
+                <input type="number" step="0.001" class="configKey form-control" data-l1key="prix_tempo_bleu" />
+            </div>
+            <div class="col-cm-2">
+                <input type="number" step="0.001" class="configKey form-control" data-l1key="prix_tempo_blanc" />
+            </div>
+            <div class="col-cm-2">
+                <input type="number" step="0.001" class="configKey form-control" data-l1key="prix_tempo_rouge" />
+            </div>
+        </div>
+    </fieldset>
+
+    <fieldset>
         <legend>{{Défauts anti-injection (Étage 3, repris par chaque eqLogic)}}</legend>
         <div class="form-group">
             <label class="col-cm-3 control-label">{{Marge anti-injection (W)}}</label>

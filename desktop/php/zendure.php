@@ -214,27 +214,6 @@ if (!isConnect()) {
                         <input type="number" class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="seuil_intensite_rouge" placeholder="90" />
                     </div>
                 </div>
-                <div class="form-group">
-                    <label class="col-cm-3 control-label">{{Prix HP / HC (€/kWh)}}</label>
-                    <div class="col-cm-2">
-                        <input type="number" step="0.001" class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="prix_hp" />
-                    </div>
-                    <div class="col-cm-2">
-                        <input type="number" step="0.001" class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="prix_hc" />
-                    </div>
-                </div>
-                <div class="form-group">
-                    <label class="col-cm-3 control-label">{{Prix Tempo Bleu/Blanc/Rouge (€/kWh)}}</label>
-                    <div class="col-cm-2">
-                        <input type="number" step="0.001" class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="prix_tempo_bleu" />
-                    </div>
-                    <div class="col-cm-2">
-                        <input type="number" step="0.001" class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="prix_tempo_blanc" />
-                    </div>
-                    <div class="col-cm-2">
-                        <input type="number" step="0.001" class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="prix_tempo_rouge" />
-                    </div>
-                </div>
             </fieldset>
 
             <fieldset>
@@ -255,13 +234,6 @@ if (!isConnect()) {
                 </div>
             </fieldset>
 
-            <fieldset>
-                <legend>{{Démon}}</legend>
-                <a class="btn btn-success" id="bt_dependancyInstall"><i class="fas fa-download"></i> {{Installer les dépendances}}</a>
-                <a class="btn btn-default" id="bt_deamonStart"><i class="fas fa-play"></i> {{Démarrer le démon}}</a>
-                <a class="btn btn-default" id="bt_deamonStop"><i class="fas fa-stop"></i> {{Arrêter le démon}}</a>
-                <span id="deamon_state"></span>
-            </fieldset>
         </form>
     </div>
 </div>
@@ -293,14 +265,5 @@ $(function () {
         });
     });
 
-    $('#bt_dependancyInstall').on('click', function () {
-        jeedom.plugin.dependancyInstall({ plugin: 'zendure' });
-    });
-    $('#bt_deamonStart').on('click', function () {
-        jeedom.eqLogic.deamonStart({ plugin: 'zendure' });
-    });
-    $('#bt_deamonStop').on('click', function () {
-        jeedom.eqLogic.deamonStop({ plugin: 'zendure' });
-    });
 });
 </script>
