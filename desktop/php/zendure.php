@@ -308,3 +308,4 @@ $(function () {
 
 });
 </script>
+<?php include_file('core', 'plugin.template', 'js'); ?>
