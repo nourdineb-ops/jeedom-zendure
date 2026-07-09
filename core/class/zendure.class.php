@@ -321,34 +321,38 @@ class zendure extends eqLogic
      * src_grid_papp, cf. addendum §11 étage 2). Chaîne réelle : pince -> listener ->
      * ce callback PHP -> socket démon -> décision -> MQTT (addendum §12).
      *
-     * ATTENTION : signature exacte de la classe `listener` du core à CONFIRMER sur
-     * doc.jeedom.com/fr_FR/dev avant de figer (cf. addendum §15). Implémentation ci-dessous
-     * calquée sur l'usage observé dans des plugins core (ex. virtual), à valider.
+     * Signature confirmée contre core/class/listener.class.php (VM) et l'usage réel
+     * dans plugins/alarm/core/class/alarm.class.php : pas de setClassId/setPluginId/
+     * byPluginId (n'existent pas dans le core) — le ciblage de la commande écoutée se
+     * fait via addEvent($cmdId), et le filtrage par instance via l'`option` passée à
+     * byClassAndFunction().
      */
     private function registerGridPowerListener()
     {
         $cmdId = $this->getConfiguration('src_grid_papp');
         if (empty($cmdId)) {
+            $this->removeGridPowerListener();
             return;
         }
-        $this->removeGridPowerListener();
 
-        $listener = new listener();
-        $listener->setClass('cmd');
-        $listener->setClassId($cmdId);
-        $listener->setFunction('zendure::onGridPowerEvent');
-        $listener->setOption(array('eq_id' => $this->getId()));
-        $listener->setPluginId('zendure');
+        $option = array('eq_id' => $this->getId());
+        $listener = listener::byClassAndFunction('zendure', 'onGridPowerEvent', $option);
+        if (!is_object($listener)) {
+            $listener = new listener();
+        }
+        $listener->setClass('zendure');
+        $listener->setFunction('onGridPowerEvent');
+        $listener->setOption($option);
+        $listener->emptyEvent();
+        $listener->addEvent($cmdId);
         $listener->save();
     }
 
     private function removeGridPowerListener()
     {
-        foreach (listener::byPluginId('zendure') as $listener) {
-            $option = $listener->getOption();
-            if (is_array($option) && ($option['eq_id'] ?? null) == $this->getId()) {
-                $listener->remove();
-            }
+        $listener = listener::byClassAndFunction('zendure', 'onGridPowerEvent', array('eq_id' => $this->getId()));
+        if (is_object($listener)) {
+            $listener->remove();
         }
     }
 
