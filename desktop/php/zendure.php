@@ -18,6 +18,10 @@ if (!isConnect()) {
 }
 
 $plugin = plugin::byId('zendure');
+sendVarToJS([
+    'eqType' => $plugin->getId()
+]);
+$eqLogics = eqLogic::byType($plugin->getId());
 ?>
 
 <div class="row row-overflow">
@@ -50,7 +54,20 @@ $plugin = plugin::byId('zendure');
         <div class="input-group m-b-5">
             <input class="form-control roundedLeft roundedRight" placeholder="{{Rechercher}}" id="in_search_eqLogic" />
         </div>
-        <div class="eqLogicThumbnailDisplay"></div>
+        <div class="eqLogicThumbnailDisplay">
+            <div class="eqLogicThumbnailContainer">
+                <?php
+                foreach ($eqLogics as $eqLogic) {
+                    $opacity = ($eqLogic->getIsEnable()) ? '' : 'disableCard';
+                    echo '<div class="eqLogicDisplayCard cursor ' . $opacity . '" data-eqLogic_id="' . $eqLogic->getId() . '">';
+                    echo '<img src="' . $eqLogic->getImage() . '"/>';
+                    echo '<br/>';
+                    echo '<span class="name">' . $eqLogic->getHumanName(true, true) . '</span>';
+                    echo '</div>';
+                }
+                ?>
+            </div>
+        </div>
     </div>
 
     <div class="col-lg-9 col-md-9 col-sm-12 col-xs-12">
