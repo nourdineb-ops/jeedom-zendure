@@ -16,15 +16,39 @@ if (!isConnect()) {
     include_file('desktop', '404', 'php');
     die();
 }
+
+$plugin = plugin::byId('zendure');
 ?>
 
 <div class="row row-overflow">
     <div class="col-lg-3 col-md-3 hidden-xs hidden-sm">
+        <legend><i class="fas fa-cog"></i> {{Gestion}}</legend>
+        <div class="eqLogicThumbnailContainer">
+            <div class="cursor eqLogicAction logoPrimary" data-action="add">
+                <i class="fas fa-plus-circle"></i>
+                <br />
+                <span style="color:var(--txt-color)">{{Ajouter}}</span>
+            </div>
+            <div class="cursor eqLogicAction logoSecondary" data-action="gotoPluginConf">
+                <i class="fas fa-wrench"></i>
+                <br>
+                <span style="color:var(--txt-color)">{{Configuration}}</span>
+            </div>
+            <div class="cursor pluginAction logoSecondary" data-action="openLocation" data-location="<?= $plugin->getDocumentation() ?>">
+                <i class="fas fa-book icon_blue"></i>
+                <br>
+                <span style="color:var(--txt-color)">{{Documentation}}</span>
+            </div>
+            <div class="cursor pluginAction logoSecondary" data-action="openLocation" data-location="https://community.jeedom.com/tag/plugin-<?= $plugin->getId() ?>">
+                <i class="fas fa-thumbs-up icon_green"></i>
+                <br>
+                <span style="color:var(--txt-color)">{{Community}}</span>
+            </div>
+        </div>
+
+        <legend>{{Mes Zendure}}</legend>
         <div class="input-group m-b-5">
-            <input class="form-control roundedLeft" placeholder="{{Rechercher}}" id="in_search_eqLogic" />
-            <span class="input-group-btn">
-                <a class="btn btn-default eqLogicAction roundedRight" data-action="add"><i class="fas fa-plus-circle"></i> {{Ajouter}}</a>
-            </span>
+            <input class="form-control roundedLeft roundedRight" placeholder="{{Rechercher}}" id="in_search_eqLogic" />
         </div>
         <div class="eqLogicThumbnailDisplay"></div>
     </div>
