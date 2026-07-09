@@ -7,9 +7,7 @@
   "author": "nourdineb",
   "website": "",
   "version": "0.1.0-dev",
-  "require": {
-    "jeedom": "4.4"
-  },
+  "require": "4.4",
   "changelog": "core/config/changelog.txt",
   "documentation": "https://github.com/",
   "state": "dev",
