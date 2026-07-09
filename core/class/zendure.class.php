@@ -13,7 +13,7 @@ class zendure extends eqLogic
      * Rôles logiques des commandes "info" (télémétrie brute, cf. brief §14.1).
      * logicalId => [nom affiché, sous-type, unité]
      */
-    public static $INFO_COMMANDS = array(
+    const INFO_COMMANDS = array(
         'solar_power' => array('Puissance solaire entrante', 'numeric', 'W'),
         'injected_power' => array('Puissance injectée maison', 'numeric', 'W'),
         'grid_power' => array('Puissance prélevée réseau', 'numeric', 'W'),
@@ -32,7 +32,7 @@ class zendure extends eqLogic
      * Commandes "action" (pilotage récurrent via setDeviceAutomationInOutLimit,
      * jamais d'écriture flash — brief §5 point critique #1).
      */
-    public static $ACTION_COMMANDS = array(
+    const ACTION_COMMANDS = array(
         'set_mode' => array('Mode Charge/Décharge', 'other'),
         'set_manual_power' => array('Puissance manuelle', 'slider'),
         'set_output_limit' => array('Limite sortie AC (W)', 'slider'),
@@ -43,7 +43,7 @@ class zendure extends eqLogic
     /*
      * Commandes calculées côté plugin (brief §14.2), pas des lectures brutes.
      */
-    public static $COMPUTED_COMMANDS = array(
+    const COMPUTED_COMMANDS = array(
         'gain_jour' => array('Gain Zendure (jour)', 'numeric', '€'),
         'depense_veille' => array('Dépense veille (J-1)', 'numeric', '€'),
         'depense_jour' => array('Dépense jour', 'numeric', '€'),
@@ -362,7 +362,7 @@ class zendure extends eqLogic
      */
     private function createOrUpdateCommands()
     {
-        foreach (self::$INFO_COMMANDS as $logicalId => $def) {
+        foreach (self::INFO_COMMANDS as $logicalId => $def) {
             $cmd = $this->getCmd(null, $logicalId);
             if (!is_object($cmd)) {
                 $cmd = new zendureCmd();
@@ -377,7 +377,7 @@ class zendure extends eqLogic
             $cmd->save();
         }
 
-        foreach (self::$COMPUTED_COMMANDS as $logicalId => $def) {
+        foreach (self::COMPUTED_COMMANDS as $logicalId => $def) {
             $cmd = $this->getCmd(null, $logicalId);
             if (!is_object($cmd)) {
                 $cmd = new zendureCmd();
@@ -392,7 +392,7 @@ class zendure extends eqLogic
             $cmd->save();
         }
 
-        foreach (self::$ACTION_COMMANDS as $logicalId => $def) {
+        foreach (self::ACTION_COMMANDS as $logicalId => $def) {
             $cmd = $this->getCmd(null, $logicalId);
             if (!is_object($cmd)) {
                 $cmd = new zendureCmd();
