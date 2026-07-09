@@ -1,15 +1,14 @@
 <?php
 /* This file is part of Jeedom.
  *
- * Page de gestion des eqLogic Zendure. Structure standard Jeedom (liste à gauche,
- * détail à droite en onglets). Les champs de configuration reprennent les 3 étages
- * décrits dans l'addendum §11 : transport (§1), sources (§2), comportement (§3).
+ * Page de gestion des eqLogic Zendure. Structure standard Jeedom (liste puis
+ * détail en pleine largeur, jamais côte à côte — cf. plugins/frigate,
+ * plugins/alarm, plugins/iCalendar), détail organisé en onglets reprenant les
+ * étages du brief (transport §1, sources §2, comportement §3).
  *
- * NOTE (addendum §15, point ouvert) : le sélecteur de commande source
- * (.zendureCmdSelect ci-dessous) est une implémentation MAISON (ajax
- * core/ajax/zendure.ajax.php?action=cmdList) plutôt qu'un widget natif du core
- * dont la signature exacte restait à confirmer sur doc.jeedom.com. À remplacer par
- * le widget natif si son API est confirmée équivalente ou meilleure.
+ * Sélection de commande source (onglet Sources) : widget natif du core
+ * (jeedom.cmd.getSelectModal), pas d'implémentation maison — point ouvert
+ * de l'addendum §15 tranché en faveur du widget natif, confirmé disponible.
  */
 
 if (!isConnect()) {
@@ -25,7 +24,7 @@ $eqLogics = eqLogic::byType($plugin->getId());
 ?>
 
 <div class="row row-overflow">
-    <div class="col-lg-3 col-md-3 hidden-xs hidden-sm">
+    <div class="col-xs-12 eqLogicThumbnailDisplay">
         <legend><i class="fas fa-cog"></i> {{Gestion}}</legend>
         <div class="eqLogicThumbnailContainer">
             <div class="cursor eqLogicAction logoPrimary" data-action="add">
@@ -50,27 +49,33 @@ $eqLogics = eqLogic::byType($plugin->getId());
             </div>
         </div>
 
-        <legend>{{Mes Zendure}}</legend>
-        <div class="input-group m-b-5">
-            <input class="form-control roundedLeft roundedRight" placeholder="{{Rechercher}}" id="in_search_eqLogic" />
-        </div>
-        <div class="eqLogicThumbnailDisplay">
-            <div class="eqLogicThumbnailContainer">
-                <?php
-                foreach ($eqLogics as $eqLogic) {
-                    $opacity = ($eqLogic->getIsEnable()) ? '' : 'disableCard';
-                    echo '<div class="eqLogicDisplayCard cursor ' . $opacity . '" data-eqLogic_id="' . $eqLogic->getId() . '">';
-                    echo '<img src="' . $eqLogic->getImage() . '"/>';
-                    echo '<br/>';
-                    echo '<span class="name">' . $eqLogic->getHumanName(true, true) . '</span>';
-                    echo '</div>';
-                }
-                ?>
-            </div>
-        </div>
+        <legend><i class="fas fa-table"></i> {{Mes équipements Zendure}}</legend>
+        <?php
+        if (count($eqLogics) == 0) {
+            echo '<br><div class="text-center" style="font-size:1.2em;font-weight:bold;">{{Aucun équipement Zendure trouvé, cliquez sur "Ajouter" pour commencer}}</div>';
+        } else {
+            echo '<div class="input-group" style="margin:5px;">';
+            echo '<input class="form-control roundedLeft" placeholder="{{Rechercher}}" id="in_searchEqlogic">';
+            echo '<div class="input-group-btn">';
+            echo '<a id="bt_resetSearch" class="btn" style="width:30px"><i class="fas fa-times"></i></a>';
+            echo '<a class="btn roundedRight hidden" id="bt_pluginDisplayAsTable" data-coreSupport="1" data-state="0"><i class="fas fa-grip-lines"></i></a>';
+            echo '</div>';
+            echo '</div>';
+            echo '<div class="eqLogicThumbnailContainer">';
+            foreach ($eqLogics as $eqLogic) {
+                $opacity = ($eqLogic->getIsEnable()) ? '' : 'disableCard';
+                echo '<div class="eqLogicDisplayCard cursor ' . $opacity . '" data-eqLogic_id="' . $eqLogic->getId() . '">';
+                echo '<img src="' . $eqLogic->getImage() . '"/>';
+                echo '<br/>';
+                echo '<span class="name">' . $eqLogic->getHumanName(true, true) . '</span>';
+                echo '</div>';
+            }
+            echo '</div>';
+        }
+        ?>
     </div>
 
-    <div class="col-lg-9 col-md-9 col-sm-12 col-xs-12 eqLogic" style="display: none;">
+    <div class="col-xs-12 eqLogic" style="display: none;">
         <div class="input-group pull-right" style="display:inline-flex">
             <span class="input-group-btn">
                 <!-- Les balises <a></a> sont volontairement fermées à la ligne suivante pour éviter les espaces entre les boutons. Ne pas modifier -->
@@ -84,7 +89,7 @@ $eqLogics = eqLogic::byType($plugin->getId());
 
         <ul class="nav nav-tabs" role="tablist">
             <li role="presentation"><a href="#" class="eqLogicAction" aria-controls="home" role="tab" data-toggle="tab" data-action="returnToThumbnailDisplay"><i class="fas fa-arrow-circle-left"></i></a></li>
-            <li role="presentation" class="active"><a href="#tab_general" aria-controls="home" role="tab" data-toggle="tab"><i class="fas fa-cog"></i> {{Zendure}}</a></li>
+            <li role="presentation" class="active"><a href="#tab_general" aria-controls="home" role="tab" data-toggle="tab"><i class="fas fa-tachometer-alt"></i> {{Equipement}}</a></li>
             <li role="presentation"><a href="#tab_transport" aria-controls="home" role="tab" data-toggle="tab"><i class="fas fa-plug"></i> {{Transport}}</a></li>
             <li role="presentation"><a href="#tab_sources" aria-controls="home" role="tab" data-toggle="tab"><i class="fas fa-satellite-dish"></i> {{Sources}}</a></li>
             <li role="presentation"><a href="#tab_comportement" aria-controls="home" role="tab" data-toggle="tab"><i class="fas fa-balance-scale"></i> {{Comportement}}</a></li>
@@ -97,211 +102,245 @@ $eqLogics = eqLogic::byType($plugin->getId());
                     {{Un eqLogic Zendure = un Hyper 2000. Multi-équipement : créer un 2e eqLogic sans recoder (addendum §13).}}
                 </div>
                 <fieldset>
-                    <legend><i class="fas fa-cog"></i> {{Général}}</legend>
+                    <legend><i class="fas fa-tachometer-alt"></i> {{Equipement}}</legend>
                     <div class="form-group">
-                        <label class="col-cm-2 control-label">{{Nom}}</label>
-                        <div class="col-cm-4">
+                        <label class="col-sm-2 control-label">{{Nom de l'équipement}}</label>
+                        <div class="col-sm-4">
                             <input class="eqLogicAttr form-control" data-l1key="name" />
                         </div>
-                        <label class="col-cm-2 control-label">{{Activer}}</label>
-                        <div class="col-cm-2">
-                            <input type="checkbox" class="eqLogicAttr" data-l1key="isEnable" checked />
+                        <label class="col-sm-2 control-label">{{Objet parent}}</label>
+                        <div class="col-sm-4">
+                            <select class="eqLogicAttr form-control" data-l1key="object_id">
+                                <option value="">{{Aucun}}</option>
+                                <?php
+                                foreach (jeeObject::buildTree(null, false) as $object) {
+                                    echo '<option value="' . $object->getId() . '">' . str_repeat('&nbsp;&nbsp;', $object->getConfiguration('parentNumber')) . $object->getName() . '</option>';
+                                }
+                                ?>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="col-sm-2 control-label">{{Statut}}</label>
+                        <div class="col-sm-4">
+                            <label class="checkbox-inline"><input type="checkbox" class="eqLogicAttr" data-l1key="isEnable" checked /> {{Activé}}</label>
+                            <label class="checkbox-inline"><input type="checkbox" class="eqLogicAttr" data-l1key="isVisible" checked /> {{Visible}}</label>
+                        </div>
+                        <label class="col-sm-2 control-label">{{Catégorie}}</label>
+                        <div class="col-sm-4">
+                            <?php
+                            foreach (jeedom::getConfiguration('eqLogic:category') as $key => $value) {
+                                echo '<label class="checkbox-inline">';
+                                echo '<input type="checkbox" class="eqLogicAttr" data-l1key="category" data-l2key="' . $key . '"' . ($key == 'energy' ? ' checked' : '') . ' /> ' . $value['name'];
+                                echo '</label>';
+                            }
+                            ?>
                         </div>
                     </div>
                 </fieldset>
             </div>
 
             <div role="tabpanel" class="tab-pane" id="tab_transport">
-            <fieldset>
-                <legend><i class="fas fa-plug"></i> {{Transport / connexion}}</legend>
-                <div class="form-group">
-                    <label class="col-cm-3 control-label">{{Mode de connexion}}</label>
-                    <div class="col-cm-4">
-                        <select id="sel_mode_connexion" class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="mode_connexion">
-                            <option value="local">{{Local (Chemin B — recommandé v1, zéro-injection)}}</option>
-                            <option value="cloud">{{Cloud (Chemin A — simple mais latent ~90s)}}</option>
-                        </select>
+                <div class="row">
+                    <div class="col-md-6">
+                        <legend><i class="fas fa-plug"></i> {{Connexion}}</legend>
+                        <fieldset>
+                            <div class="form-group">
+                                <label class="col-sm-4 control-label">{{Mode de connexion}}</label>
+                                <div class="col-sm-8">
+                                    <select id="sel_mode_connexion" class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="mode_connexion">
+                                        <option value="local">{{Local (Chemin B — recommandé v1, zéro-injection)}}</option>
+                                        <option value="cloud">{{Cloud (Chemin A — simple mais latent ~90s)}}</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label class="col-sm-4 control-label">{{Identifiant appareil (device_id)}}</label>
+                                <div class="col-sm-8">
+                                    <input class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="device_id" />
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label class="col-sm-4 control-label">{{Product key}}</label>
+                                <div class="col-sm-8">
+                                    <input class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="product_key" />
+                                </div>
+                            </div>
+                        </fieldset>
                     </div>
-                </div>
-                <div class="form-group">
-                    <label class="col-cm-3 control-label">{{Identifiant appareil (device_id)}}</label>
-                    <div class="col-cm-4">
-                        <input class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="device_id" />
-                    </div>
-                    <label class="col-cm-2 control-label">{{Product key}}</label>
-                    <div class="col-cm-3">
-                        <input class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="product_key" />
-                    </div>
-                </div>
 
-                <div id="bloc_cloud">
-                    <div class="form-group">
-                        <label class="col-cm-3 control-label">{{Broker cloud}}</label>
-                        <div class="col-cm-4">
-                            <input class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="cloud_host" placeholder="mqtt-eu.zen-iot.com" />
+                    <div class="col-md-6">
+                        <div id="bloc_cloud">
+                            <legend><i class="fas fa-cloud"></i> {{Identifiants Cloud (Chemin A)}}</legend>
+                            <fieldset>
+                                <div class="form-group">
+                                    <label class="col-sm-4 control-label">{{Broker cloud}}</label>
+                                    <div class="col-sm-8">
+                                        <input class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="cloud_host" placeholder="mqtt-eu.zen-iot.com" />
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label class="col-sm-4 control-label">{{Port}}</label>
+                                    <div class="col-sm-8">
+                                        <input type="number" class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="cloud_port" placeholder="1883" />
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label class="col-sm-4 control-label">{{Clé Cloud d'Autorisation}}</label>
+                                    <div class="col-sm-8">
+                                        <input type="password" class="eqLogicAttr inputPassword form-control" data-l1key="configuration" data-l2key="cloud_auth_key" />
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label class="col-sm-4 control-label">{{Numéro de série}}</label>
+                                    <div class="col-sm-8">
+                                        <input class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="cloud_device_serial" />
+                                    </div>
+                                </div>
+                            </fieldset>
                         </div>
-                        <label class="col-cm-2 control-label">{{Port}}</label>
-                        <div class="col-cm-3">
-                            <input type="number" class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="cloud_port" placeholder="1883" />
-                        </div>
-                    </div>
-                    <div class="form-group">
-                        <label class="col-cm-3 control-label">{{Clé Cloud d'Autorisation}}</label>
-                        <div class="col-cm-4">
-                            <input type="password" class="eqLogicAttr inputPassword form-control" data-l1key="configuration" data-l2key="cloud_auth_key" />
-                        </div>
-                        <label class="col-cm-2 control-label">{{Numéro de série}}</label>
-                        <div class="col-cm-3">
-                            <input class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="cloud_device_serial" />
-                        </div>
-                    </div>
-                </div>
 
-                <div id="bloc_local">
-                    <div class="form-group">
-                        <label class="col-cm-3 control-label">{{IP Mosquitto local}}</label>
-                        <div class="col-cm-4">
-                            <input class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="local_host" placeholder="192.168.1.50" />
+                        <div id="bloc_local">
+                            <legend><i class="fas fa-network-wired"></i> {{Broker local (Chemin B)}}</legend>
+                            <fieldset>
+                                <div class="form-group">
+                                    <label class="col-sm-4 control-label">{{IP Mosquitto local}}</label>
+                                    <div class="col-sm-8">
+                                        <input class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="local_host" placeholder="192.168.1.50" />
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label class="col-sm-4 control-label">{{Port}}</label>
+                                    <div class="col-sm-8">
+                                        <input type="number" class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="local_port" placeholder="1883" />
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label class="col-sm-4 control-label">{{Identifiant (optionnel)}}</label>
+                                    <div class="col-sm-8">
+                                        <input class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="local_username" />
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label class="col-sm-4 control-label">{{Mot de passe}}</label>
+                                    <div class="col-sm-8">
+                                        <input type="password" class="eqLogicAttr inputPassword form-control" data-l1key="configuration" data-l2key="local_password" />
+                                    </div>
+                                </div>
+                                <div class="alert alert-warning">
+                                    {{Prérequis Chemin B : relais DNS mq.zen-iot.com -> Mosquitto local + reconfiguration Bluetooth de l'appareil (Solarflow Bluetooth Manager / Zendure Cloud Disconnector). Voir README.}}
+                                </div>
+                            </fieldset>
                         </div>
-                        <label class="col-cm-2 control-label">{{Port}}</label>
-                        <div class="col-cm-3">
-                            <input type="number" class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="local_port" placeholder="1883" />
-                        </div>
-                    </div>
-                    <div class="form-group">
-                        <label class="col-cm-3 control-label">{{Identifiant (optionnel)}}</label>
-                        <div class="col-cm-4">
-                            <input class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="local_username" />
-                        </div>
-                        <label class="col-cm-2 control-label">{{Mot de passe}}</label>
-                        <div class="col-cm-3">
-                            <input type="password" class="eqLogicAttr inputPassword form-control" data-l1key="configuration" data-l2key="local_password" />
-                        </div>
-                    </div>
-                    <div class="alert alert-warning">
-                        {{Prérequis Chemin B : relais DNS mq.zen-iot.com -> Mosquitto local + reconfiguration Bluetooth de l'appareil (Solarflow Bluetooth Manager / Zendure Cloud Disconnector). Voir README.}}
                     </div>
                 </div>
-            </fieldset>
             </div>
 
             <div role="tabpanel" class="tab-pane" id="tab_sources">
-            <fieldset>
-                <legend><i class="fas fa-satellite-dish"></i> {{Sources de lecture (jamais d'ID en dur)}}</legend>
-                <div class="form-group">
-                    <label class="col-cm-3 control-label">{{Pince ampèremétrique (intensité)}}</label>
-                    <div class="col-cm-5">
-                        <select class="zendureCmdSelect eqLogicAttr form-control" data-l1key="configuration" data-l2key="src_intensite"></select>
+                <fieldset>
+                    <legend><i class="fas fa-satellite-dish"></i> {{Sources de lecture (jamais d'ID en dur)}}</legend>
+                    <div class="alert alert-info">
+                        {{Chaque source pointe vers une commande "info" existante (pince, téléinfo, Tempo, prévision solaire...) via le sélecteur natif Jeedom.}}
                     </div>
-                </div>
-                <div class="form-group">
-                    <label class="col-cm-3 control-label">{{PAPP réseau}}</label>
-                    <div class="col-cm-5">
-                        <select class="zendureCmdSelect eqLogicAttr form-control" data-l1key="configuration" data-l2key="src_grid_papp"></select>
-                    </div>
-                </div>
-                <div class="form-group">
-                    <label class="col-cm-3 control-label">{{Imax abonnement}}</label>
-                    <div class="col-cm-5">
-                        <select class="zendureCmdSelect eqLogicAttr form-control" data-l1key="configuration" data-l2key="src_imax_abonnement"></select>
-                    </div>
-                </div>
-                <div class="form-group">
-                    <label class="col-cm-3 control-label">{{Période tarifaire (PTEC / HP-HC)}}</label>
-                    <div class="col-cm-5">
-                        <select class="zendureCmdSelect eqLogicAttr form-control" data-l1key="configuration" data-l2key="src_periode_tarif"></select>
-                    </div>
-                </div>
-                <div class="form-group">
-                    <label class="col-cm-3 control-label">{{Tempo (now / J / J+1)}}</label>
-                    <div class="col-cm-2">
-                        <select class="zendureCmdSelect eqLogicAttr form-control" data-l1key="configuration" data-l2key="src_tempo_now"></select>
-                    </div>
-                    <div class="col-cm-2">
-                        <select class="zendureCmdSelect eqLogicAttr form-control" data-l1key="configuration" data-l2key="src_tempo_j"></select>
-                    </div>
-                    <div class="col-cm-2">
-                        <select class="zendureCmdSelect eqLogicAttr form-control" data-l1key="configuration" data-l2key="src_tempo_j1"></select>
-                    </div>
-                </div>
-                <div class="form-group">
-                    <label class="col-cm-3 control-label">{{Prévision solaire (kWh)}}</label>
-                    <div class="col-cm-5">
-                        <select class="zendureCmdSelect eqLogicAttr form-control" data-l1key="configuration" data-l2key="src_prevision_solaire"></select>
-                    </div>
-                </div>
-            </fieldset>
+                    <?php
+                    $sources = [
+                        'src_intensite' => '{{Pince ampèremétrique (intensité)}}',
+                        'src_grid_papp' => '{{PAPP réseau}}',
+                        'src_imax_abonnement' => '{{Imax abonnement}}',
+                        'src_periode_tarif' => '{{Période tarifaire (PTEC / HP-HC)}}',
+                        'src_tempo_now' => '{{Tempo — jour même}}',
+                        'src_tempo_j' => '{{Tempo — J}}',
+                        'src_tempo_j1' => '{{Tempo — J+1}}',
+                        'src_prevision_solaire' => '{{Prévision solaire (kWh)}}',
+                    ];
+                    foreach ($sources as $key => $label) {
+                        echo '<div class="form-group">';
+                        echo '<label class="col-sm-3 control-label">' . $label . '</label>';
+                        echo '<div class="col-sm-6">';
+                        echo '<div class="input-group">';
+                        echo '<input type="text" class="form-control cmdSourceDisplay" id="disp_' . $key . '" placeholder="{{Aucune commande sélectionnée}}" readonly />';
+                        echo '<input type="hidden" class="eqLogicAttr cmdSourceValue" data-l1key="configuration" data-l2key="' . $key . '" id="val_' . $key . '" />';
+                        echo '<span class="input-group-btn">';
+                        echo '<a class="btn btn-default bt_selectCmd" data-target="' . $key . '" title="{{Choisir une commande}}"><i class="fas fa-search"></i></a>';
+                        echo '<a class="btn btn-default bt_clearCmd" data-target="' . $key . '" title="{{Effacer}}"><i class="fas fa-times"></i></a>';
+                        echo '</span>';
+                        echo '</div>';
+                        echo '</div>';
+                        echo '</div>';
+                    }
+                    ?>
+                </fieldset>
             </div>
 
             <div role="tabpanel" class="tab-pane" id="tab_comportement">
-            <fieldset>
-                <legend><i class="fas fa-balance-scale"></i> {{Comportement}}</legend>
-                <div class="form-group">
-                    <label class="col-cm-3 control-label">{{Marge anti-injection (W)}}</label>
-                    <div class="col-cm-2">
-                        <input type="number" class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="marge_anti_injection" placeholder="30" />
+                <fieldset>
+                    <legend><i class="fas fa-balance-scale"></i> {{Comportement}}</legend>
+                    <div class="form-group">
+                        <label class="col-sm-3 control-label">{{Marge anti-injection (W)}}</label>
+                        <div class="col-sm-2">
+                            <input type="number" class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="marge_anti_injection" placeholder="30" />
+                        </div>
+                        <label class="col-sm-3 control-label">{{Cooldown (s)}}</label>
+                        <div class="col-sm-2">
+                            <input type="number" step="0.1" class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="cooldown_anti_injection" placeholder="2" />
+                        </div>
                     </div>
-                    <label class="col-cm-3 control-label">{{Cooldown (s)}}</label>
-                    <div class="col-cm-2">
-                        <input type="number" step="0.1" class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="cooldown_anti_injection" placeholder="2" />
+                    <div class="form-group">
+                        <label class="col-sm-3 control-label">{{Hystérésis (W)}}</label>
+                        <div class="col-sm-2">
+                            <input type="number" class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="hysteresis_anti_injection" placeholder="15" />
+                        </div>
+                        <label class="col-sm-3 control-label">{{Limites sortie min/max (W)}}</label>
+                        <div class="col-sm-1">
+                            <input type="number" class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="limite_min_w" placeholder="0" />
+                        </div>
+                        <div class="col-sm-1">
+                            <input type="number" class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="limite_max_w" placeholder="1200" />
+                        </div>
                     </div>
-                </div>
-                <div class="form-group">
-                    <label class="col-cm-3 control-label">{{Hystérésis (W)}}</label>
-                    <div class="col-cm-2">
-                        <input type="number" class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="hysteresis_anti_injection" placeholder="15" />
+                    <div class="form-group">
+                        <label class="col-sm-3 control-label">{{Imax (A)}}</label>
+                        <div class="col-sm-2">
+                            <input type="number" class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="imax_ampere" />
+                        </div>
+                        <label class="col-sm-3 control-label">{{Réseau}}</label>
+                        <div class="col-sm-2">
+                            <select class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="phases">
+                                <option value="mono">{{Monophasé}}</option>
+                                <option value="tri">{{Triphasé}}</option>
+                            </select>
+                        </div>
                     </div>
-                    <label class="col-cm-3 control-label">{{Limites sortie min/max (W)}}</label>
-                    <div class="col-cm-1">
-                        <input type="number" class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="limite_min_w" placeholder="0" />
+                    <div class="form-group">
+                        <label class="col-sm-3 control-label">{{Seuil jauge ambre / rouge (%)}}</label>
+                        <div class="col-sm-2">
+                            <input type="number" class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="seuil_intensite_ambre" placeholder="70" />
+                        </div>
+                        <div class="col-sm-2">
+                            <input type="number" class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="seuil_intensite_rouge" placeholder="90" />
+                        </div>
                     </div>
-                    <div class="col-cm-1">
-                        <input type="number" class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="limite_max_w" placeholder="1200" />
-                    </div>
-                </div>
-                <div class="form-group">
-                    <label class="col-cm-3 control-label">{{Imax (A)}}</label>
-                    <div class="col-cm-2">
-                        <input type="number" class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="imax_ampere" />
-                    </div>
-                    <label class="col-cm-3 control-label">{{Réseau}}</label>
-                    <div class="col-cm-2">
-                        <select class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="phases">
-                            <option value="mono">{{Monophasé}}</option>
-                            <option value="tri">{{Triphasé}}</option>
-                        </select>
-                    </div>
-                </div>
-                <div class="form-group">
-                    <label class="col-cm-3 control-label">{{Seuil jauge ambre / rouge (%)}}</label>
-                    <div class="col-cm-2">
-                        <input type="number" class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="seuil_intensite_ambre" placeholder="70" />
-                    </div>
-                    <div class="col-cm-2">
-                        <input type="number" class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="seuil_intensite_rouge" placeholder="90" />
-                    </div>
-                </div>
-            </fieldset>
+                </fieldset>
             </div>
 
             <div role="tabpanel" class="tab-pane" id="tab_ihm">
-            <fieldset>
-                <legend><i class="fas fa-palette"></i> {{IHM}}</legend>
-                <div class="form-group">
-                    <label class="col-cm-3 control-label">{{Dashboard}}</label>
-                    <div class="col-cm-3">
-                        <select class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="template_dashboard">
-                            <option value="flux">{{Flux}}</option>
-                            <option value="condense">{{Condensé}}</option>
-                            <option value="historique">{{Historique}}</option>
-                        </select>
+                <fieldset>
+                    <legend><i class="fas fa-palette"></i> {{IHM}}</legend>
+                    <div class="form-group">
+                        <label class="col-sm-3 control-label">{{Dashboard}}</label>
+                        <div class="col-sm-3">
+                            <select class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="template_dashboard">
+                                <option value="flux">{{Flux}}</option>
+                                <option value="condense">{{Condensé}}</option>
+                                <option value="historique">{{Historique}}</option>
+                            </select>
+                        </div>
+                        <label class="col-sm-2 control-label">{{Animations}}</label>
+                        <div class="col-sm-2">
+                            <input type="checkbox" class="eqLogicAttr" data-l1key="configuration" data-l2key="animations_actives" checked />
+                        </div>
                     </div>
-                    <label class="col-cm-2 control-label">{{Animations}}</label>
-                    <div class="col-cm-2">
-                        <input type="checkbox" class="eqLogicAttr" data-l1key="configuration" data-l2key="animations_actives" checked />
-                    </div>
-                </div>
-            </fieldset>
+                </fieldset>
             </div>
         </form>
     </div>
@@ -315,25 +354,37 @@ $(function () {
         $('#bloc_local').toggle(mode == 'local');
     }).trigger('change');
 
-    $('.zendureCmdSelect').each(function () {
-        var $sel = $(this);
-        var current = $sel.attr('data-cmdid') || '';
-        jeedom.plugin.ajax({
-            action: 'cmdList',
-            plugin: 'zendure',
-            error: function (error) {
-                $('#div_alert').showAlert({ message: error.message, level: 'danger' });
-            },
-            success: function (data) {
-                $sel.empty().append('<option value="">{{Choisir une commande}}</option>');
-                $.each(data, function (i, cmd) {
-                    $sel.append('<option value="' + cmd.id + '">' + cmd.eqName + ' :: ' + cmd.name + '</option>');
-                });
-                $sel.val(current);
+    $('body').off('click', '.bt_selectCmd').on('click', '.bt_selectCmd', function () {
+        var key = $(this).data('target');
+        jeedom.cmd.getSelectModal({}, function (result) {
+            if (!isset(result.cmd) || result.cmd.id == '') {
+                return;
             }
+            $('#val_' + key).value(result.cmd.id).trigger('change');
+            $('#disp_' + key).value(result.human);
         });
     });
 
+    $('body').off('click', '.bt_clearCmd').on('click', '.bt_clearCmd', function () {
+        var key = $(this).data('target');
+        $('#val_' + key).value('').trigger('change');
+        $('#disp_' + key).value('');
+    });
+
+    $('.cmdSourceValue').each(function () {
+        var $val = $(this);
+        var cmdId = $val.value();
+        if (cmdId == '' || cmdId == undefined) {
+            return;
+        }
+        var key = $val.attr('id').replace('val_', '');
+        jeedom.cmd.getHumanCmdName({
+            id: cmdId,
+            success: function (data) {
+                $('#disp_' + key).value(data.result);
+            }
+        });
+    });
 });
 </script>
 <?php include_file('core', 'plugin.template', 'js'); ?>
