@@ -92,11 +92,16 @@ resources/install.sh           venv + pip install
 
 ## Points ouverts (à confirmer avant de figer)
 
-- Structure réelle des topics/payload MQTT du Hyper 2000 — voir références ci-dessous.
-  `mqtt_transport.py` a des templates de topic **configurables** en attendant.
-- Signature exacte de la classe `listener` du core Jeedom (utilisée dans
-  `zendure.class.php::registerGridPowerListener`) — à valider contre
-  `doc.jeedom.com/fr_FR/dev` ou le code source du core au premier déploiement.
+- ~~Structure réelle des topics/payload MQTT du Hyper 2000~~ **Confirmée** contre le
+  code source de l'intégration Home Assistant `zendure_ha` (en production sur ce
+  Hyper 2000) : topics `iot/{productKey}/{deviceId}/properties|function/...`,
+  pilotage de la limite sortie/entrée via `function/invoke` + payload
+  `deviceAutomation` (pas `properties/write`). Implémenté dans `mqtt_transport.py`.
+  Reste à vérifier en conditions réelles : credentials cloud (le flux HA passe par
+  une API cloud tierce non répliquée ici, cf. Chemin B retenu pour la v1).
+- ~~Signature exacte de la classe `listener` du core Jeedom~~ **Confirmée et
+  corrigée** contre `core/class/listener.class.php` (VM) et l'usage réel dans
+  `plugins/alarm` du core — voir `zendure.class.php::registerGridPowerListener`.
 - Convention exacte des templates de dashboard custom (`core/template/dashboard/`) —
   implémenté ici via `eqLogic::toHtml()` surchargé (extension point standard et sûr),
   à confirmer si une convention native de fichiers existe et serait préférable.

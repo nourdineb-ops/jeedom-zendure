@@ -5,11 +5,15 @@ Rien de spécifique à "cloud" ou "local" ici : uniquement des paramètres de co
 (cf. factory.py). C'est la même classe qui tourne dans les deux cas — cf. brief §4 :
 "le cœur est identique ; seule la couche transport MQTT change".
 
-Structure des topics / charge utile de commande à CONFIRMER sur l'installation réelle
-(brief §15) en lisant iobroker.zendure-solarflow (Nograx) et
-Zendure/developer-device-data-report. Les templates sont donc des paramètres de
-config (topic_telemetry, topic_command, property_output_limit, property_input_limit),
-pas des constantes en dur, pour pouvoir corriger sans recoder.
+Protocole (topics + payloads) confirmé contre le code source réel de l'intégration
+Home Assistant `zendure_ha` (custom_components/zendure_ha/device.py et
+devices/hyper2000.py, testée en production sur ce même Hyper 2000) :
+- Souscription télémétrie en wildcard `iot/{product_key}/{device_id}/#`, la trame
+  utile arrivant sur le suffixe `properties/report`.
+- Le pilotage de la limite de sortie/entrée (setDeviceAutomationInOutLimit) ne passe
+  PAS par `properties/write` mais par `function/invoke`, payload `deviceAutomation`
+  (cf. Hyper2000.discharge/charge dans zendure_ha). C'est le seul mécanisme qui
+  déclenche réellement l'automation embarquée sans écriture flash.
 """
 
 import json
@@ -31,9 +35,8 @@ class MqttTransport(Transport):
         """conn attendu (toutes les clés viennent de la config, cf. Étage 1 du brief) :
         host, port, tls (bool), username, password, client_id,
         device_id, product_key,
-        topic_telemetry (template avec {device_id}/{product_key}),
-        topic_command (template idem),
-        property_output_limit, property_input_limit (noms de propriété setDeviceAutomationInOutLimit).
+        topic_telemetry (souscription wildcard, template avec {device_id}/{product_key}),
+        topic_function (topic de commande deviceAutomation, template idem).
         """
         self._conn = conn
         self._client = mqtt.Client(client_id=conn.get("client_id") or f"jeedom-zendure-{conn['device_id']}")
@@ -41,6 +44,7 @@ class MqttTransport(Transport):
         self._conn_cb: Optional[Callable[[bool], None]] = None
         self._connected = False
         self._lock = threading.Lock()
+        self._message_id = 0
 
         if conn.get("username"):
             self._client.username_pw_set(conn.get("username"), conn.get("password"))
@@ -68,10 +72,26 @@ class MqttTransport(Transport):
             return self._connected
 
     def set_output_limit(self, watts: int) -> None:
-        self._publish_property(self._conn["property_output_limit"], int(watts))
+        # autoModelProgram=2 : décharge (sortie vers la maison), cf. Hyper2000.discharge (zendure_ha).
+        self._publish_automation(
+            program=2,
+            value={"chargingType": 0, "chargingPower": 0, "freq": 0, "outPower": int(watts)},
+        )
 
     def set_input_limit(self, watts: int) -> None:
-        self._publish_property(self._conn["property_input_limit"], int(watts))
+        # autoModelProgram=1 : charge (depuis le réseau), cf. Hyper2000.charge (zendure_ha).
+        # chargingPower est positif côté device même si watts représente une limite de charge.
+        self._publish_automation(
+            program=1,
+            value={
+                "chargingType": 1,
+                "price": 2,
+                "chargingPower": int(watts),
+                "prices": [1] * 24,
+                "outPower": 0,
+                "freq": 0,
+            },
+        )
 
     def on_telemetry(self, callback: Callable[[TelemetryFrame], None]) -> None:
         self._telemetry_cb = callback
@@ -81,13 +101,33 @@ class MqttTransport(Transport):
 
     # -- Internals -------------------------------------------------------------
 
-    def _publish_property(self, property_name: str, value: int) -> None:
-        topic = self._conn["topic_command"].format(
+    def _next_message_id(self) -> int:
+        self._message_id += 1
+        return self._message_id
+
+    def _publish_automation(self, program: int, value: dict) -> None:
+        topic = self._conn["topic_function"].format(
             device_id=self._conn["device_id"], product_key=self._conn.get("product_key", "")
         )
-        # setDeviceAutomationInOutLimit : ne déclenche pas d'écriture flash côté appareil
-        # (cf. brief §5 point critique #1). Format de payload à confirmer (§15).
-        payload = json.dumps({"properties": {property_name: value}, "messageId": int(time.time() * 1000)})
+        # deviceAutomation/autoModel=8 : seul mécanisme qui déclenche l'automation embarquée
+        # sans écriture flash (setDeviceAutomationInOutLimit, cf. brief §5 point critique #1) —
+        # confirmé contre Hyper2000.charge/discharge dans l'intégration zendure_ha.
+        payload = json.dumps(
+            {
+                "arguments": [
+                    {
+                        "autoModelProgram": program,
+                        "autoModelValue": value,
+                        "msgType": 1,
+                        "autoModel": 8,
+                    }
+                ],
+                "function": "deviceAutomation",
+                "messageId": self._next_message_id(),
+                "deviceKey": self._conn["device_id"],
+                "timestamp": int(time.time()),
+            }
+        )
         log.debug("Publish %s -> %s", topic, payload)
         self._client.publish(topic, payload, qos=1)
 
@@ -113,6 +153,10 @@ class MqttTransport(Transport):
             self._conn_cb(False)
 
     def _on_message(self, client, userdata, msg):
+        # Le topic souscrit est un wildcard (.../#) : seule la trame de télémétrie
+        # (suffixe properties/report) nous intéresse, cf. mqttMessage() dans zendure_ha.
+        if not msg.topic.endswith("properties/report"):
+            return
         try:
             data = json.loads(msg.payload.decode("utf-8"))
         except (ValueError, UnicodeDecodeError):
