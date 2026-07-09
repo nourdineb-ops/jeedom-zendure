@@ -6,10 +6,12 @@ où "cloud" et "local" divergent, sur les paramètres de connexion uniquement.
 
 from .mqtt_transport import MqttTransport
 
-DEFAULT_TOPIC_TELEMETRY = "iot/{product_key}/{device_id}/properties/report"
-DEFAULT_TOPIC_COMMAND = "iot/{product_key}/{device_id}/properties/write"
-DEFAULT_PROPERTY_OUTPUT_LIMIT = "outputLimit"
-DEFAULT_PROPERTY_INPUT_LIMIT = "inputLimit"
+# Topics confirmés contre le code source de l'intégration Home Assistant zendure_ha
+# (custom_components/zendure_ha/device.py), en production sur ce même Hyper 2000.
+# Souscription en wildcard : le filtrage sur properties/report se fait dans
+# MqttTransport._on_message.
+DEFAULT_TOPIC_TELEMETRY = "iot/{product_key}/{device_id}/#"
+DEFAULT_TOPIC_FUNCTION = "iot/{product_key}/{device_id}/function/invoke"
 
 
 def build_transport(eq_config: dict) -> MqttTransport:
@@ -39,9 +41,7 @@ def build_transport(eq_config: dict) -> MqttTransport:
             "device_id": eq_config["device_id"],
             "product_key": eq_config.get("product_key", ""),
             "topic_telemetry": eq_config.get("topic_telemetry", DEFAULT_TOPIC_TELEMETRY),
-            "topic_command": eq_config.get("topic_command", DEFAULT_TOPIC_COMMAND),
-            "property_output_limit": eq_config.get("property_output_limit", DEFAULT_PROPERTY_OUTPUT_LIMIT),
-            "property_input_limit": eq_config.get("property_input_limit", DEFAULT_PROPERTY_INPUT_LIMIT),
+            "topic_function": eq_config.get("topic_function", DEFAULT_TOPIC_FUNCTION),
         }
     )
     return MqttTransport(conn)
