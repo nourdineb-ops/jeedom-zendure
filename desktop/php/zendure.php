@@ -106,6 +106,7 @@ $eqLogics = eqLogic::byType($plugin->getId());
                     <div class="form-group">
                         <label class="col-sm-2 control-label">{{Nom de l'équipement}}</label>
                         <div class="col-sm-6">
+                            <input type="text" class="eqLogicAttr form-control" data-l1key="id" style="display:none;">
                             <input class="eqLogicAttr form-control" data-l1key="name" />
                         </div>
                     </div>
