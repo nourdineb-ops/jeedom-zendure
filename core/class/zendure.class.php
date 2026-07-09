@@ -75,8 +75,11 @@ class zendure extends eqLogic
 
     public static function dependancy_install()
     {
-        log::add('zendure', 'info', 'Installation des dépendances du démon (venv + pip)');
-        return exec::execInBg('bash ' . dirname(__FILE__) . '/../../resources/install.sh', 'zendure_dependancy');
+        log::remove('zendure_update');
+        return array(
+            'script' => dirname(__FILE__) . '/../../resources/install.sh',
+            'log' => log::getPathToLog('zendure_update'),
+        );
     }
 
     public static function socketport()
