@@ -93,6 +93,14 @@ class MqttTransport(Transport):
             },
         )
 
+    def set_mode(self, mode: int) -> None:
+        # acMode (1=input/2=output) passe par properties/write, PAS function/invoke
+        # (canal distinct, cf. ZendureDevice.entityWrite dans zendure_ha) — confirmé en direct.
+        self._publish_property("acMode", int(mode))
+
+    def set_soc_min(self, percent: int) -> None:
+        self._publish_property("minSoc", int(percent))
+
     def on_telemetry(self, callback: Callable[[TelemetryFrame], None]) -> None:
         self._telemetry_cb = callback
 
@@ -131,15 +139,34 @@ class MqttTransport(Transport):
         log.debug("Publish %s -> %s", topic, payload)
         self._client.publish(topic, payload, qos=1)
 
+    def _publish_property(self, name: str, value) -> None:
+        topic = self._conn["topic_write"].format(
+            device_id=self._conn["device_id"], product_key=self._conn.get("product_key", "")
+        )
+        payload = json.dumps(
+            {
+                "deviceId": self._conn["device_id"],
+                "messageId": self._next_message_id(),
+                "timestamp": int(time.time()),
+                "properties": {name: value},
+            }
+        )
+        log.debug("Publish %s -> %s", topic, payload)
+        self._client.publish(topic, payload, qos=1)
+
     def _on_connect(self, client, userdata, flags, rc):
         with self._lock:
             self._connected = rc == 0
         if rc == 0:
-            topic = self._conn["topic_telemetry"].format(
-                device_id=self._conn["device_id"], product_key=self._conn.get("product_key", "")
-            )
+            pk = self._conn.get("product_key", "")
+            did = self._conn["device_id"]
+            topic = self._conn["topic_telemetry"].format(device_id=did, product_key=pk)
             client.subscribe(topic, qos=1)
-            log.info("Connecté, abonné à %s", topic)
+            # zendure_ha souscrit aussi sans le préfixe "iot/" (defensive, cf. Api.mqttConnect) :
+            # certains firmwares/génération publient la télémétrie sur ce topic-là.
+            legacy_topic = f"/{pk}/{did}/#"
+            client.subscribe(legacy_topic, qos=1)
+            log.info("Connecté, abonné à %s et %s", topic, legacy_topic)
         else:
             log.error("Échec connexion MQTT, rc=%s", rc)
         if self._conn_cb:
