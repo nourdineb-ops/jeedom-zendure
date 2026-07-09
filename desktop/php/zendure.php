@@ -105,11 +105,13 @@ $eqLogics = eqLogic::byType($plugin->getId());
                     <legend><i class="fas fa-tachometer-alt"></i> {{Equipement}}</legend>
                     <div class="form-group">
                         <label class="col-sm-2 control-label">{{Nom de l'équipement}}</label>
-                        <div class="col-sm-4">
+                        <div class="col-sm-6">
                             <input class="eqLogicAttr form-control" data-l1key="name" />
                         </div>
+                    </div>
+                    <div class="form-group">
                         <label class="col-sm-2 control-label">{{Objet parent}}</label>
-                        <div class="col-sm-4">
+                        <div class="col-sm-6">
                             <select class="eqLogicAttr form-control" data-l1key="object_id">
                                 <option value="">{{Aucun}}</option>
                                 <?php
@@ -122,12 +124,14 @@ $eqLogics = eqLogic::byType($plugin->getId());
                     </div>
                     <div class="form-group">
                         <label class="col-sm-2 control-label">{{Statut}}</label>
-                        <div class="col-sm-4">
+                        <div class="col-sm-6">
                             <label class="checkbox-inline"><input type="checkbox" class="eqLogicAttr" data-l1key="isEnable" checked /> {{Activé}}</label>
                             <label class="checkbox-inline"><input type="checkbox" class="eqLogicAttr" data-l1key="isVisible" checked /> {{Visible}}</label>
                         </div>
+                    </div>
+                    <div class="form-group">
                         <label class="col-sm-2 control-label">{{Catégorie}}</label>
-                        <div class="col-sm-4">
+                        <div class="col-sm-8">
                             <?php
                             foreach (jeedom::getConfiguration('eqLogic:category') as $key => $value) {
                                 echo '<label class="checkbox-inline">';
@@ -240,7 +244,7 @@ $eqLogics = eqLogic::byType($plugin->getId());
                 <fieldset>
                     <legend><i class="fas fa-satellite-dish"></i> {{Sources de lecture (jamais d'ID en dur)}}</legend>
                     <div class="alert alert-info">
-                        {{Chaque source pointe vers une commande "info" existante (pince, téléinfo, Tempo, prévision solaire...) via le sélecteur natif Jeedom.}}
+                        {{Chaque source pointe vers une commande "info" existante (pince, téléinfo, Tempo, prévision solaire...). La fenêtre qui s'ouvre a 3 listes en cascade : choisissez d'abord l'Objet (pièce), puis l'Équipement, puis la Commande, avant de cliquer Valider.}}
                     </div>
                     <?php
                     $sources = [
@@ -356,7 +360,7 @@ $(function () {
 
     $('body').off('click', '.bt_selectCmd').on('click', '.bt_selectCmd', function () {
         var key = $(this).data('target');
-        jeedom.cmd.getSelectModal({}, function (result) {
+        jeedom.cmd.getSelectModal({ cmd: { type: 'info' } }, function (result) {
             if (!isset(result.cmd) || result.cmd.id == '') {
                 return;
             }
