@@ -269,9 +269,14 @@ class zendure extends eqLogic
         // démon pas encore connecté au vrai appareil) renvoie '' via execCmd(), et
         // PHP 8 refuse l'arithmétique sur une chaîne non numérique ('' + '' fatal).
         $solar = (float) $this->getCmdValue('solar_power');
-        $grid = (float) $this->getCmdValue('grid_power');
+        // "Réseau" = la vraie mesure externe (pince/PAPP Linky), pas la télémétrie
+        // interne Zendure (grid_power/gridInputPower, qui ne reflète que ce que le
+        // boîtier Zendure lui-même tire du réseau, souvent 0 en décharge) — corrigé
+        // suite à un écart constaté avec la vraie pince EDF (~330-350W affichés,
+        // 0W avant correction).
+        $grid = (float) $this->getConfiguredSourceValue('src_grid_papp');
         $injected = (float) $this->getCmdValue('injected_power');
-        $house = $solar + $grid - $injected;
+        $house = $grid + $injected;
 
         $imax = (float) $this->getConfiguration('imax_ampere', 30);
         $intensite = (float) $this->getConfiguredSourceValue('src_intensite');
@@ -286,11 +291,12 @@ class zendure extends eqLogic
         }
 
         $animationsOn = $this->getConfiguration('animations_actives', 1);
+        list(, $modeLabel, ) = $this->modeInfo($this->getCmdValue('mode'));
 
         $tokens = array(
             '##EQ_ID##' => $this->getId(),
             '##NAME##' => $this->getName(),
-            '##MODE##' => $this->getCmdValue('mode'),
+            '##MODE##' => $modeLabel,
             '##SOC##' => round((float) $this->getCmdValue('soc')),
             '##SOLAR_W##' => round($solar),
             '##GRID_W##' => round($grid),
@@ -307,7 +313,7 @@ class zendure extends eqLogic
     /**
      * Template "Flux" (addendum §14.3) : losange animé Solaire/Réseau/Maison/Batterie,
      * jauge d'intensité, Tempo, indicateurs financiers, curseurs de pilotage. Réutilise
-     * les mêmes signaux et la même formule de bilan que toHtmlCondense() (solar+grid-injected
+     * les mêmes signaux et la même formule de bilan que toHtmlCondense() (grid[PAPP]+injected
      * pour la puissance maison) pour rester cohérent entre gabarits.
      */
     private function toHtmlFlux()
@@ -316,28 +322,17 @@ class zendure extends eqLogic
         $html = file_get_contents($path);
 
         $solar = (float) $this->getCmdValue('solar_power');
-        $grid = (float) $this->getCmdValue('grid_power');
+        // Cf. toHtmlCondense() : "Réseau" doit être la vraie mesure externe (pince/PAPP),
+        // pas la télémétrie interne Zendure grid_power (souvent 0, ne reflète que ce que
+        // le boîtier lui-même tire du réseau, pas la consommation réelle du foyer).
+        $grid = (float) $this->getConfiguredSourceValue('src_grid_papp');
         $injected = (float) $this->getCmdValue('injected_power');
-        $house = $solar + $grid - $injected;
+        $house = $grid + $injected;
         $soc = round((float) $this->getCmdValue('soc'));
 
         $selfconso = $house > 0 ? max(0, min(100, round((1 - ($grid / $house)) * 100))) : 0;
 
-        $mode = (string) $this->getCmdValue('mode');
-        $modeLc = strtolower($mode);
-        if (strpos($modeLc, 'décharge') !== false || strpos($modeLc, 'decharge') !== false || strpos($modeLc, 'discharg') !== false) {
-            $modeIcon = 'fa-arrow-down';
-            $modeLabel = 'Décharge';
-            $batteryArrow = '↓';
-        } elseif (strpos($modeLc, 'charge') !== false) {
-            $modeIcon = 'fa-arrow-up';
-            $modeLabel = 'Charge';
-            $batteryArrow = '↑';
-        } else {
-            $modeIcon = 'fa-pause';
-            $modeLabel = $mode !== '' ? $mode : 'Veille';
-            $batteryArrow = '↔';
-        }
+        list($modeIcon, $modeLabel, $batteryArrow) = $this->modeInfo($this->getCmdValue('mode'));
         $gridArrow = $grid >= 0 ? '↓' : '↑';
 
         $imax = (float) $this->getConfiguration('imax_ampere', 30);
@@ -395,6 +390,32 @@ class zendure extends eqLogic
             '##CMD_SET_SOC_MIN_ID##' => is_object($socMinCmd) ? $socMinCmd->getId() : 0,
         );
         return str_replace(array_keys($tokens), array_values($tokens), $html);
+    }
+
+    /**
+     * Traduit la commande "mode" (acMode brut de la télémétrie Zendure : 1=charge,
+     * 2=décharge, cf. commentaire de set_mode dans mqtt_transport.py) en [icône
+     * FontAwesome, libellé, flèche] pour l'affichage. acMode arrive en entier (1/2),
+     * jamais en toutes lettres — un simple strpos('charge') ne matchait donc jamais
+     * et affichait "2" tel quel (constaté sur le dashboard réel).
+     */
+    private function modeInfo($mode)
+    {
+        $mode = (string) $mode;
+        if ($mode === '2') {
+            return array('fa-arrow-down', 'Décharge', '↓');
+        }
+        if ($mode === '1') {
+            return array('fa-arrow-up', 'Charge', '↑');
+        }
+        $modeLc = strtolower($mode);
+        if (strpos($modeLc, 'décharge') !== false || strpos($modeLc, 'decharge') !== false || strpos($modeLc, 'discharg') !== false) {
+            return array('fa-arrow-down', 'Décharge', '↓');
+        }
+        if (strpos($modeLc, 'charge') !== false) {
+            return array('fa-arrow-up', 'Charge', '↑');
+        }
+        return array('fa-pause', $mode !== '' ? $mode : 'Veille', '↔');
     }
 
     /**
