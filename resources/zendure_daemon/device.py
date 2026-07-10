@@ -32,6 +32,13 @@ class Device:
         self._transport.connect()
 
     def stop(self) -> None:
+        # Repasse smartMode à 0 avant de couper : sinon l'app mobile reste
+        # indéfiniment sur "Mode intelligent" alors que plus personne ne pilote
+        # l'appareil (cf. échange avec l'utilisateur sur ce comportement).
+        try:
+            self._transport.set_smart_mode(False)
+        except Exception:
+            log.warning("eq_id=%s échec set_smart_mode(False) à l'arrêt", self.eq_id, exc_info=True)
         self._transport.disconnect()
 
     def request_telemetry(self) -> None:
