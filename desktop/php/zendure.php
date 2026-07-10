@@ -253,9 +253,9 @@ $eqLogics = eqLogic::byType($plugin->getId());
                         'src_grid_papp' => '{{PAPP réseau}}',
                         'src_imax_abonnement' => '{{Imax abonnement}}',
                         'src_periode_tarif' => '{{Période tarifaire (PTEC / HP-HC)}}',
-                        'src_tempo_now' => '{{Tempo — jour même}}',
-                        'src_tempo_j' => '{{Tempo — J}}',
-                        'src_tempo_j1' => '{{Tempo — J+1}}',
+                        'src_tempo_now' => '{{Tempo — période courante (HP/HC + couleur, ex. HCJB)}}',
+                        'src_tempo_j' => '{{Tempo — couleur du jour}}',
+                        'src_tempo_j1' => '{{Tempo — couleur de demain (J+1)}}',
                         'src_prevision_solaire' => '{{Prévision solaire (kWh)}}',
                     ];
                     foreach ($sources as $key => $label) {
