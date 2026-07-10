@@ -13,6 +13,7 @@ from .mqtt_transport import MqttTransport
 DEFAULT_TOPIC_TELEMETRY = "iot/{product_key}/{device_id}/#"
 DEFAULT_TOPIC_FUNCTION = "iot/{product_key}/{device_id}/function/invoke"
 DEFAULT_TOPIC_WRITE = "iot/{product_key}/{device_id}/properties/write"
+DEFAULT_TOPIC_READ = "iot/{product_key}/{device_id}/properties/read"
 
 
 def build_transport(eq_config: dict) -> MqttTransport:
@@ -44,6 +45,7 @@ def build_transport(eq_config: dict) -> MqttTransport:
             "topic_telemetry": eq_config.get("topic_telemetry", DEFAULT_TOPIC_TELEMETRY),
             "topic_function": eq_config.get("topic_function", DEFAULT_TOPIC_FUNCTION),
             "topic_write": eq_config.get("topic_write", DEFAULT_TOPIC_WRITE),
+            "topic_read": eq_config.get("topic_read", DEFAULT_TOPIC_READ),
         }
     )
     return MqttTransport(conn)
