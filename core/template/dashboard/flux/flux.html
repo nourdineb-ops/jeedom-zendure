@@ -153,12 +153,12 @@ valeurs statiques -> tokens ##XXX## remplacés par zendure::toHtmlFlux()).
         <div class="zf-node zf-top">
             <i class="fas fa-sun" style="color:#EF9F27"></i>
             <span class="zf-value">##SOLAR_W## W</span>
-            <span class="zf-label">{{Solaire}}</span>
+            <span class="zf-label">Solaire</span>
         </div>
         <div class="zf-node zf-left">
             <i class="fas fa-plug" style="color:#378ADD"></i>
             <span class="zf-value" style="color:#378ADD">##GRID_ARROW## ##GRID_W## W</span>
-            <span class="zf-label">{{Réseau}}</span>
+            <span class="zf-label">Réseau</span>
         </div>
         <div class="zf-hub"><i class="fas fa-bolt"></i></div>
         <div class="zf-node zf-right zf-node-lg">
@@ -184,17 +184,17 @@ valeurs statiques -> tokens ##XXX## remplacés par zendure::toHtmlFlux()).
             </svg>
             <div>
                 <div class="zf-gauge-value">##INTENSITE_A## <span>A</span></div>
-                <div class="zf-gauge-marge"><i class="fas fa-shield-alt"></i> {{marge}} ##INTENSITE_MARGE_A## A</div>
-                <div class="zf-gauge-label">{{Intensité réseau}}</div>
+                <div class="zf-gauge-marge"><i class="fas fa-shield-alt"></i> marge ##INTENSITE_MARGE_A## A</div>
+                <div class="zf-gauge-label">Intensité réseau</div>
             </div>
         </div>
         <div class="zf-card zf-tempo">
             <div class="zf-tempo-row">
-                <span>{{Tempo aujourd'hui}}</span>
+                <span>Tempo aujourd'hui</span>
                 <span class="zf-pill" style="color:##TEMPO_TODAY_FG##;background:##TEMPO_TODAY_BG##">##TEMPO_TODAY_LABEL##</span>
             </div>
             <div class="zf-tempo-row">
-                <span>{{Demain (J+1)}}</span>
+                <span>Demain (J+1)</span>
                 <span class="zf-pill zf-pill-muted" style="color:##TEMPO_TOMORROW_FG##;background:##TEMPO_TOMORROW_BG##">##TEMPO_TOMORROW_LABEL##</span>
             </div>
         </div>
@@ -202,29 +202,29 @@ valeurs statiques -> tokens ##XXX## remplacés par zendure::toHtmlFlux()).
 
     <div class="zf-row3">
         <div class="zf-card zf-money zf-money-gain">
-            <div class="zf-money-label"><i class="fas fa-coins"></i> {{Gain Zendure}} · {{jour}}</div>
+            <div class="zf-money-label"><i class="fas fa-coins"></i> Gain Zendure · jour</div>
             <div class="zf-money-value">+ ##GAIN_JOUR## €</div>
         </div>
         <div class="zf-card zf-money">
-            <div class="zf-money-label"><i class="fas fa-calendar-minus"></i> {{Dépense veille}}</div>
+            <div class="zf-money-label"><i class="fas fa-calendar-minus"></i> Dépense veille</div>
             <div class="zf-money-value">##DEPENSE_VEILLE## €</div>
         </div>
         <div class="zf-card zf-money">
-            <div class="zf-money-label"><i class="fas fa-calendar-day"></i> {{Dépense jour}}</div>
+            <div class="zf-money-label"><i class="fas fa-calendar-day"></i> Dépense jour</div>
             <div class="zf-money-value">##DEPENSE_JOUR## €</div>
         </div>
     </div>
 
     <div class="zf-card zf-pilotage">
-        <div class="zf-pilotage-title"><i class="fas fa-sliders-h"></i> {{Pilotage}}</div>
+        <div class="zf-pilotage-title"><i class="fas fa-sliders-h"></i> Pilotage</div>
         <div class="zf-row2">
             <div>
-                <div class="zf-slider-row"><span>{{Limite sortie AC}}</span><span class="zf-slider-value" id="zf-out-val-##EQ_ID##">##OUTPUT_LIMIT_W## W</span></div>
+                <div class="zf-slider-row"><span>Limite sortie AC</span><span class="zf-slider-value" id="zf-out-val-##EQ_ID##">##OUTPUT_LIMIT_W## W</span></div>
                 <input type="range" min="0" max="##OUTPUT_LIMIT_MAX##" value="##OUTPUT_LIMIT_W##" step="10"
                        class="zf-slider" id="zf-out-##EQ_ID##" data-cmd-id="##CMD_SET_OUTPUT_LIMIT_ID##" />
             </div>
             <div>
-                <div class="zf-slider-row"><span>{{SOC minimum}}</span><span class="zf-slider-value" id="zf-socmin-val-##EQ_ID##">##SOC_MIN##%</span></div>
+                <div class="zf-slider-row"><span>SOC minimum</span><span class="zf-slider-value" id="zf-socmin-val-##EQ_ID##">##SOC_MIN##%</span></div>
                 <input type="range" min="0" max="100" value="##SOC_MIN##" step="1"
                        class="zf-slider" id="zf-socmin-##EQ_ID##" data-cmd-id="##CMD_SET_SOC_MIN_ID##" />
             </div>
