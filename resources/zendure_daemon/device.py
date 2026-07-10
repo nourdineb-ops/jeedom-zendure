@@ -34,9 +34,38 @@ class Device:
     def stop(self) -> None:
         self._transport.disconnect()
 
+    # Clés qui déterminent la connexion transport : si l'une change (mode, host,
+    # credentials...), il faut reconnecter, pas juste mettre à jour le régulateur.
+    _TRANSPORT_KEYS = (
+        "mode_connexion",
+        "device_id",
+        "product_key",
+        "cloud_host",
+        "cloud_port",
+        "cloud_tls",
+        "cloud_username",
+        "cloud_auth_key",
+        "local_host",
+        "local_port",
+        "local_tls",
+        "local_username",
+        "local_password",
+    )
+
     def reload_config(self, eq_config: dict) -> None:
+        transport_changed = any(
+            self._eq_config.get(key) != eq_config.get(key) for key in self._TRANSPORT_KEYS
+        )
         self._eq_config = eq_config
         self._regulator.reload_config(AntiInjectionConfig.from_dict(eq_config.get("anti_injection", {})))
+
+        if transport_changed:
+            log.info("eq_id=%s configuration transport modifiée, reconnexion", self.eq_id)
+            self._transport.disconnect()
+            self._transport = build_transport(eq_config)
+            self._transport.on_telemetry(self._on_telemetry)
+            self._transport.on_connection_change(self._on_connection_change)
+            self._transport.connect()
 
     def on_grid_power(self, value_w: float) -> None:
         """Appelé depuis le socket serveur quand la pince (via listener PHP) rapporte une nouvelle valeur."""
