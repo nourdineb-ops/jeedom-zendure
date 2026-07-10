@@ -101,6 +101,9 @@ class MqttTransport(Transport):
     def set_soc_min(self, percent: int) -> None:
         self._publish_property("minSoc", int(percent))
 
+    def set_smart_mode(self, enabled: bool) -> None:
+        self._publish_property("smartMode", 1 if enabled else 0)
+
     def request_telemetry(self) -> None:
         topic = self._conn["topic_read"].format(
             device_id=self._conn["device_id"], product_key=self._conn.get("product_key", "")

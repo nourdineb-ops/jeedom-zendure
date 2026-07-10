@@ -45,6 +45,15 @@ class Transport(ABC):
         """Pousse le seuil SOC minimum (%), propriété minSoc."""
 
     @abstractmethod
+    def set_smart_mode(self, enabled: bool) -> None:
+        """Pousse la propriété smartMode (0/1). Le firmware Zendure semble déjà la
+        déduire lui-même dès qu'une commande deviceAutomation arrive (constaté via
+        l'app mobile), mais zendure_ha l'écrit aussi explicitement (device.py,
+        power_charge/power_discharge) — on fait pareil, et surtout on la repasse à 0
+        à l'arrêt propre du démon pour que l'app ne reste pas indéfiniment sur
+        "Mode intelligent" après qu'on ait rendu la main à l'appareil."""
+
+    @abstractmethod
     def request_telemetry(self) -> None:
         """Demande une trame de télémétrie à jour (getAll). L'appareil ne pousse pas
         spontanément en continu : sans ce ping périodique (cf. dataRefresh dans
