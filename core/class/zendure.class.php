@@ -254,6 +254,9 @@ class zendure extends eqLogic
         if ($template == 'condense') {
             return $this->toHtmlCondense();
         }
+        if ($template == 'flux') {
+            return $this->toHtmlFlux();
+        }
         return parent::toHtml($_version);
     }
 
@@ -299,6 +302,121 @@ class zendure extends eqLogic
             '##ANIMATIONS_CLASS##' => $animationsOn ? 'zc-animated' : '',
         );
         return str_replace(array_keys($tokens), array_values($tokens), $html);
+    }
+
+    /**
+     * Template "Flux" (addendum §14.3) : losange animé Solaire/Réseau/Maison/Batterie,
+     * jauge d'intensité, Tempo, indicateurs financiers, curseurs de pilotage. Réutilise
+     * les mêmes signaux et la même formule de bilan que toHtmlCondense() (solar+grid-injected
+     * pour la puissance maison) pour rester cohérent entre gabarits.
+     */
+    private function toHtmlFlux()
+    {
+        $path = dirname(__FILE__) . '/../template/dashboard/flux/flux.html';
+        $html = file_get_contents($path);
+
+        $solar = (float) $this->getCmdValue('solar_power');
+        $grid = (float) $this->getCmdValue('grid_power');
+        $injected = (float) $this->getCmdValue('injected_power');
+        $house = $solar + $grid - $injected;
+        $soc = round((float) $this->getCmdValue('soc'));
+
+        $selfconso = $house > 0 ? max(0, min(100, round((1 - ($grid / $house)) * 100))) : 0;
+
+        $mode = (string) $this->getCmdValue('mode');
+        $modeLc = strtolower($mode);
+        if (strpos($modeLc, 'décharge') !== false || strpos($modeLc, 'decharge') !== false || strpos($modeLc, 'discharg') !== false) {
+            $modeIcon = 'fa-arrow-down';
+            $modeLabel = 'Décharge';
+            $batteryArrow = '↓';
+        } elseif (strpos($modeLc, 'charge') !== false) {
+            $modeIcon = 'fa-arrow-up';
+            $modeLabel = 'Charge';
+            $batteryArrow = '↑';
+        } else {
+            $modeIcon = 'fa-pause';
+            $modeLabel = $mode !== '' ? $mode : 'Veille';
+            $batteryArrow = '↔';
+        }
+        $gridArrow = $grid >= 0 ? '↓' : '↑';
+
+        $imax = (float) $this->getConfiguration('imax_ampere', 30);
+        $intensite = (float) $this->getConfiguredSourceValue('src_intensite');
+        $pct = $imax > 0 ? min(100, ($intensite / $imax) * 100) : 0;
+        $angleRad = deg2rad(180 - ($pct / 100) * 180);
+        $gaugeX = round(50 + 30 * cos($angleRad), 1);
+        $gaugeY = round(52 - 30 * sin($angleRad), 1);
+
+        $periode = (string) $this->getCmdValue('periode_tarif');
+        if ($periode === '') {
+            $periode = (string) $this->getConfiguredSourceValue('src_tempo_now');
+        }
+
+        $tempoToday = $this->tempoColorInfo($this->getConfiguredSourceValue('src_tempo_j'));
+        $tempoTomorrow = $this->tempoColorInfo($this->getConfiguredSourceValue('src_tempo_j1'));
+
+        $outputLimitCmd = $this->getCmd(null, 'set_output_limit');
+        $socMinCmd = $this->getCmd(null, 'set_soc_min');
+
+        $animationsOn = $this->getConfiguration('animations_actives', 1);
+
+        $tokens = array(
+            '##ANIMATIONS_CLASS##' => $animationsOn ? 'zc-animated' : '',
+            '##EQ_ID##' => $this->getId(),
+            '##NAME##' => $this->getName(),
+            '##PERIODE_LABEL##' => $periode !== '' ? $periode : '—',
+            '##MODE_ICON##' => $modeIcon,
+            '##MODE_LABEL##' => $modeLabel,
+            '##SOLAR_W##' => round($solar),
+            '##GRID_ARROW##' => $gridArrow,
+            '##GRID_W##' => round(abs($grid)),
+            '##HOUSE_W##' => round($house),
+            '##HOUSE_SELFCONSO_PCT##' => $selfconso,
+            '##SOC##' => $soc,
+            '##BATTERY_ARROW##' => $batteryArrow,
+            '##BATTERY_W##' => round(abs($injected)),
+            '##GAUGE_X##' => $gaugeX,
+            '##GAUGE_Y##' => $gaugeY,
+            '##INTENSITE_A##' => round($intensite, 1),
+            '##INTENSITE_MARGE_A##' => round($imax - $intensite, 1),
+            '##TEMPO_TODAY_FG##' => $tempoToday[0],
+            '##TEMPO_TODAY_BG##' => $tempoToday[1],
+            '##TEMPO_TODAY_LABEL##' => $tempoToday[2],
+            '##TEMPO_TOMORROW_FG##' => $tempoTomorrow[0],
+            '##TEMPO_TOMORROW_BG##' => $tempoTomorrow[1],
+            '##TEMPO_TOMORROW_LABEL##' => $tempoTomorrow[2],
+            '##GAIN_JOUR##' => number_format((float) $this->getCmdValue('gain_jour'), 2),
+            '##DEPENSE_VEILLE##' => number_format((float) $this->getCmdValue('depense_veille'), 2),
+            '##DEPENSE_JOUR##' => number_format((float) $this->getCmdValue('depense_jour'), 2),
+            '##OUTPUT_LIMIT_W##' => round((float) $this->getCmdValue('output_limit')),
+            '##OUTPUT_LIMIT_MAX##' => round((float) $this->getConfiguration('limite_max_w', 1200)),
+            '##SOC_MIN##' => round((float) $this->getCmdValue('set_soc_min')),
+            '##CMD_SET_OUTPUT_LIMIT_ID##' => is_object($outputLimitCmd) ? $outputLimitCmd->getId() : 0,
+            '##CMD_SET_SOC_MIN_ID##' => is_object($socMinCmd) ? $socMinCmd->getId() : 0,
+        );
+        return str_replace(array_keys($tokens), array_values($tokens), $html);
+    }
+
+    /**
+     * Traduit une couleur Tempo (source externe, ex. "Bleu"/"Blanc"/"Rouge" ou code
+     * numérique 1/2/3) en [couleur texte, couleur fond, libellé] pour les pastilles Flux.
+     */
+    private function tempoColorInfo($raw)
+    {
+        $v = strtolower(trim((string) $raw));
+        if ($v === '') {
+            return array('#6B7280', 'rgba(127,127,127,0.16)', '—');
+        }
+        if (strpos($v, 'roug') !== false || $v === '3' || $v === 'red') {
+            return array('#B91C1C', '#FCA5A5', 'Rouge');
+        }
+        if (strpos($v, 'blanc') !== false || $v === '2' || $v === 'white') {
+            return array('#854F0B', '#FDE68A', 'Blanc');
+        }
+        if (strpos($v, 'bleu') !== false || $v === '1' || $v === 'blue') {
+            return array('#1D4ED8', '#BFDBFE', 'Bleu');
+        }
+        return array('#6B7280', 'rgba(127,127,127,0.16)', $raw);
     }
 
     /**
