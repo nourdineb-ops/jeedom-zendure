@@ -35,6 +35,7 @@ try {
         $cmd = $eqLogic->getCmd(null, $logicalId);
         if (is_object($cmd)) {
             $cmd->event($value);
+            log::add('zendure', 'debug', 'callback eq_id=' . $eqId . ' ' . $logicalId . '=' . $value);
         } else {
             log::add('zendure', 'debug', 'Valeur reçue pour commande inconnue : ' . $logicalId);
         }

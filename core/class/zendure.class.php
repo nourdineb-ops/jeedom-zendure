@@ -196,6 +196,7 @@ class zendure extends eqLogic
         );
         $path = jeedom::getTmpFolder('zendure') . '/daemon_config.json';
         file_put_contents($path, json_encode($config, JSON_PRETTY_PRINT));
+        log::add('zendure', 'debug', 'writeDaemonConfig : ' . count($equipments) . ' équipement(s) -> ' . $path);
         return $path;
     }
 
@@ -339,6 +340,7 @@ class zendure extends eqLogic
         try {
             return cmd::byString($human);
         } catch (Exception $e) {
+            log::add('zendure', 'debug', 'resolveSourceCmd(' . $configKey . ') introuvable pour "' . $human . '" : ' . $e->getMessage());
             return null;
         }
     }
@@ -357,6 +359,7 @@ class zendure extends eqLogic
 
     public function postSave()
     {
+        log::add('zendure', 'debug', 'postSave eq_id=' . $this->getId() . ' (' . $this->getName() . ')');
         $this->createOrUpdateCommands();
         $this->registerGridPowerListener();
         self::writeDaemonConfig();
@@ -454,6 +457,7 @@ class zendure extends eqLogic
         $listener->emptyEvent();
         $listener->addEvent($cmd->getId());
         $listener->save();
+        log::add('zendure', 'debug', 'registerGridPowerListener eq_id=' . $this->getId() . ' -> cmd_id=' . $cmd->getId());
     }
 
     private function removeGridPowerListener()
@@ -476,6 +480,7 @@ class zendure extends eqLogic
         if ($eqId === null || $value === null) {
             return;
         }
+        log::add('zendure', 'debug', 'onGridPowerEvent eq_id=' . $eqId . ' value=' . $value . 'W');
         self::sendToDaemon(array(
             'type' => 'grid_power',
             'eq_id' => (int) $eqId,
