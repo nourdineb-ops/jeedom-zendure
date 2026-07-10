@@ -19,10 +19,10 @@ def build_transport(eq_config: dict) -> MqttTransport:
     mode = eq_config["mode_connexion"]
     if mode == "cloud":
         conn = {
-            "host": eq_config.get("cloud_host", "mqtt-eu.zen-iot.com"),
+            "host": eq_config.get("cloud_host", "mqtteu.zen-iot.com"),
             "port": eq_config.get("cloud_port", 1883),
             "tls": eq_config.get("cloud_tls", False),
-            "username": eq_config.get("cloud_device_serial"),
+            "username": eq_config.get("cloud_username"),
             "password": eq_config.get("cloud_auth_key"),  # Clé Cloud d'Autorisation
         }
     elif mode == "local":
