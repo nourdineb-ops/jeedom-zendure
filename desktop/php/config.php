@@ -20,16 +20,6 @@ if (!isConnect('admin')) {
                 <input type="number" class="configKey form-control" data-l1key="socketport" placeholder="55071" />
             </div>
         </div>
-        <div class="form-group">
-            <label class="col-cm-3 control-label">{{Niveau de log}}</label>
-            <div class="col-cm-3">
-                <select class="configKey form-control" data-l1key="loglevel">
-                    <option value="info">info</option>
-                    <option value="debug">debug</option>
-                    <option value="warning">warning</option>
-                </select>
-            </div>
-        </div>
     </fieldset>
 
     <fieldset>
