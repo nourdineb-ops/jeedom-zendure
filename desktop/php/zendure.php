@@ -394,8 +394,9 @@ $eqLogics = eqLogic::byType($plugin->getId());
                 <div class="alert alert-info">
                     <strong>{{À quoi sert cet onglet}}</strong>
                     <ul style="margin-bottom:0;">
-                        <li>{{Condensé : seul template réellement implémenté à ce jour (anneau SOC, 4 flux, jauge intensité, gain €). Choisissez-le pour un affichage riche.}}</li>
-                        <li>{{Flux et Historique : pas encore implémentés — en les sélectionnant, l'équipement retombe sur l'affichage générique Jeedom (liste de commandes), sans plantage mais sans le rendu visuel prévu à terme.}}</li>
+                        <li>{{Condensé : tuile compacte (anneau SOC, 4 flux, jauge intensité, gain €).}}</li>
+                        <li>{{Flux : losange animé Solaire/Réseau/Maison/Batterie, jauge d'intensité, Tempo J/J+1, indicateurs financiers et curseurs de pilotage (limite de sortie AC, SOC minimum).}}</li>
+                        <li>{{Historique : pas encore implémenté — en le sélectionnant, l'équipement retombe sur l'affichage générique Jeedom (liste de commandes), sans plantage mais sans le rendu visuel prévu à terme.}}</li>
                         <li>{{Animations : désactivez si vous préférez un rendu statique (utile sur mobile/tablette).}}</li>
                     </ul>
                 </div>
@@ -434,17 +435,52 @@ $eqLogics = eqLogic::byType($plugin->getId());
                     </div>
 
                     <div class="col-md-4 text-center">
-                        <p><strong>{{Flux}}</strong> <span class="label label-default">{{pas encore implémenté}}</span></p>
-                        <div class="zf-preview">
-                            <div class="zf-node zf-top">☀ {{Solaire}}<br>1200 W</div>
-                            <div class="zf-row">
-                                <div class="zf-node zf-left">⇅ {{Réseau}}<br>30 W</div>
-                                <div class="zf-hub">⎔</div>
-                                <div class="zf-node zf-right">⌂ {{Maison}}<br>950 W</div>
+                        <p><strong>{{Flux}}</strong> <span class="label label-success">{{implémenté}}</span></p>
+                        <div class="zendure-flux zf-preview-static">
+                            <div class="zf-header">
+                                <div class="zf-title"><i class="fas fa-bolt"></i><span>Panneaux solaires</span></div>
+                                <div class="zf-badges">
+                                    <span class="zf-badge zf-badge-tarif"><i class="fas fa-sun"></i> HC</span>
+                                    <span class="zf-badge"><i class="fas fa-arrow-down"></i> Décharge</span>
+                                </div>
                             </div>
-                            <div class="zf-node zf-bottom">🔋 {{Batterie}}<br>74%</div>
+                            <div class="zf-diagram">
+                                <div class="zf-node zf-top"><i class="fas fa-sun" style="color:#EF9F27"></i><span class="zf-value">1200 W</span><span class="zf-label">{{Solaire}}</span></div>
+                                <div class="zf-node zf-left"><i class="fas fa-plug" style="color:#378ADD"></i><span class="zf-value" style="color:#378ADD">↓ 30 W</span><span class="zf-label">{{Réseau}}</span></div>
+                                <div class="zf-hub"><i class="fas fa-bolt"></i></div>
+                                <div class="zf-node zf-right zf-node-lg"><i class="fas fa-home" style="color:#D4537E"></i><span class="zf-value">950 W</span><span class="zf-label"><i class="fas fa-leaf"></i> 97%</span></div>
+                                <div class="zf-node zf-bottom"><span class="zf-value">74%</span><i class="fas fa-battery-three-quarters" style="color:#ED93B1"></i><span class="zf-value-sm" style="color:#D4537E">↓ 220 W</span></div>
+                            </div>
+                            <div class="zf-row2">
+                                <div class="zf-card zf-gauge">
+                                    <svg viewBox="0 0 100 62" class="zf-gauge-svg" aria-hidden="true">
+                                        <path d="M14,52 A36,36 0 0 1 71.2,22.9" fill="none" stroke="#639922" stroke-width="7" stroke-linecap="round" />
+                                        <path d="M71.2,22.9 A36,36 0 0 1 84.2,40.9" fill="none" stroke="#EF9F27" stroke-width="7" />
+                                        <path d="M84.2,40.9 A36,36 0 0 1 86,52" fill="none" stroke="#E24B4A" stroke-width="7" stroke-linecap="round" />
+                                        <line x1="50" y1="52" x2="35" y2="27" stroke="var(--zf-text)" stroke-width="2.5" stroke-linecap="round" />
+                                        <circle cx="50" cy="52" r="3.5" fill="var(--zf-text)" />
+                                    </svg>
+                                    <div><div class="zf-gauge-value">6.2 <span>A</span></div><div class="zf-gauge-marge"><i class="fas fa-shield-alt"></i> {{marge}} 23.8 A</div></div>
+                                </div>
+                                <div class="zf-card zf-tempo">
+                                    <div class="zf-tempo-row"><span>{{Aujourd'hui}}</span><span class="zf-pill" style="color:#1D4ED8;background:#BFDBFE">Bleu</span></div>
+                                    <div class="zf-tempo-row"><span>{{Demain}}</span><span class="zf-pill" style="color:#854F0B;background:#FDE68A">Blanc</span></div>
+                                </div>
+                            </div>
+                            <div class="zf-row3">
+                                <div class="zf-card zf-money zf-money-gain"><div class="zf-money-label"><i class="fas fa-coins"></i> {{Gain}}</div><div class="zf-money-value">+1.24 €</div></div>
+                                <div class="zf-card zf-money"><div class="zf-money-label"><i class="fas fa-calendar-minus"></i> {{Veille}}</div><div class="zf-money-value">0.85 €</div></div>
+                                <div class="zf-card zf-money"><div class="zf-money-label"><i class="fas fa-calendar-day"></i> {{Jour}}</div><div class="zf-money-value">0.31 €</div></div>
+                            </div>
+                            <div class="zf-card zf-pilotage">
+                                <div class="zf-pilotage-title"><i class="fas fa-sliders-h"></i> {{Pilotage}}</div>
+                                <div class="zf-row2">
+                                    <div><div class="zf-slider-row"><span>{{Limite sortie AC}}</span><span>800 W</span></div><input type="range" class="zf-slider" value="800" disabled /></div>
+                                    <div><div class="zf-slider-row"><span>{{SOC minimum}}</span><span>20%</span></div><input type="range" class="zf-slider" value="20" disabled /></div>
+                                </div>
+                            </div>
                         </div>
-                        <p class="text-muted" style="font-size:11px;">{{Losange animé prévu : particules dans le sens réel du courant.}}</p>
+                        <p class="text-muted" style="font-size:11px;">{{Sur le vrai dashboard : diagramme animé (particules dans le sens réel du courant) et curseurs fonctionnels.}}</p>
                     </div>
 
                     <div class="col-md-4 text-center">
@@ -496,19 +532,89 @@ $eqLogics = eqLogic::byType($plugin->getId());
 .zc-preview .zc-intensite-bar { height: 100%; }
 .zc-preview .zc-footer { margin-top: 6px; text-align: right; opacity: 0.85; }
 
-/* Aperçu conceptuel "Flux" (pas encore implémenté) : losange statique Solaire/Réseau/Maison/Batterie */
-.zf-preview { max-width: 260px; margin: 0 auto; font-size: 12px; }
-.zf-preview .zf-node {
-    background: var(--bg-widget, #1e1e1e);
-    color: var(--text-widget, #eee);
-    border-radius: 8px;
-    padding: 8px;
-    display: inline-block;
-    min-width: 80px;
+/* Aperçu "Flux" (onglet IHM) : copie du <style> inline de core/template/dashboard/flux/flux.html,
+   les classes .zendure-flux/.zf-* sont volontairement identiques au vrai template
+   (cf. .zendure-condense ci-dessus pour la même convention). Pas d'animation ni de
+   JS de curseur ici : c'est un aperçu statique avec des valeurs d'exemple. */
+.zendure-flux {
+    --zf-surface-0: var(--bg-widget, #1e1e1e);
+    --zf-surface-1: rgba(127, 127, 127, 0.08);
+    --zf-surface-2: rgba(127, 127, 127, 0.16);
+    --zf-text: var(--text-widget, #eee);
+    --zf-text-muted: rgba(170, 170, 170, 0.8);
+    --zf-border: rgba(127, 127, 127, 0.25);
+    width: 100%;
+    max-width: 660px;
+    background: var(--zf-surface-0);
+    color: var(--zf-text);
+    border-radius: 12px;
+    padding: 14px 16px;
+    font-size: 13px;
 }
-.zf-preview .zf-top, .zf-preview .zf-bottom { margin: 4px auto; }
-.zf-preview .zf-row { display: flex; align-items: center; justify-content: space-between; margin: 4px 0; }
-.zf-preview .zf-hub { font-size: 22px; opacity: 0.6; }
+.zendure-flux .zf-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+.zendure-flux .zf-title { display: flex; align-items: center; gap: 8px; font-weight: 600; }
+.zendure-flux .zf-title i { color: #EF9F27; }
+.zendure-flux .zf-badges { display: flex; gap: 6px; }
+.zendure-flux .zf-badge { font-size: 11px; padding: 3px 10px; border-radius: 20px; background: var(--zf-surface-2); }
+.zendure-flux .zf-badge-tarif { color: #854F0B; background: #FAC775; }
+.zendure-flux .zf-diagram {
+    position: relative; width: 100%; max-width: 640px; height: 300px; margin: 0 auto;
+    background: var(--zf-surface-1); border-radius: 14px; border: 0.5px solid var(--zf-border);
+}
+.zendure-flux .zf-node {
+    position: absolute; transform: translate(-50%, -50%); width: 84px; height: 84px;
+    border-radius: 50%; background: var(--zf-surface-2); border: 2.5px solid var(--zf-border);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    text-align: center; line-height: 1.2;
+}
+.zendure-flux .zf-node-lg { width: 96px; height: 96px; }
+.zendure-flux .zf-top { left: 50%; top: 22%; border-color: #EF9F27; }
+.zendure-flux .zf-left { left: 16%; top: 58%; border-color: #378ADD; }
+.zendure-flux .zf-right { left: 84%; top: 58%; border-color: #D4537E; }
+.zendure-flux .zf-bottom { left: 50%; top: 92%; border-color: #ED93B1; }
+.zendure-flux .zf-hub {
+    position: absolute; left: 50%; top: 58%; transform: translate(-50%, -50%);
+    width: 56px; height: 56px; border-radius: 50%; background: var(--zf-surface-2);
+    border: 2px solid var(--zf-border); display: flex; align-items: center; justify-content: center;
+    color: var(--zf-text-muted); font-size: 20px;
+}
+.zendure-flux .zf-value { font-size: 14px; font-weight: 600; margin-top: 2px; }
+.zendure-flux .zf-value-sm { font-size: 11px; font-weight: 600; }
+.zendure-flux .zf-label { font-size: 9.5px; color: var(--zf-text-muted); }
+.zendure-flux .zf-row2, .zendure-flux .zf-row3 { display: grid; gap: 10px; margin-top: 12px; }
+.zendure-flux .zf-row2 { grid-template-columns: 1fr 1fr; }
+.zendure-flux .zf-row3 { grid-template-columns: repeat(3, 1fr); }
+.zendure-flux .zf-card { background: var(--zf-surface-1); border-radius: 10px; padding: 12px 14px; }
+.zendure-flux .zf-gauge { display: flex; align-items: center; gap: 12px; }
+.zendure-flux .zf-gauge-svg { width: 90px; height: 56px; flex-shrink: 0; }
+.zendure-flux .zf-gauge-value { font-size: 19px; font-weight: 600; }
+.zendure-flux .zf-gauge-value span { font-size: 12px; color: var(--zf-text-muted); }
+.zendure-flux .zf-gauge-marge { font-size: 10.5px; color: #3B6D11; margin-top: 2px; }
+.zendure-flux .zf-tempo { display: flex; flex-direction: column; justify-content: center; gap: 8px; }
+.zendure-flux .zf-tempo-row { display: flex; justify-content: space-between; align-items: center; font-size: 11px; color: var(--zf-text-muted); }
+.zendure-flux .zf-pill { font-size: 11px; font-weight: 600; padding: 2px 10px; border-radius: 20px; }
+.zendure-flux .zf-money-label { font-size: 10.5px; color: var(--zf-text-muted); }
+.zendure-flux .zf-money-value { font-size: 17px; font-weight: 600; margin-top: 3px; }
+.zendure-flux .zf-money-gain { background: rgba(76, 217, 100, 0.12); }
+.zendure-flux .zf-money-gain .zf-money-label, .zendure-flux .zf-money-gain .zf-money-value { color: #3B6D11; }
+.zendure-flux .zf-pilotage { margin-top: 12px; }
+.zendure-flux .zf-pilotage-title { font-size: 11px; color: var(--zf-text-muted); margin-bottom: 8px; }
+.zendure-flux .zf-slider-row { display: flex; justify-content: space-between; font-size: 11.5px; margin-bottom: 3px; }
+.zendure-flux .zf-slider { width: 100%; }
+
+.zendure-flux.zf-preview-static {
+    display: inline-block;
+    max-width: 340px;
+    font-size: 11px;
+    padding: 10px 12px;
+}
+.zendure-flux.zf-preview-static .zf-diagram { height: 220px; }
+.zendure-flux.zf-preview-static .zf-node { width: 68px; height: 68px; }
+.zendure-flux.zf-preview-static .zf-node-lg { width: 78px; height: 78px; }
+.zendure-flux.zf-preview-static .zf-hub { width: 44px; height: 44px; font-size: 16px; }
+.zendure-flux.zf-preview-static .zf-value { font-size: 12px; }
+.zendure-flux.zf-preview-static .zf-gauge-svg { width: 70px; height: 44px; }
+.zendure-flux.zf-preview-static .zf-slider { width: 100%; }
 
 /* Aperçu conceptuel "Historique" (pas encore implémenté) : mini barres du jour */
 .zh-preview { max-width: 260px; margin: 0 auto; }
