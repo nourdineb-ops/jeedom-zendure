@@ -245,7 +245,7 @@ $eqLogics = eqLogic::byType($plugin->getId());
                 <fieldset>
                     <legend><i class="fas fa-satellite-dish"></i> {{Sources de lecture (jamais d'ID en dur)}}</legend>
                     <div class="alert alert-info">
-                        {{Chaque source pointe vers une commande "info" existante (pince, téléinfo, Tempo, prévision solaire...). La fenêtre qui s'ouvre a 3 listes en cascade : choisissez d'abord l'Objet (pièce), puis l'Équipement, puis la Commande, avant de cliquer Valider.}}
+                        {{Chaque source pointe vers une commande "info" existante (pince, téléinfo, Tempo, prévision solaire...) via le sélecteur natif Jeedom.}}
                     </div>
                     <?php
                     $sources = [
@@ -263,11 +263,9 @@ $eqLogics = eqLogic::byType($plugin->getId());
                         echo '<label class="col-sm-3 control-label">' . $label . '</label>';
                         echo '<div class="col-sm-6">';
                         echo '<div class="input-group">';
-                        echo '<input type="text" class="form-control cmdSourceDisplay" id="disp_' . $key . '" placeholder="{{Aucune commande sélectionnée}}" readonly />';
-                        echo '<input type="hidden" class="eqLogicAttr cmdSourceValue" data-l1key="configuration" data-l2key="' . $key . '" id="val_' . $key . '" />';
+                        echo '<input type="text" class="eqLogicAttr form-control roundedLeft" data-l1key="configuration" data-l2key="' . $key . '" placeholder="{{Aucune commande sélectionnée}}" />';
                         echo '<span class="input-group-btn">';
-                        echo '<a class="btn btn-default bt_selectCmd" data-target="' . $key . '" title="{{Choisir une commande}}"><i class="fas fa-search"></i></a>';
-                        echo '<a class="btn btn-default bt_clearCmd" data-target="' . $key . '" title="{{Effacer}}"><i class="fas fa-times"></i></a>';
+                        echo '<a class="btn btn-default listCmdInfo roundedRight" title="{{Choisir une commande}}"><i class="fas fa-list-alt"></i></a>';
                         echo '</span>';
                         echo '</div>';
                         echo '</div>';
@@ -359,35 +357,13 @@ $(function () {
         $('#bloc_local').toggle(mode == 'local');
     }).trigger('change');
 
-    $('body').off('click', '.bt_selectCmd').on('click', '.bt_selectCmd', function () {
-        var key = $(this).data('target');
+    // Sélecteur natif de commande (onglet Sources) — pattern confirmé fonctionnel
+    // dans plugins/portail_gen : le champ visible stocke directement la référence
+    // humaine #[Objet][Eq][Cmd]#, résolue côté PHP via cmd::byString().
+    $('.eqLogic').off('click', '.listCmdInfo').on('click', '.listCmdInfo', function () {
+        var el = $(this).closest('.form-group').find('.eqLogicAttr');
         jeedom.cmd.getSelectModal({ cmd: { type: 'info' } }, function (result) {
-            if (!isset(result.cmd) || result.cmd.id == '') {
-                return;
-            }
-            $('#val_' + key).value(result.cmd.id).trigger('change');
-            $('#disp_' + key).value(result.human);
-        });
-    });
-
-    $('body').off('click', '.bt_clearCmd').on('click', '.bt_clearCmd', function () {
-        var key = $(this).data('target');
-        $('#val_' + key).value('').trigger('change');
-        $('#disp_' + key).value('');
-    });
-
-    $('.cmdSourceValue').each(function () {
-        var $val = $(this);
-        var cmdId = $val.value();
-        if (cmdId == '' || cmdId == undefined) {
-            return;
-        }
-        var key = $val.attr('id').replace('val_', '');
-        jeedom.cmd.getHumanCmdName({
-            id: cmdId,
-            success: function (data) {
-                $('#disp_' + key).value(data.result);
-            }
+            el.value(result.human);
         });
     });
 });
