@@ -258,9 +258,12 @@ class zendure extends eqLogic
         $path = dirname(__FILE__) . '/../template/dashboard/condense/condense.html';
         $html = file_get_contents($path);
 
-        $solar = $this->getCmdValue('solar_power');
-        $grid = $this->getCmdValue('grid_power');
-        $injected = $this->getCmdValue('injected_power');
+        // (float) explicite : une commande jamais alimentée (eqLogic tout juste créé,
+        // démon pas encore connecté au vrai appareil) renvoie '' via execCmd(), et
+        // PHP 8 refuse l'arithmétique sur une chaîne non numérique ('' + '' fatal).
+        $solar = (float) $this->getCmdValue('solar_power');
+        $grid = (float) $this->getCmdValue('grid_power');
+        $injected = (float) $this->getCmdValue('injected_power');
         $house = $solar + $grid - $injected;
 
         $imax = (float) $this->getConfiguration('imax_ampere', 30);
@@ -281,7 +284,7 @@ class zendure extends eqLogic
             '##EQ_ID##' => $this->getId(),
             '##NAME##' => $this->getName(),
             '##MODE##' => $this->getCmdValue('mode'),
-            '##SOC##' => round($this->getCmdValue('soc')),
+            '##SOC##' => round((float) $this->getCmdValue('soc')),
             '##SOLAR_W##' => round($solar),
             '##GRID_W##' => round($grid),
             '##HOUSE_W##' => round($house),
