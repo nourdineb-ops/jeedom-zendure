@@ -309,20 +309,35 @@ class zendure extends eqLogic
     }
 
     /**
-     * Lit la valeur d'une source externe (Étage 2 : cmdId stocké dans la config,
-     * ex. src_intensite / src_grid_papp) — jamais d'ID en dur, cf. addendum §11.
+     * Lit la valeur d'une source externe (Étage 2 : référence humaine
+     * #[Objet][Eq][Cmd]# stockée dans la config via le sélecteur natif
+     * jeedom.cmd.getSelectModal, ex. src_intensite / src_grid_papp) — jamais
+     * d'ID en dur, cf. addendum §11.
      */
     private function getConfiguredSourceValue($configKey)
     {
-        $cmdId = $this->getConfiguration($configKey);
-        if (empty($cmdId)) {
-            return 0;
-        }
-        $cmd = cmd::byId($cmdId);
+        $cmd = $this->resolveSourceCmd($configKey);
         if (!is_object($cmd)) {
             return 0;
         }
         return $cmd->execCmd();
+    }
+
+    /**
+     * Résout une référence humaine (#[Objet][Eq][Cmd]#) stockée en config
+     * vers l'objet cmd réel. Retourne null si vide ou introuvable.
+     */
+    private function resolveSourceCmd($configKey)
+    {
+        $human = $this->getConfiguration($configKey);
+        if (empty($human)) {
+            return null;
+        }
+        try {
+            return cmd::byString($human);
+        } catch (Exception $e) {
+            return null;
+        }
     }
 
     public function preInsert()
@@ -419,8 +434,8 @@ class zendure extends eqLogic
      */
     private function registerGridPowerListener()
     {
-        $cmdId = $this->getConfiguration('src_grid_papp');
-        if (empty($cmdId)) {
+        $cmd = $this->resolveSourceCmd('src_grid_papp');
+        if (!is_object($cmd)) {
             $this->removeGridPowerListener();
             return;
         }
@@ -434,7 +449,7 @@ class zendure extends eqLogic
         $listener->setFunction('onGridPowerEvent');
         $listener->setOption($option);
         $listener->emptyEvent();
-        $listener->addEvent($cmdId);
+        $listener->addEvent($cmd->getId());
         $listener->save();
     }
 
