@@ -392,10 +392,131 @@ $eqLogics = eqLogic::byType($plugin->getId());
                         <li>{{Animations : désactivez si vous préférez un rendu statique (utile sur mobile/tablette).}}</li>
                     </ul>
                 </div>
+
+                <legend>{{Aperçus (statiques, données d'exemple)}}</legend>
+                <div class="row">
+                    <div class="col-md-4 text-center">
+                        <p><strong>{{Condensé}}</strong> <span class="label label-success">{{implémenté}}</span></p>
+                        <div class="zc-preview zendure-condense">
+                            <div class="zc-header">
+                                <span class="zc-name">Panneaux solaires</span>
+                                <span class="zc-mode">Décharge</span>
+                            </div>
+                            <div class="zc-body">
+                                <div class="zc-soc-ring">
+                                    <svg viewBox="0 0 36 36">
+                                        <path class="zc-soc-bg" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                                        <path class="zc-soc-fg" stroke-dasharray="74, 100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                                    </svg>
+                                    <div class="zc-soc-value">74%</div>
+                                </div>
+                                <ul class="zc-flux">
+                                    <li><span class="zc-flux-label">☀ {{Solaire}}</span><span class="zc-flux-value">1200 W</span></li>
+                                    <li><span class="zc-flux-label">⇅ {{Réseau}}</span><span class="zc-flux-value">30 W</span></li>
+                                    <li><span class="zc-flux-label">⌂ {{Maison}}</span><span class="zc-flux-value">950 W</span></li>
+                                    <li><span class="zc-flux-label">⇥ {{Injecté}}</span><span class="zc-flux-value">0 W</span></li>
+                                </ul>
+                            </div>
+                            <div class="zc-intensite">
+                                <div class="zc-intensite-bar" style="width:45%;background:#4cd964"></div>
+                            </div>
+                            <div class="zc-footer">
+                                <span>{{Gain jour}} : 1.24 €</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-md-4 text-center">
+                        <p><strong>{{Flux}}</strong> <span class="label label-default">{{pas encore implémenté}}</span></p>
+                        <div class="zf-preview">
+                            <div class="zf-node zf-top">☀ {{Solaire}}<br>1200 W</div>
+                            <div class="zf-row">
+                                <div class="zf-node zf-left">⇅ {{Réseau}}<br>30 W</div>
+                                <div class="zf-hub">⎔</div>
+                                <div class="zf-node zf-right">⌂ {{Maison}}<br>950 W</div>
+                            </div>
+                            <div class="zf-node zf-bottom">🔋 {{Batterie}}<br>74%</div>
+                        </div>
+                        <p class="text-muted" style="font-size:11px;">{{Losange animé prévu : particules dans le sens réel du courant.}}</p>
+                    </div>
+
+                    <div class="col-md-4 text-center">
+                        <p><strong>{{Historique}}</strong> <span class="label label-default">{{pas encore implémenté}}</span></p>
+                        <div class="zh-preview">
+                            <div class="zh-bars">
+                                <div class="zh-bar" style="height:20%"></div>
+                                <div class="zh-bar" style="height:35%"></div>
+                                <div class="zh-bar" style="height:55%"></div>
+                                <div class="zh-bar" style="height:80%"></div>
+                                <div class="zh-bar" style="height:65%"></div>
+                                <div class="zh-bar" style="height:40%"></div>
+                                <div class="zh-bar" style="height:25%"></div>
+                            </div>
+                            <div class="zh-footer">{{Solaire}} / {{Maison}} / {{Injection}} — {{Gain cumulé}} : 4.80 €</div>
+                        </div>
+                        <p class="text-muted" style="font-size:11px;">{{Courbes du jour + totaux, basé sur l'historisation des commandes.}}</p>
+                    </div>
+                </div>
             </div>
         </form>
     </div>
 </div>
+
+<style>
+/* Aperçu "Condensé" (onglet IHM) : copie de core/template/dashboard/condense/condense.css,
+   les classes .zendure-condense/.zc-* sont volontairement identiques au vrai template. */
+.zc-preview.zendure-condense {
+    display: inline-block;
+    text-align: left;
+    width: 100%;
+    max-width: 340px;
+    background: var(--bg-widget, #1e1e1e);
+    border-radius: 10px;
+    padding: 10px 14px;
+    color: var(--text-widget, #eee);
+    font-size: 13px;
+}
+.zc-preview .zc-header { display: flex; justify-content: space-between; font-weight: 600; margin-bottom: 6px; }
+.zc-preview .zc-body { display: flex; align-items: center; gap: 12px; }
+.zc-preview .zc-soc-ring { position: relative; width: 64px; height: 64px; flex: 0 0 auto; }
+.zc-preview .zc-soc-ring svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+.zc-preview .zc-soc-bg { fill: none; stroke: rgba(255,255,255,0.12); stroke-width: 3; }
+.zc-preview .zc-soc-fg { fill: none; stroke: #4cd964; stroke-width: 3; stroke-linecap: round; }
+.zc-preview .zc-soc-value { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 13px; }
+.zc-preview .zc-flux { list-style: none; margin: 0; padding: 0; flex: 1 1 auto; }
+.zc-preview .zc-flux li { display: flex; justify-content: space-between; padding: 1px 0; }
+.zc-preview .zc-intensite { height: 4px; background: rgba(255,255,255,0.12); border-radius: 2px; margin-top: 8px; overflow: hidden; }
+.zc-preview .zc-intensite-bar { height: 100%; }
+.zc-preview .zc-footer { margin-top: 6px; text-align: right; opacity: 0.85; }
+
+/* Aperçu conceptuel "Flux" (pas encore implémenté) : losange statique Solaire/Réseau/Maison/Batterie */
+.zf-preview { max-width: 260px; margin: 0 auto; font-size: 12px; }
+.zf-preview .zf-node {
+    background: var(--bg-widget, #1e1e1e);
+    color: var(--text-widget, #eee);
+    border-radius: 8px;
+    padding: 8px;
+    display: inline-block;
+    min-width: 80px;
+}
+.zf-preview .zf-top, .zf-preview .zf-bottom { margin: 4px auto; }
+.zf-preview .zf-row { display: flex; align-items: center; justify-content: space-between; margin: 4px 0; }
+.zf-preview .zf-hub { font-size: 22px; opacity: 0.6; }
+
+/* Aperçu conceptuel "Historique" (pas encore implémenté) : mini barres du jour */
+.zh-preview { max-width: 260px; margin: 0 auto; }
+.zh-preview .zh-bars {
+    display: flex;
+    align-items: flex-end;
+    gap: 4px;
+    height: 80px;
+    background: var(--bg-widget, #1e1e1e);
+    border-radius: 8px;
+    padding: 8px;
+}
+.zh-preview .zh-bar { flex: 1 1 auto; background: #4cd964; border-radius: 2px 2px 0 0; }
+.zh-preview .zh-footer { font-size: 11px; margin-top: 6px; opacity: 0.85; }
+</style>
 
 <script>
 $(function () {
