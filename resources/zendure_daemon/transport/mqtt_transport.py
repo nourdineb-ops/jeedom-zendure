@@ -39,7 +39,16 @@ class MqttTransport(Transport):
         topic_function (topic de commande deviceAutomation, template idem).
         """
         self._conn = conn
-        self._client = mqtt.Client(client_id=conn.get("client_id") or f"jeedom-zendure-{conn['device_id']}")
+        # protocol=MQTTv31 + clean_session=False : confirmé indispensable en test réel
+        # contre mqtteu.zen-iot.com — avec MQTTv3.1.1 (défaut paho) le SUBACK renvoie
+        # QoS=128 (souscription refusée par le broker) même avec un clientId/login valides.
+        # Avec ces deux réglages (alignés sur Api.mqttCloud.__init__ dans zendure_ha),
+        # le SUBACK passe à QoS=1 et la télémétrie arrive réellement.
+        self._client = mqtt.Client(
+            client_id=conn.get("client_id") or f"jeedom-zendure-{conn['device_id']}",
+            clean_session=False,
+            protocol=mqtt.MQTTv31,
+        )
         self._telemetry_cb: Optional[Callable[[TelemetryFrame], None]] = None
         self._conn_cb: Optional[Callable[[bool], None]] = None
         self._connected = False
@@ -54,6 +63,7 @@ class MqttTransport(Transport):
         self._client.on_connect = self._on_connect
         self._client.on_disconnect = self._on_disconnect
         self._client.on_message = self._on_message
+        self._client.on_subscribe = self._on_subscribe
 
     # -- Transport interface -------------------------------------------------
 
@@ -182,6 +192,12 @@ class MqttTransport(Transport):
             log.error("Échec connexion MQTT, rc=%s", rc)
         if self._conn_cb:
             self._conn_cb(rc == 0)
+
+    def _on_subscribe(self, client, userdata, mid, granted_qos):
+        # QoS=128 (0x80) dans le SUBACK = souscription refusée par le broker (ACL) :
+        # sans ce log on ne peut pas distinguer "abonné mais rien ne vient" de
+        # "jamais réellement abonné", ce qui est exactement le doute actuel.
+        log.info("SUBACK mid=%s granted_qos=%s", mid, granted_qos)
 
     def _on_disconnect(self, client, userdata, rc):
         with self._lock:
