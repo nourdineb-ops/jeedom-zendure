@@ -143,6 +143,16 @@ $eqLogics = eqLogic::byType($plugin->getId());
                         </div>
                     </div>
                 </fieldset>
+                <div class="alert alert-info" style="margin-top:20px;">
+                    <strong>{{À quoi sert cet onglet}}</strong>
+                    <ul style="margin-bottom:0;">
+                        <li>{{Nom : libre, sert juste à identifier l'équipement dans Jeedom.}}</li>
+                        <li>{{Objet parent : la pièce où se trouve physiquement la batterie (ex. Extérieur, Garage). Purement organisationnel.}}</li>
+                        <li>{{Activé : démarre réellement le pilotage (connexion MQTT + boucle anti-injection). Désactivé = l'équipement existe mais ne fait rien.}}</li>
+                        <li>{{Visible : affiche le dashboard "Condensé" sur la page d'accueil / la vue de l'objet.}}</li>
+                        <li>{{Catégorie : cosmétique (icône/filtre Jeedom), Énergie coché par défaut.}}</li>
+                    </ul>
+                </div>
             </div>
 
             <div role="tabpanel" class="tab-pane" id="tab_transport">
@@ -181,7 +191,7 @@ $eqLogics = eqLogic::byType($plugin->getId());
                                 <div class="form-group">
                                     <label class="col-sm-4 control-label">{{Broker cloud}}</label>
                                     <div class="col-sm-8">
-                                        <input class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="cloud_host" placeholder="mqtt-eu.zen-iot.com" />
+                                        <input class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="cloud_host" placeholder="mqtteu.zen-iot.com" />
                                     </div>
                                 </div>
                                 <div class="form-group">
@@ -191,15 +201,15 @@ $eqLogics = eqLogic::byType($plugin->getId());
                                     </div>
                                 </div>
                                 <div class="form-group">
-                                    <label class="col-sm-4 control-label">{{Clé Cloud d'Autorisation}}</label>
+                                    <label class="col-sm-4 control-label">{{Nom d'utilisateur MQTT}}</label>
                                     <div class="col-sm-8">
-                                        <input type="password" class="eqLogicAttr inputPassword form-control" data-l1key="configuration" data-l2key="cloud_auth_key" />
+                                        <input class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="cloud_username" />
                                     </div>
                                 </div>
                                 <div class="form-group">
-                                    <label class="col-sm-4 control-label">{{Numéro de série}}</label>
+                                    <label class="col-sm-4 control-label">{{Mot de passe / clé MQTT}}</label>
                                     <div class="col-sm-8">
-                                        <input class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="cloud_device_serial" />
+                                        <input type="password" class="eqLogicAttr inputPassword form-control" data-l1key="configuration" data-l2key="cloud_auth_key" />
                                     </div>
                                 </div>
                             </fieldset>
@@ -239,6 +249,15 @@ $eqLogics = eqLogic::byType($plugin->getId());
                         </div>
                     </div>
                 </div>
+                <div class="alert alert-info">
+                    <strong>{{À quoi sert cet onglet}}</strong>
+                    <ul style="margin-bottom:0;">
+                        <li>{{Identifiant appareil (device_id) et Product key : identifiants internes Zendure de VOTRE Hyper 2000 (pas le numéro de série visible sur l'étiquette). Ils ne sont pas exposés par l'app officielle — la façon la plus fiable de les récupérer est de sniffer les infos d'une intégration existante qui pilote déjà l'appareil (ex. Home Assistant : fichier .storage/zendure_ha.storage, champs productKey/deviceKey).}}</li>
+                        <li>{{Chemin A (Cloud) : le démon se connecte au broker MQTT cloud de Zendure — simple, mais latence ~90s côté cloud communautaire. C'est le seul chemin validé en conditions réelles à ce jour sur ce projet.}}</li>
+                        <li>{{Chemin B (Local) : cible v1 retenue pour le zéro-injection strict (latence minimale), mais nécessite un relais DNS + une reconfiguration Bluetooth de l'appareil vers un broker Mosquitto local (voir l'avertissement ci-dessus). Pas encore mis en place.}}</li>
+                        <li>{{En Cloud : le nom d'utilisateur/mot de passe MQTT ne sont PAS le compte de l'app Zendure — ce sont des identifiants de session MQTT (obtenus par ex. en récupérant ceux utilisés par une intégration Home Assistant existante).}}</li>
+                    </ul>
+                </div>
             </div>
 
             <div role="tabpanel" class="tab-pane" id="tab_sources">
@@ -273,6 +292,16 @@ $eqLogics = eqLogic::byType($plugin->getId());
                     }
                     ?>
                 </fieldset>
+                <div class="alert alert-info">
+                    <strong>{{À quoi sert cet onglet}}</strong>
+                    <ul style="margin-bottom:0;">
+                        <li>{{Pince ampèremétrique / PAPP réseau : la mesure de puissance au niveau du compteur EDF. C'est l'entrée principale de la boucle anti-injection rapide (onglet Comportement) — sans elle, le pilotage automatique ne peut pas fonctionner.}}</li>
+                        <li>{{Imax abonnement : intensité max souscrite (A), sert à la jauge d'intensité du dashboard.}}</li>
+                        <li>{{Période tarifaire (PTEC/HP-HC) et les 3 sources Tempo : utilisées pour le calcul du gain (€) et la stratégie de charge nocturne (charger davantage si demain est en jour Tempo Rouge).}}</li>
+                        <li>{{Prévision solaire : utilisée par la boucle lente (hors périmètre direct du démon) pour moduler le SOC cible nocturne.}}</li>
+                        <li>{{Toutes ces sources doivent déjà exister comme commandes "info" ailleurs dans Jeedom (téléinfo, RTE Tempo, prévision solaire...) — ce plugin ne les crée pas, il les référence.}}</li>
+                    </ul>
+                </div>
             </div>
 
             <div role="tabpanel" class="tab-pane" id="tab_comportement">
@@ -324,6 +353,17 @@ $eqLogics = eqLogic::byType($plugin->getId());
                         </div>
                     </div>
                 </fieldset>
+                <div class="alert alert-info">
+                    <strong>{{Logique de la boucle anti-injection}}</strong>
+                    <p>{{À chaque mesure de la pince/PAPP (grid_power), le démon calcule l'écart entre la puissance réseau mesurée et la marge cible, et reporte cet écart ~1:1 sur la nouvelle limite de sortie de la batterie (régulateur proportionnel, pas d'intégrateur). Convention : grid_power > 0 = import réseau (normal), < 0 = injection (à éviter).}}</p>
+                    <ul style="margin-bottom:0;">
+                        <li>{{Marge anti-injection (W) : objectif de puissance importée du réseau à maintenir (jamais tout à 0, pour absorber les variations entre deux mesures de la pince). Ex. 30W.}}</li>
+                        <li>{{Cooldown (s) : délai minimum entre deux commandes envoyées à la batterie, pour ne pas la solliciter en continu. Ignoré en cas d'injection avérée (voir seuil urgent, non exposé dans cet onglet — cf. urgent_injection_w).}}</li>
+                        <li>{{Hystérésis (W) : en dessous de ce changement de puissance, on ne renvoie pas de commande (évite de spammer la batterie pour des micro-ajustements).}}</li>
+                        <li>{{Limites sortie min/max (W) : bornes physiques/souhaitées de la limite de sortie envoyée à la batterie (ex. 0 à 1200W pour un Hyper 2000).}}</li>
+                        <li>{{Imax (A) / Réseau (mono/tri) / Seuils jauge : alimentent uniquement la jauge d'intensité du dashboard "Condensé", aucun impact sur la régulation elle-même.}}</li>
+                    </ul>
+                </div>
             </div>
 
             <div role="tabpanel" class="tab-pane" id="tab_ihm">
@@ -333,8 +373,8 @@ $eqLogics = eqLogic::byType($plugin->getId());
                         <label class="col-sm-3 control-label">{{Dashboard}}</label>
                         <div class="col-sm-3">
                             <select class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="template_dashboard">
-                                <option value="flux">{{Flux}}</option>
                                 <option value="condense">{{Condensé}}</option>
+                                <option value="flux">{{Flux}}</option>
                                 <option value="historique">{{Historique}}</option>
                             </select>
                         </div>
@@ -344,6 +384,14 @@ $eqLogics = eqLogic::byType($plugin->getId());
                         </div>
                     </div>
                 </fieldset>
+                <div class="alert alert-info">
+                    <strong>{{À quoi sert cet onglet}}</strong>
+                    <ul style="margin-bottom:0;">
+                        <li>{{Condensé : seul template réellement implémenté à ce jour (anneau SOC, 4 flux, jauge intensité, gain €). Choisissez-le pour un affichage riche.}}</li>
+                        <li>{{Flux et Historique : pas encore implémentés — en les sélectionnant, l'équipement retombe sur l'affichage générique Jeedom (liste de commandes), sans plantage mais sans le rendu visuel prévu à terme.}}</li>
+                        <li>{{Animations : désactivez si vous préférez un rendu statique (utile sur mobile/tablette).}}</li>
+                    </ul>
+                </div>
             </div>
         </form>
     </div>

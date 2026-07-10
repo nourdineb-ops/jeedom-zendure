@@ -223,10 +223,10 @@ class zendure extends eqLogic
         );
 
         if ($mode == 'cloud') {
-            $conf['cloud_host'] = $this->getConfiguration('cloud_host', 'mqtt-eu.zen-iot.com');
+            $conf['cloud_host'] = $this->getConfiguration('cloud_host', 'mqtteu.zen-iot.com');
             $conf['cloud_port'] = $this->getConfiguration('cloud_port', 1883);
             $conf['cloud_tls'] = (bool) $this->getConfiguration('cloud_tls', false);
-            $conf['cloud_device_serial'] = $this->getConfiguration('cloud_device_serial');
+            $conf['cloud_username'] = $this->getConfiguration('cloud_username');
             $conf['cloud_auth_key'] = $this->getConfiguration('cloud_auth_key');
         } else {
             $conf['local_host'] = $this->getConfiguration('local_host');
