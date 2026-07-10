@@ -212,6 +212,13 @@ $eqLogics = eqLogic::byType($plugin->getId());
                                         <input type="password" class="eqLogicAttr inputPassword form-control" data-l1key="configuration" data-l2key="cloud_auth_key" />
                                     </div>
                                 </div>
+                                <div class="form-group">
+                                    <label class="col-sm-4 control-label">{{Client ID MQTT (avancé)}}</label>
+                                    <div class="col-sm-8">
+                                        <input class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="cloud_client_id" placeholder="{{auto-généré si vide}}" />
+                                        <span class="help-block" style="margin-bottom:0;">{{Laisser vide sauf besoin de diagnostic : certains brokers limitent la réception de télémétrie à un clientId précis lié au compte.}}</span>
+                                    </div>
+                                </div>
                             </fieldset>
                         </div>
 

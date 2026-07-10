@@ -109,6 +109,7 @@ class ZendureDaemon:
             now = time.monotonic()
             if now - last_poll >= TELEMETRY_POLL_S:
                 last_poll = now
+                log.debug("Ping télémétrie périodique (%d équipement(s))", len(self._devices))
                 for device in self._devices.values():
                     device.request_telemetry()
 
