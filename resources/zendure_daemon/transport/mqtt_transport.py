@@ -105,6 +105,7 @@ class MqttTransport(Transport):
         topic = self._conn["topic_read"].format(
             device_id=self._conn["device_id"], product_key=self._conn.get("product_key", "")
         )
+        log.debug("Publish %s -> getAll", topic)
         self._client.publish(topic, json.dumps({"properties": ["getAll"]}), qos=1)
 
     def on_telemetry(self, callback: Callable[[TelemetryFrame], None]) -> None:
@@ -188,8 +189,11 @@ class MqttTransport(Transport):
 
     def _on_message(self, client, userdata, msg):
         # Le topic souscrit est un wildcard (.../#) : seule la trame de télémétrie
-        # (suffixe properties/report) nous intéresse, cf. mqttMessage() dans zendure_ha.
+        # (suffixe properties/report) alimente le callback, mais on logue tout le
+        # reste en debug (replies, ack, erreurs) pour garder de la visibilité en
+        # diagnostic — notamment sur function/invoke/reply et properties/read/reply.
         if not msg.topic.endswith("properties/report"):
+            log.debug("Reçu %s -> %s", msg.topic, msg.payload[:300])
             return
         try:
             data = json.loads(msg.payload.decode("utf-8"))

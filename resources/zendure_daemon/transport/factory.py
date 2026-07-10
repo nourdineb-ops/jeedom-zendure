@@ -39,7 +39,11 @@ def build_transport(eq_config: dict) -> MqttTransport:
 
     conn.update(
         {
-            "client_id": f"jeedom-zendure-{eq_config['device_id']}",
+            # Certains brokers (confirmé sur le cloud Zendure) limitent la réception de
+            # télémétrie à un clientId précis lié au compte — configurable pour pouvoir
+            # basculer sur un clientId connu (ex. celui d'une intégration existante) sans
+            # toucher au code. Par défaut, un identifiant généré, propre à ce démon.
+            "client_id": eq_config.get("cloud_client_id") or f"jeedom-zendure-{eq_config['device_id']}",
             "device_id": eq_config["device_id"],
             "product_key": eq_config.get("product_key", ""),
             "topic_telemetry": eq_config.get("topic_telemetry", DEFAULT_TOPIC_TELEMETRY),

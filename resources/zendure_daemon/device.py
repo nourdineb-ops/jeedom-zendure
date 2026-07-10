@@ -48,6 +48,7 @@ class Device:
         "cloud_tls",
         "cloud_username",
         "cloud_auth_key",
+        "cloud_client_id",
         "local_host",
         "local_port",
         "local_tls",

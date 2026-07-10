@@ -231,6 +231,7 @@ class zendure extends eqLogic
             $conf['cloud_tls'] = (bool) $this->getConfiguration('cloud_tls', false);
             $conf['cloud_username'] = $this->getConfiguration('cloud_username');
             $conf['cloud_auth_key'] = $this->getConfiguration('cloud_auth_key');
+            $conf['cloud_client_id'] = $this->getConfiguration('cloud_client_id');
         } else {
             $conf['local_host'] = $this->getConfiguration('local_host');
             $conf['local_port'] = $this->getConfiguration('local_port', 1883);
