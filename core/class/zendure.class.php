@@ -204,9 +204,11 @@ class zendure extends eqLogic
 
     public function toDaemonConfig()
     {
+        // Chaîne de repli à 3 niveaux : valeur de cet eqLogic -> défaut global du
+        // plugin (config::byKey, réglé sur la page racine) -> défaut codé en dur.
         $antiInjection = array(
-            'marge_w' => $this->getConfiguration('marge_anti_injection', 30),
-            'cooldown_s' => $this->getConfiguration('cooldown_anti_injection', 2),
+            'marge_w' => $this->getConfiguration('marge_anti_injection', config::byKey('default_marge_anti_injection', 'zendure', 30)),
+            'cooldown_s' => $this->getConfiguration('cooldown_anti_injection', config::byKey('default_cooldown_anti_injection', 'zendure', 2)),
             'hysteresis_w' => $this->getConfiguration('hysteresis_anti_injection', 15),
             'limit_min_w' => $this->getConfiguration('limite_min_w', 0),
             'limit_max_w' => $this->getConfiguration('limite_max_w', 1200),
@@ -224,8 +226,8 @@ class zendure extends eqLogic
         );
 
         if ($mode == 'cloud') {
-            $conf['cloud_host'] = $this->getConfiguration('cloud_host', 'mqtteu.zen-iot.com');
-            $conf['cloud_port'] = $this->getConfiguration('cloud_port', 1883);
+            $conf['cloud_host'] = $this->getConfiguration('cloud_host', config::byKey('default_cloud_host', 'zendure', 'mqtteu.zen-iot.com'));
+            $conf['cloud_port'] = $this->getConfiguration('cloud_port', config::byKey('default_cloud_port', 'zendure', 1883));
             $conf['cloud_tls'] = (bool) $this->getConfiguration('cloud_tls', false);
             $conf['cloud_username'] = $this->getConfiguration('cloud_username');
             $conf['cloud_auth_key'] = $this->getConfiguration('cloud_auth_key');
