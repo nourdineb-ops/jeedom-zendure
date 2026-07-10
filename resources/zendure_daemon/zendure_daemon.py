@@ -27,6 +27,11 @@ from jeedom.socket_server import JeedomSocketServer
 
 log = logging.getLogger("zendure.daemon")
 
+# Cadence de ping télémétrie (properties/read getAll) : l'appareil ne pousse pas
+# spontanément en continu, il faut le solliciter périodiquement (même ordre de
+# grandeur que le SCAN_INTERVAL de l'intégration Home Assistant zendure_ha).
+TELEMETRY_POLL_S = 60
+
 
 class ZendureDaemon:
     def __init__(self, args: argparse.Namespace):
@@ -98,8 +103,14 @@ class ZendureDaemon:
         signal.signal(signal.SIGINT, handle_sigterm)
 
         self.start()
+        last_poll = time.monotonic()
         while self._running:
             time.sleep(1)
+            now = time.monotonic()
+            if now - last_poll >= TELEMETRY_POLL_S:
+                last_poll = now
+                for device in self._devices.values():
+                    device.request_telemetry()
 
 
 def parse_args() -> argparse.Namespace:

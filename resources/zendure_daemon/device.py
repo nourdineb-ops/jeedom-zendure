@@ -34,6 +34,9 @@ class Device:
     def stop(self) -> None:
         self._transport.disconnect()
 
+    def request_telemetry(self) -> None:
+        self._transport.request_telemetry()
+
     # Clés qui déterminent la connexion transport : si l'une change (mode, host,
     # credentials...), il faut reconnecter, pas juste mettre à jour le régulateur.
     _TRANSPORT_KEYS = (

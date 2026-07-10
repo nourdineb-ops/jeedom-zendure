@@ -45,6 +45,12 @@ class Transport(ABC):
         """Pousse le seuil SOC minimum (%), propriété minSoc."""
 
     @abstractmethod
+    def request_telemetry(self) -> None:
+        """Demande une trame de télémétrie à jour (getAll). L'appareil ne pousse pas
+        spontanément en continu : sans ce ping périodique (cf. dataRefresh dans
+        zendure_ha, toutes les 60s), la télémétrie ne remonte quasiment jamais."""
+
+    @abstractmethod
     def on_telemetry(self, callback: Callable[[TelemetryFrame], None]) -> None:
         """Enregistre le callback appelé à chaque trame de télémétrie reçue."""
 

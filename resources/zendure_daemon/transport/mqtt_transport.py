@@ -101,6 +101,12 @@ class MqttTransport(Transport):
     def set_soc_min(self, percent: int) -> None:
         self._publish_property("minSoc", int(percent))
 
+    def request_telemetry(self) -> None:
+        topic = self._conn["topic_read"].format(
+            device_id=self._conn["device_id"], product_key=self._conn.get("product_key", "")
+        )
+        self._client.publish(topic, json.dumps({"properties": ["getAll"]}), qos=1)
+
     def on_telemetry(self, callback: Callable[[TelemetryFrame], None]) -> None:
         self._telemetry_cb = callback
 
@@ -167,6 +173,7 @@ class MqttTransport(Transport):
             legacy_topic = f"/{pk}/{did}/#"
             client.subscribe(legacy_topic, qos=1)
             log.info("Connecté, abonné à %s et %s", topic, legacy_topic)
+            self.request_telemetry()
         else:
             log.error("Échec connexion MQTT, rc=%s", rc)
         if self._conn_cb:
