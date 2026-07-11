@@ -321,11 +321,14 @@ class zendure extends eqLogic
         $path = dirname(__FILE__) . '/../template/dashboard/flux/flux.html';
         $html = file_get_contents($path);
 
-        $solar = (float) $this->getCmdValue('solar_power');
+        // Chaque grandeur du losange est désormais "source ou défaut" (cf. échange sur
+        // le choix de la commande la plus fiable, illustré sur l'injection puis étendu
+        // au solaire) : src_xxx vide -> comportement historique inchangé.
+        $solar = (float) $this->getSourceOrDefault('src_solaire', 'solar_power');
         // Cf. toHtmlCondense() : "Réseau" doit être la vraie mesure externe (pince/PAPP),
         // pas la télémétrie interne Zendure grid_power (souvent 0, ne reflète que ce que
         // le boîtier lui-même tire du réseau, pas la consommation réelle du foyer).
-        $grid = (float) $this->getConfiguredSourceValue('src_grid_papp');
+        $grid = (float) $this->getSourceOrDefault('src_grid_papp', 'grid_power');
         $injected = (float) $this->getSourceOrDefault('src_injection', 'injected_power');
         $house = $grid + abs($injected);
         $soc = round((float) $this->getCmdValue('soc'));
@@ -334,6 +337,18 @@ class zendure extends eqLogic
 
         list($modeIcon, $modeLabel, $batteryArrow) = $this->modeInfo($this->getCmdValue('mode'));
         $gridArrow = $grid >= 0 ? '↓' : '↑';
+
+        // Sens réel du courant dans le losange animé : chaque flux réversible (réseau,
+        // batterie) choisit son tracé SVG (import/export, charge/décharge) selon le signe
+        // de la grandeur ; en dessous du seuil, le flux est marqué inactif (pas de
+        // particules, trait terne) plutôt que de continuer à animer un flux nul.
+        $flowThresholdW = 5.0;
+        $pathGridD = $grid >= 0 ? 'M162,173 L292,173' : 'M292,173 L162,173';
+        $pathBatD = $injected >= 0 ? 'M320,236 L320,196' : 'M320,196 L320,236';
+        $solActive = abs($solar) >= $flowThresholdW ? 'zf-flow-active' : '';
+        $gridActive = abs($grid) >= $flowThresholdW ? 'zf-flow-active' : '';
+        $batActive = abs($injected) >= $flowThresholdW ? 'zf-flow-active' : '';
+        $houseActive = abs($house) >= $flowThresholdW ? 'zf-flow-active' : '';
 
         $imax = (float) $this->getConfiguration('imax_ampere', 30);
         $intensite = (float) $this->getConfiguredSourceValue('src_intensite');
@@ -362,6 +377,14 @@ class zendure extends eqLogic
             '##PERIODE_LABEL##' => $periode !== '' ? $periode : '—',
             '##MODE_ICON##' => $modeIcon,
             '##MODE_LABEL##' => $modeLabel,
+            '##PATH_SOL_D##' => 'M320,112 L320,150',
+            '##PATH_GRID_D##' => $pathGridD,
+            '##PATH_BAT_D##' => $pathBatD,
+            '##PATH_HOUSE_D##' => 'M348,173 L476,173',
+            '##SOL_ACTIVE_CLASS##' => $solActive,
+            '##GRID_ACTIVE_CLASS##' => $gridActive,
+            '##BAT_ACTIVE_CLASS##' => $batActive,
+            '##HOUSE_ACTIVE_CLASS##' => $houseActive,
             '##SOLAR_W##' => round($solar),
             '##GRID_ARROW##' => $gridArrow,
             '##GRID_W##' => round(abs($grid)),
