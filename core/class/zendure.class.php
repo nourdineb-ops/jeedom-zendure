@@ -276,7 +276,7 @@ class zendure extends eqLogic
         // 0W avant correction).
         $grid = (float) $this->getConfiguredSourceValue('src_grid_papp');
         $injected = (float) $this->getCmdValue('injected_power');
-        $house = $grid + $injected;
+        $house = $grid + abs($injected);
 
         $imax = (float) $this->getConfiguration('imax_ampere', 30);
         $intensite = (float) $this->getConfiguredSourceValue('src_intensite');
@@ -327,7 +327,7 @@ class zendure extends eqLogic
         // le boîtier lui-même tire du réseau, pas la consommation réelle du foyer).
         $grid = (float) $this->getConfiguredSourceValue('src_grid_papp');
         $injected = (float) $this->getCmdValue('injected_power');
-        $house = $grid + $injected;
+        $house = $grid + abs($injected);
         $soc = round((float) $this->getCmdValue('soc'));
 
         $selfconso = $house > 0 ? max(0, min(100, round((1 - ($grid / $house)) * 100))) : 0;
