@@ -78,4 +78,23 @@ if (!isConnect('admin')) {
             </div>
         </div>
     </fieldset>
+
+    <fieldset>
+        <legend>{{Défauts fréquence de mise à jour (Étage 3, repris par chaque eqLogic)}}</legend>
+        <div class="alert alert-info">
+            {{Le démon ne pousse une valeur de télémétrie vers Jeedom que si elle a changé, sauf au minimum toutes les X secondes (pour ne jamais laisser une commande "morte" trop longtemps). Un bouton "Capture télémétrie complète (1h)" sur chaque équipement permet de tout laisser passer temporairement pour du diagnostic.}}
+        </div>
+        <div class="form-group">
+            <label class="col-cm-3 control-label">{{Intervalle minimum (s)}}</label>
+            <div class="col-cm-3">
+                <input type="number" class="configKey form-control" data-l1key="default_telemetry_min_interval_s" placeholder="300" />
+            </div>
+        </div>
+        <div class="form-group">
+            <label class="col-cm-3 control-label">{{Tolérance de bruit}}</label>
+            <div class="col-cm-3">
+                <input type="number" step="0.1" class="configKey form-control" data-l1key="default_telemetry_noise_threshold" placeholder="3" />
+            </div>
+        </div>
+    </fieldset>
 </form>
