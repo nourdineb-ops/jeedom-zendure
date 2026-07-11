@@ -78,6 +78,29 @@ class Device:
             self._transport.on_connection_change(self._on_connection_change)
             self._transport.connect()
 
+    # logicalId (cf. zendure::ACTION_COMMANDS côté PHP) -> méthode Transport.
+    _ACTION_DISPATCH = {
+        "set_output_limit": "set_output_limit",
+        "set_input_limit": "set_input_limit",
+        "set_soc_min": "set_soc_min",
+        "set_mode": "set_mode",
+    }
+
+    def on_action(self, logical_id: str, value) -> None:
+        """Appelé depuis le socket serveur pour toute commande "action" déclenchée côté
+        Jeedom (curseur du dashboard, exécution manuelle d'une commande...) — cf.
+        zendureCmd::execute() qui relaie ici via {"type": "action", ...}. Sans ce
+        handler le démon logait juste "Type de message inconnu : action" et les
+        curseurs du dashboard ne faisaient strictement rien."""
+        method_name = self._ACTION_DISPATCH.get(logical_id)
+        if method_name is None:
+            log.warning("eq_id=%s action non gérée : %s=%s", self.eq_id, logical_id, value)
+            return
+        try:
+            getattr(self._transport, method_name)(int(float(value)))
+        except (TypeError, ValueError):
+            log.warning("eq_id=%s valeur invalide pour %s : %r", self.eq_id, logical_id, value)
+
     def on_grid_power(self, value_w: float) -> None:
         """Appelé depuis le socket serveur quand la pince (via listener PHP) rapporte une nouvelle valeur."""
         new_limit = self._regulator.update(value_w)
@@ -86,13 +109,11 @@ class Device:
             self._transport.set_output_limit(new_limit)
 
     def _on_telemetry(self, frame: TelemetryFrame) -> None:
-        # La trame report Zendure vient sous {"properties": {...}} (et parfois packData) ;
-        # callback.php attend un dict plat {logicalId: valeur} (cf. core/php/callback.php).
-        # Sans ce dépaquetage/traduction, aucune commande info n'était jamais mise à jour.
-        properties = dict(frame).get("properties", {})
-        if not properties:
-            return
-        values = translate_properties(properties)
+        # La trame report Zendure peut porter des données hors du wrapper "properties"
+        # (packData, cluster, wifiName/mac/ip...) : translate_properties() aplatit
+        # désormais la trame ENTIÈRE (moins la plomberie protocole), pas juste
+        # "properties", pour ne perdre aucune information remontée par l'appareil.
+        values = translate_properties(dict(frame))
         if values:
             self._callback.send_event(self.eq_id, values)
 

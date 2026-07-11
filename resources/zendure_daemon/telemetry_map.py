@@ -1,13 +1,21 @@
-"""Traduction clé Zendure brute -> logicalId de commande Jeedom (brief addendum §14.1 :
-"mapper 1:1 sur les topics du Hyper 2000"). Noms de propriété Zendure confirmés contre
-le code source de l'intégration Home Assistant zendure_ha (custom_components/zendure_ha/device.py).
+"""Traduction d'une trame Zendure brute (topic properties/report) -> dict plat
+{logicalId: valeur} consommé par callback.php.
 
-Les commandes total_output_kwh / total_solar_kwh / total_from_edf_kwh / forecast_today_kwh
-ne sont volontairement pas ici : ce ne sont pas des lectures brutes Zendure (agrégats /
-prévision solaire, cf. §14.2), elles restent hors de ce mapping.
+Changement de stratégie (échange avec l'utilisateur) : on ne filtre plus sur une
+liste figée de clés connues. La trame complète est aplatie (properties, packData,
+cluster, wifiName/mac/ip... tout ce qui n'est pas de la plomberie protocole) et
+CHAQUE clé devient une commande "info" (créée à la volée côté callback.php si elle
+n'existe pas encore). Ça permet à l'utilisateur de choisir lui-même, via l'onglet
+Sources, la commande la plus fiable pour un usage donné (ex. injection : notre nom
+"injected_power" curé, ou la clé brute "outputHomePower", ou une source externe).
+
+Les logicalId "curés" (solar_power, injected_power, grid_power, soc, output_limit,
+input_limit, mode) restent aussi produits en plus des clés brutes, en alias : le
+reste du plugin (widgets, valeurs par défaut) continue de fonctionner sans
+configuration Sources supplémentaire.
 """
 
-PROPERTY_TO_LOGICAL_ID = {
+CURATED_ALIASES = {
     "solarInputPower": "solar_power",
     "outputHomePower": "injected_power",
     "gridInputPower": "grid_power",
@@ -17,12 +25,37 @@ PROPERTY_TO_LOGICAL_ID = {
     "acMode": "mode",
 }
 
+# Clés de plomberie protocole (pas des mesures) : jamais transformées en commande.
+_ENVELOPE_KEYS = {"messageId", "product", "deviceId", "timestamp"}
 
-def translate_properties(properties: dict) -> dict:
-    """Filtre + traduit les clés reconnues ; les clés Zendure sans commande Jeedom
-    correspondante (packState, hemsState, remainOutTime...) sont ignorées ici."""
-    return {
-        PROPERTY_TO_LOGICAL_ID[key]: value
-        for key, value in properties.items()
-        if key in PROPERTY_TO_LOGICAL_ID
-    }
+
+def _flatten(prefix: str, value, out: dict) -> None:
+    if isinstance(value, dict):
+        for key, sub in value.items():
+            _flatten(f"{prefix}_{key}" if prefix else str(key), sub, out)
+    elif isinstance(value, list):
+        for i, sub in enumerate(value):
+            _flatten(f"{prefix}{i}" if prefix else str(i), sub, out)
+    else:
+        out[prefix] = value
+
+
+def translate_properties(frame: dict) -> dict:
+    """Aplatit toute la trame (hors clés de plomberie) en {logicalId: valeur},
+    en ajoutant les alias curés pour les clés reconnues."""
+    flat: dict = {}
+    for key, value in frame.items():
+        if key in _ENVELOPE_KEYS:
+            continue
+        if key == "properties":
+            # Le wrapper "properties" est transparent : ses enfants remontent
+            # directement (solarInputPower, pas properties_solarInputPower).
+            _flatten("", value, flat)
+        else:
+            _flatten(key, value, flat)
+
+    values = dict(flat)
+    for raw_key, curated_id in CURATED_ALIASES.items():
+        if raw_key in flat:
+            values[curated_id] = flat[raw_key]
+    return values

@@ -33,12 +33,27 @@ try {
 
     foreach ($values as $logicalId => $value) {
         $cmd = $eqLogic->getCmd(null, $logicalId);
-        if (is_object($cmd)) {
-            $cmd->event($value);
-            log::add('zendure', 'debug', 'callback eq_id=' . $eqId . ' ' . $logicalId . '=' . $value);
-        } else {
-            log::add('zendure', 'debug', 'Valeur reçue pour commande inconnue : ' . $logicalId);
+        if (!is_object($cmd)) {
+            // Changement de stratégie : le plugin capture désormais TOUTE la
+            // télémétrie Zendure (pas une liste figée de clés), et crée la
+            // commande à la volée au premier signalement — l'utilisateur choisit
+            // ensuite lui-même, via l'onglet Sources, laquelle est la plus
+            // fiable pour un usage donné (ex. injection).
+            $cmd = new zendureCmd();
+            $cmd->setLogicalId($logicalId);
+            $cmd->setEqLogic_id($eqLogic->getId());
+            $cmd->setType('info');
+            $cmd->setName($logicalId);
+            $cmd->setSubType(is_numeric($value) ? 'numeric' : 'string');
+            // Pas d'historisation par défaut : une trame peut porter des dizaines
+            // de clés à un rythme élevé (cf. échange sur la fréquence MQTT), on ne
+            // veut pas gonfler `history` pour des champs jamais réellement utilisés.
+            // L'utilisateur peut l'activer au cas par cas depuis la commande.
+            $cmd->setIsHistorized(0);
+            $cmd->save();
+            log::add('zendure', 'debug', 'Commande créée à la volée : ' . $logicalId);
         }
+        $cmd->event($value);
     }
 
     echo json_encode(array('state' => 'ok'));
