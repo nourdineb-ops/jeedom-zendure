@@ -736,7 +736,7 @@ $(function () {
         }
         var $tbody = $('#table_telemetrie tbody').empty();
         $.ajax({
-            type: 'GET',
+            type: 'POST',
             url: 'plugins/zendure/core/ajax/zendure.ajax.php',
             data: { action: 'listCommands', eqLogic_id: eqLogicId },
             dataType: 'json',
