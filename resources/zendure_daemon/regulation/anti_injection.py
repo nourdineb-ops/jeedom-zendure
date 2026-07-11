@@ -6,42 +6,34 @@ en agissant sur la limite de sortie Zendure (setDeviceAutomationInOutLimit, pas 
 flash). "Jamais" est borné au cycle de reporting de la pince, pas un vrai zéro
 continu (cf. reformulation §12) : la marge absorbe l'écart entre deux échantillons.
 
-Calcul en absolu, PAS en incrémental (corrigé le 2026-07-11 après relecture
-précise du scénario Jeedom historique, qui fait référence — cf. les deux
-branches FAST et HP de scenarioSubElement_id=1534, mathématiquement
-identiques une fois réduites) :
+Repris trait pour trait de la branche FAST du scénario Jeedom historique
+(scenarioSubElement_id=1534, qui fait référence — vérifié ligne à ligne le
+2026-07-11) :
 
-    target = clamp(0, limit_max_w, grid_power_w + injected_power_w - marge_w)
+    si grid_power_w >= marge_w : rien à faire ici, on importe assez, la
+        correction "à la hausse" est du ressort du cron HP (périodique,
+        cf. zendure::cronOptimisationHP() côté PHP), pas de cette boucle
+        rapide. Réagir vite dans les DEUX sens (comme le faisait une version
+        antérieure de ce fichier) a coïncidé avec une oscillation réseau plus
+        sévère en conditions réelles.
+    sinon : target = clamp(0, limit_max_w, grid_power_w + injected_power_w - marge_w)
+        recalculé en absolu à chaque fois depuis la télémétrie réelle, jamais
+        depuis un état interne mémorisé (cf. incident du 2026-07-11 : notre
+        compteur interne grimpait à 1200W pendant que la limite réellement
+        appliquée par l'appareil restait bloquée à 285W).
 
-où injected_power_w est la puissance ACTUELLEMENT délivrée par Zendure à la
-maison (télémétrie réelle, pas une valeur qu'on a nous-même commandée). La
-cible est recalculée intégralement à chaque appel à partir de ces deux mesures
-réelles — jamais "dernière limite envoyée + ajustement". Une version antérieure
-de ce fichier faisait `proposed = current_limit + error` (incrémental) : ça
-fonctionne tant que l'appareil obéit fidèlement, mais dérive dès qu'il n'obéit
-pas exactement (constaté en conditions réelles : la limite réellement
-appliquée par l'appareil restait bloquée à 285W pendant que notre compteur
-interne grimpait jusqu'à 1200W puis en redescendait sans aucun rapport avec la
-réalité). Se baser sur la télémétrie réelle à chaque calcul rend le régulateur
-auto-correcteur : peu importe ce que l'appareil a réellement fait de la
-dernière commande, le prochain calcul repart de faits mesurés, pas d'un
-souvenir.
+Pas d'hystérésis (retirée le 2026-07-11) : le scénario de référence n'en a
+aucune, il renvoie la commande à chaque exécution qui passe le cooldown, même
+si la valeur ne change presque pas. C'est justement l'interaction hystérésis +
+silence prolongé qui avait causé un incident réel (commande jamais renvoyée
+pendant 7 minutes). Sans hystérésis, ce problème ne peut plus se produire : dès
+qu'un événement passe le gate `grid_power_w < marge_w` et le cooldown, on
+envoie, point.
 
-Décharge uniquement (vérifié dans le même scénario de référence) : les
-branches FAST et HP ne poussent jamais mode=charge, seulement mode=output,
-plancher à 0. Le seul mode=charge de tout le scénario est dans le bloc nuit
-(00h-06h), une décision programmée une fois par nuit, hors périmètre de cette
-boucle rapide (cf. addendum §9bis : "la boucle lente reste côté scénario
-Jeedom").
-
-Cooldown et hystérésis limitent le nombre de commandes envoyées (comparaison
-sur la DERNIÈRE VALEUR ENVOYÉE, pas sur la formule elle-même — le calcul reste
-toujours absolu), sauf en cas d'injection avérée où la sécurité prime sur le
-cooldown (urgent_injection_w). Heartbeat (refresh_interval_s) : renvoie la
-cible courante même inchangée au-delà de ce délai — sans ça, un plateau
-prolongé (cible stable pendant plusieurs minutes) ne renvoie plus rien et
-l'appareil semble reprendre la main tout seul (deviceAutomation expire côté
-firmware si non rafraîchi, constaté en conditions réelles le 2026-07-11).
+Cooldown : délai minimum entre deux commandes, sauf en cas d'injection avérée
+où la sécurité prime (urgent_injection_w) — repris du scénario (FAST_COOLDOWN_S),
+avec en plus le bypass "urgent" qui n'existe pas dans le scénario mais reste
+jugé utile ici.
 """
 
 import time
@@ -53,16 +45,11 @@ from typing import Optional
 class AntiInjectionConfig:
     marge_w: float = 30.0
     cooldown_s: float = 2.0
-    hysteresis_w: float = 15.0
     limit_min_w: float = 0.0
     limit_max_w: float = 1200.0
     # En dessous de ce seuil (W, peut être négatif), on shunte le cooldown :
     # la sécurité zéro-injection prime sur la limitation du nombre de commandes.
     urgent_injection_w: float = -20.0
-    # Heartbeat : renvoie la cible courante (même inchangée) si ce délai est
-    # dépassé depuis le dernier envoi. Volontairement bien en dessous du poll
-    # télémétrie (60s).
-    refresh_interval_s: float = 30.0
 
     @classmethod
     def from_dict(cls, d: dict) -> "AntiInjectionConfig":
@@ -77,9 +64,6 @@ class RegulatorAction:
 class AntiInjectionRegulator:
     def __init__(self, config: AntiInjectionConfig):
         self._cfg = config
-        # Dernière valeur ENVOYÉE (pas la cible calculée) : sert uniquement à
-        # l'hystérésis/heartbeat, jamais de base pour le prochain calcul.
-        self._last_sent_value: Optional[float] = None
         self._last_sent_at: float = 0.0
 
     def reload_config(self, config: AntiInjectionConfig) -> None:
@@ -90,29 +74,21 @@ class AntiInjectionRegulator:
 
         grid_power_w : lecture instantanée de la pince/Tableau_GRID.
         injected_power_w : puissance ACTUELLEMENT délivrée par Zendure à la
-        maison (télémétrie réelle — cf. docstring module, jamais une valeur
-        qu'on a nous-même commandée)."""
+        maison (télémétrie réelle, jamais une valeur qu'on a nous-même commandée)."""
         now = now if now is not None else time.monotonic()
         cfg = self._cfg
 
-        target = self._clamp(grid_power_w + injected_power_w - cfg.marge_w)
-
-        if self._last_sent_value is None:
-            change = float("inf")
-        else:
-            change = abs(target - self._last_sent_value)
-        significant = change >= cfg.hysteresis_w
-        stale = (now - self._last_sent_at) >= cfg.refresh_interval_s
-
-        if not significant and not stale:
+        if grid_power_w >= cfg.marge_w:
+            # On importe assez (ou trop) : pas de risque d'injection immédiat,
+            # on laisse le cron HP périodique gérer l'optimisation à la hausse.
             return None
 
-        if significant:
-            urgent = grid_power_w <= cfg.urgent_injection_w
-            if not urgent and (now - self._last_sent_at) < cfg.cooldown_s:
-                return None
+        target = self._clamp(grid_power_w + injected_power_w - cfg.marge_w)
 
-        self._last_sent_value = target
+        urgent = grid_power_w <= cfg.urgent_injection_w
+        if not urgent and (now - self._last_sent_at) < cfg.cooldown_s:
+            return None
+
         self._last_sent_at = now
         return RegulatorAction(int(round(target)))
 
