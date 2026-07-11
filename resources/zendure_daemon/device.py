@@ -32,6 +32,10 @@ class Device:
             float(eq_config.get("telemetry_min_interval_s", 300)),
             float(eq_config.get("telemetry_noise_threshold", 3)),
         )
+        # Dernière puissance RÉELLEMENT délivrée à la maison (télémétrie Zendure,
+        # pas une valeur qu'on a nous-même commandée) — cf. anti_injection.py,
+        # le régulateur recalcule sa cible à partir de cette mesure à chaque fois.
+        self._last_injected_w: float = 0.0
         self._transport.on_telemetry(self._on_telemetry)
         self._transport.on_connection_change(self._on_connection_change)
 
@@ -115,11 +119,20 @@ class Device:
             log.warning("eq_id=%s valeur invalide pour %s : %r", self.eq_id, logical_id, value)
 
     def on_grid_power(self, value_w: float) -> None:
-        """Appelé depuis le socket serveur quand la pince (via listener PHP) rapporte une nouvelle valeur."""
-        new_limit = self._regulator.update(value_w)
-        if new_limit is not None:
-            log.debug("eq_id=%s grid=%.1fW -> nouvelle limite sortie %sW", self.eq_id, value_w, new_limit)
-            self._transport.set_output_limit(new_limit)
+        """Appelé depuis le socket serveur quand la pince (via listener PHP) rapporte une nouvelle valeur.
+
+        Décharge uniquement (cf. anti_injection.py) : jamais de bascule en charge
+        depuis cette boucle rapide, aligné sur le scénario Jeedom de référence.
+        Le calcul se base sur la dernière puissance injectée RÉELLEMENT mesurée
+        (télémétrie), pas sur une limite qu'on aurait nous-même commandée."""
+        action = self._regulator.update(value_w, self._last_injected_w)
+        if action is None:
+            return
+        log.debug(
+            "eq_id=%s grid=%.1fW injected=%.1fW -> discharge %sW",
+            self.eq_id, value_w, self._last_injected_w, action.power_w,
+        )
+        self._transport.set_output_limit(action.power_w)
 
     def _on_telemetry(self, frame: TelemetryFrame) -> None:
         # La trame report Zendure peut porter des données hors du wrapper "properties"
@@ -127,6 +140,11 @@ class Device:
         # désormais la trame ENTIÈRE (moins la plomberie protocole), pas juste
         # "properties", pour ne perdre aucune information remontée par l'appareil.
         values = translate_properties(dict(frame))
+        if "injected_power" in values:
+            try:
+                self._last_injected_w = float(values["injected_power"])
+            except (TypeError, ValueError):
+                pass
         values = self._throttle.filter(values)
         if values:
             self._callback.send_event(self.eq_id, values)
