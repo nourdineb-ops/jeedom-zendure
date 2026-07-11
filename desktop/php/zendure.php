@@ -708,7 +708,7 @@ $(function () {
         }
         $.ajax({
             type: 'POST',
-            url: 'core/ajax/zendure.ajax.php',
+            url: 'plugins/zendure/core/ajax/zendure.ajax.php',
             data: { action: 'debugCapture', eqLogic_id: eqLogicId },
             dataType: 'json',
             error: function (request, status, error) {
@@ -737,7 +737,7 @@ $(function () {
         var $tbody = $('#table_telemetrie tbody').empty();
         $.ajax({
             type: 'GET',
-            url: 'core/ajax/zendure.ajax.php',
+            url: 'plugins/zendure/core/ajax/zendure.ajax.php',
             data: { action: 'listCommands', eqLogic_id: eqLogicId },
             dataType: 'json',
             error: function (request, status, error) {
