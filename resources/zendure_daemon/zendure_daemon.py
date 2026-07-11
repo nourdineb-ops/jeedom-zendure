@@ -43,6 +43,7 @@ class ZendureDaemon:
             handlers={
                 "grid_power": self._handle_grid_power,
                 "reload_config": lambda _msg: self.reload_config(),
+                "action": self._handle_action,
             },
         )
         self._running = False
@@ -88,6 +89,13 @@ class ZendureDaemon:
             log.warning("grid_power reçu pour eq_id inconnu: %s", message.get("eq_id"))
             return
         device.on_grid_power(float(message["value_w"]))
+
+    def _handle_action(self, message: dict) -> None:
+        device = self._devices.get(message.get("eq_id"))
+        if device is None:
+            log.warning("action reçue pour eq_id inconnu: %s", message.get("eq_id"))
+            return
+        device.on_action(message.get("logical_id"), message.get("value"))
 
     def run_forever(self) -> None:
         def handle_sighup(_signum, _frame):

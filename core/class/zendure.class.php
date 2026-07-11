@@ -275,7 +275,7 @@ class zendure extends eqLogic
         // suite à un écart constaté avec la vraie pince EDF (~330-350W affichés,
         // 0W avant correction).
         $grid = (float) $this->getConfiguredSourceValue('src_grid_papp');
-        $injected = (float) $this->getCmdValue('injected_power');
+        $injected = (float) $this->getSourceOrDefault('src_injection', 'injected_power');
         $house = $grid + abs($injected);
 
         $imax = (float) $this->getConfiguration('imax_ampere', 30);
@@ -326,7 +326,7 @@ class zendure extends eqLogic
         // pas la télémétrie interne Zendure grid_power (souvent 0, ne reflète que ce que
         // le boîtier lui-même tire du réseau, pas la consommation réelle du foyer).
         $grid = (float) $this->getConfiguredSourceValue('src_grid_papp');
-        $injected = (float) $this->getCmdValue('injected_power');
+        $injected = (float) $this->getSourceOrDefault('src_injection', 'injected_power');
         $house = $grid + abs($injected);
         $soc = round((float) $this->getCmdValue('soc'));
 
@@ -467,6 +467,22 @@ class zendure extends eqLogic
             return 0;
         }
         return $cmd->execCmd();
+    }
+
+    /**
+     * Comme getConfiguredSourceValue(), mais retombe sur une commande interne
+     * du plugin (getCmdValue) si l'utilisateur n'a pas configuré de source —
+     * permet de proposer un choix (ex. src_injection : la télémétrie Zendure
+     * curée "injected_power" par défaut, ou n'importe quelle autre commande
+     * jugée plus fiable, ex. une pince externe) sans rien casser tant que
+     * personne n'a rien configuré.
+     */
+    private function getSourceOrDefault($configKey, $defaultLogicalId)
+    {
+        if (!empty($this->getConfiguration($configKey))) {
+            return $this->getConfiguredSourceValue($configKey);
+        }
+        return $this->getCmdValue($defaultLogicalId);
     }
 
     /**
