@@ -94,6 +94,7 @@ $eqLogics = eqLogic::byType($plugin->getId());
             <li role="presentation"><a href="#tab_sources" aria-controls="home" role="tab" data-toggle="tab"><i class="fas fa-satellite-dish"></i> {{Sources}}</a></li>
             <li role="presentation"><a href="#tab_comportement" aria-controls="home" role="tab" data-toggle="tab"><i class="fas fa-balance-scale"></i> {{Comportement}}</a></li>
             <li role="presentation"><a href="#tab_ihm" aria-controls="home" role="tab" data-toggle="tab"><i class="fas fa-palette"></i> {{IHM}}</a></li>
+            <li role="presentation"><a href="#tab_telemetrie" aria-controls="home" role="tab" data-toggle="tab" id="bt_tabTelemetrie"><i class="fas fa-list"></i> {{Télémétrie}}</a></li>
         </ul>
 
         <form class="form-horizontal tab-content" id="div_eqLogic">
@@ -525,6 +526,30 @@ $eqLogics = eqLogic::byType($plugin->getId());
                     </div>
                 </div>
             </div>
+
+            <div role="tabpanel" class="tab-pane" id="tab_telemetrie">
+                <fieldset>
+                    <legend><i class="fas fa-list"></i> {{Commandes de l'équipement}}</legend>
+                    <div class="alert alert-info">
+                        {{Toutes les commandes de cet équipement : les "curées" (utilisées par le plugin, ex. solar_power) et celles créées automatiquement par le démon à partir de la télémétrie brute Zendure (ex. outputHomePower, packData0_socLevel...). Non historisées par défaut pour ces dernières (activable au cas par cas via "Configuration avancée" sur la commande elle-même).}}
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-condensed" id="table_telemetrie">
+                            <thead>
+                                <tr>
+                                    <th>{{logicalId}}</th>
+                                    <th>{{Nom}}</th>
+                                    <th>{{Type}}</th>
+                                    <th>{{Valeur}}</th>
+                                    <th>{{Historisée}}</th>
+                                    <th>{{Dernière mise à jour}}</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </fieldset>
+            </div>
         </form>
     </div>
 </div>
@@ -695,6 +720,47 @@ $(function () {
                     return;
                 }
                 $('#div_alert').showAlert({ message: '{{Capture complète activée pour 1h}}', level: 'success' });
+            }
+        });
+    });
+
+    // Onglet "Télémétrie" : rechargé à chaque affichage de l'onglet (valeurs vivantes,
+    // pas de rafraîchissement auto en continu pour ne pas spammer l'AJAX).
+    function escapeHtml(s) {
+        return $('<div>').text(s === null || s === undefined ? '' : s).html();
+    }
+    $('.eqLogic').off('shown.bs.tab', '#bt_tabTelemetrie').on('shown.bs.tab', '#bt_tabTelemetrie', function () {
+        var eqLogicId = $('.eqLogic').find('[data-l1key="id"]').value();
+        if (!eqLogicId) {
+            return;
+        }
+        var $tbody = $('#table_telemetrie tbody').empty();
+        $.ajax({
+            type: 'GET',
+            url: 'core/ajax/zendure.ajax.php',
+            data: { action: 'listCommands', eqLogic_id: eqLogicId },
+            dataType: 'json',
+            error: function (request, status, error) {
+                handleAjaxError(request, status, error);
+            },
+            success: function (data) {
+                if (data.state != 'ok') {
+                    $('#div_alert').showAlert({ message: data.result, level: 'danger' });
+                    return;
+                }
+                $.each(data.result, function (i, cmd) {
+                    var badge = cmd.curated ? '<span class="label label-primary">{{curée}}</span>' : '<span class="label label-default">{{brute}}</span>';
+                    var histo = cmd.isHistorized == 1 ? '{{oui}}' : '{{non}}';
+                    var value = cmd.type == 'info' ? escapeHtml(cmd.value) + (cmd.unit ? ' ' + escapeHtml(cmd.unit) : '') : '—';
+                    $tbody.append(
+                        '<tr><td><code>' + escapeHtml(cmd.logicalId) + '</code> ' + badge + '</td>' +
+                        '<td>' + escapeHtml(cmd.name) + '</td>' +
+                        '<td>' + escapeHtml(cmd.type) + '/' + escapeHtml(cmd.subType) + '</td>' +
+                        '<td>' + value + '</td>' +
+                        '<td>' + histo + '</td>' +
+                        '<td>' + escapeHtml(cmd.collectDate) + '</td></tr>'
+                    );
+                });
             }
         });
     });
