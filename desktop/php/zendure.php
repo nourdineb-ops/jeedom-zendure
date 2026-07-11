@@ -363,6 +363,24 @@ $eqLogics = eqLogic::byType($plugin->getId());
                         </div>
                     </div>
                 </fieldset>
+                <fieldset>
+                    <legend><i class="fas fa-database"></i> {{Fréquence de mise à jour}}</legend>
+                    <div class="form-group">
+                        <label class="col-sm-3 control-label">{{Intervalle minimum (s)}}</label>
+                        <div class="col-sm-2">
+                            <input type="number" class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="telemetry_min_interval_s" placeholder="300" />
+                        </div>
+                        <label class="col-sm-3 control-label">{{Tolérance de bruit}}</label>
+                        <div class="col-sm-2">
+                            <input type="number" step="0.1" class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="telemetry_noise_threshold" placeholder="3" />
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <div class="col-sm-6">
+                            <a id="bt_debugCapture" class="btn btn-default"><i class="fas fa-satellite-dish"></i> {{Capture télémétrie complète (1h)}}</a>
+                        </div>
+                    </div>
+                </fieldset>
                 <div class="alert alert-info">
                     <strong>{{Logique de la boucle anti-injection}}</strong>
                     <p>{{À chaque mesure de la pince/PAPP (grid_power), le démon calcule l'écart entre la puissance réseau mesurée et la marge cible, et reporte cet écart ~1:1 sur la nouvelle limite de sortie de la batterie (régulateur proportionnel, pas d'intégrateur). Convention : grid_power > 0 = import réseau (normal), < 0 = injection (à éviter).}}</p>
@@ -372,6 +390,9 @@ $eqLogics = eqLogic::byType($plugin->getId());
                         <li>{{Hystérésis (W) : en dessous de ce changement de puissance, on ne renvoie pas de commande (évite de spammer la batterie pour des micro-ajustements).}}</li>
                         <li>{{Limites sortie min/max (W) : bornes physiques/souhaitées de la limite de sortie envoyée à la batterie (ex. 0 à 1200W pour un Hyper 2000).}}</li>
                         <li>{{Imax (A) / Réseau (mono/tri) / Seuils jauge : alimentent uniquement la jauge d'intensité du dashboard "Condensé", aucun impact sur la régulation elle-même.}}</li>
+                        <li>{{Intervalle minimum (s) : le démon ne pousse une valeur de télémétrie vers Jeedom que si elle a changé depuis le dernier envoi, sauf si ce délai est dépassé (heartbeat, pour ne jamais laisser une commande "morte" trop longtemps). N'affecte pas l'anti-injection elle-même (qui reste temps réel).}}</li>
+                        <li>{{Tolérance de bruit : un écart numérique en dessous de cette valeur n'est pas considéré comme un changement (ex. 3 = les puissances qui frémissent de quelques W en permanence ne déclenchent plus un envoi à chaque trame). Sans tolérance, seules les valeurs stables (SOC%, état...) bénéficient vraiment du filtre.}}</li>
+                        <li>{{Capture télémétrie complète (1h) : désactive temporairement ce filtre — tout est poussé sans filtrage pendant 1h (diagnostic), puis le filtrage normal reprend automatiquement.}}</li>
                     </ul>
                 </div>
             </div>
@@ -649,6 +670,32 @@ $(function () {
         var el = $(this).closest('.form-group').find('.eqLogicAttr');
         jeedom.cmd.getSelectModal({ cmd: { type: 'info' } }, function (result) {
             el.value(result.human);
+        });
+    });
+
+    // Bouton "Capture télémétrie complète (1h)" : pas de cmd_id connu à l'avance côté
+    // PHP (formulaire partagé entre équipements), on le résout via un mini AJAX dédié
+    // (core/ajax/zendure.ajax.php) plutôt que jeedom.cmd.execute() qui exige l'id direct.
+    $('.eqLogic').off('click', '#bt_debugCapture').on('click', '#bt_debugCapture', function () {
+        var eqLogicId = $('.eqLogic').find('[data-l1key="id"]').value();
+        if (!eqLogicId) {
+            return;
+        }
+        $.ajax({
+            type: 'POST',
+            url: 'core/ajax/zendure.ajax.php',
+            data: { action: 'debugCapture', eqLogic_id: eqLogicId },
+            dataType: 'json',
+            error: function (request, status, error) {
+                handleAjaxError(request, status, error);
+            },
+            success: function (data) {
+                if (data.state != 'ok') {
+                    $('#div_alert').showAlert({ message: data.result, level: 'danger' });
+                    return;
+                }
+                $('#div_alert').showAlert({ message: '{{Capture complète activée pour 1h}}', level: 'success' });
+            }
         });
     });
 });

@@ -38,6 +38,7 @@ class zendure extends eqLogic
         'set_output_limit' => array('Limite sortie AC (W)', 'slider'),
         'set_input_limit' => array('Limite entrée AC (W)', 'slider'),
         'set_soc_min' => array('SOC minimum', 'slider'),
+        'debug_capture_1h' => array('Capture télémétrie complète (1h)', 'other'),
     );
 
     /*
@@ -223,6 +224,13 @@ class zendure extends eqLogic
             'mode_connexion' => $mode,
             'anti_injection' => $antiInjection,
             'loop_period_s' => $this->getConfiguration('loop_period_s', 1),
+            // Filtre "ne pousser que si ça change, au minimum toutes les X min" (cf.
+            // échange sur le volume d'historique) — TelemetryThrottle côté démon.
+            // noise_threshold : tolérance sur les valeurs numériques (une puissance
+            // instantanée frémit de quelques W en permanence, sans tolérance le filtre
+            // ne réduit presque rien sur ce type de valeur — constaté en direct).
+            'telemetry_min_interval_s' => (int) $this->getConfiguration('telemetry_min_interval_s', config::byKey('default_telemetry_min_interval_s', 'zendure', 300)),
+            'telemetry_noise_threshold' => (float) $this->getConfiguration('telemetry_noise_threshold', config::byKey('default_telemetry_noise_threshold', 'zendure', 3)),
         );
 
         if ($mode == 'cloud') {

@@ -10,8 +10,11 @@ from typing import Optional
 
 from regulation.anti_injection import AntiInjectionConfig, AntiInjectionRegulator
 from telemetry_map import translate_properties
+from telemetry_throttle import TelemetryThrottle
 from transport.base import TelemetryFrame, Transport
 from transport.factory import build_transport
+
+DEBUG_CAPTURE_DURATION_S = 3600.0
 
 log = logging.getLogger("zendure.device")
 
@@ -24,6 +27,10 @@ class Device:
         self._transport: Transport = build_transport(eq_config)
         self._regulator = AntiInjectionRegulator(
             AntiInjectionConfig.from_dict(eq_config.get("anti_injection", {}))
+        )
+        self._throttle = TelemetryThrottle(
+            float(eq_config.get("telemetry_min_interval_s", 300)),
+            float(eq_config.get("telemetry_noise_threshold", 3)),
         )
         self._transport.on_telemetry(self._on_telemetry)
         self._transport.on_connection_change(self._on_connection_change)
@@ -69,6 +76,8 @@ class Device:
         )
         self._eq_config = eq_config
         self._regulator.reload_config(AntiInjectionConfig.from_dict(eq_config.get("anti_injection", {})))
+        self._throttle.min_interval_s = float(eq_config.get("telemetry_min_interval_s", 300))
+        self._throttle.noise_threshold = float(eq_config.get("telemetry_noise_threshold", 3))
 
         if transport_changed:
             log.info("eq_id=%s configuration transport modifiée, reconnexion", self.eq_id)
@@ -92,6 +101,10 @@ class Device:
         zendureCmd::execute() qui relaie ici via {"type": "action", ...}. Sans ce
         handler le démon logait juste "Type de message inconnu : action" et les
         curseurs du dashboard ne faisaient strictement rien."""
+        if logical_id == "debug_capture_1h":
+            self._throttle.enable_debug_capture(DEBUG_CAPTURE_DURATION_S)
+            log.info("eq_id=%s capture télémétrie complète activée pour %ds", self.eq_id, int(DEBUG_CAPTURE_DURATION_S))
+            return
         method_name = self._ACTION_DISPATCH.get(logical_id)
         if method_name is None:
             log.warning("eq_id=%s action non gérée : %s=%s", self.eq_id, logical_id, value)
@@ -114,6 +127,7 @@ class Device:
         # désormais la trame ENTIÈRE (moins la plomberie protocole), pas juste
         # "properties", pour ne perdre aucune information remontée par l'appareil.
         values = translate_properties(dict(frame))
+        values = self._throttle.filter(values)
         if values:
             self._callback.send_event(self.eq_id, values)
 
