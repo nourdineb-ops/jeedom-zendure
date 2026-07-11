@@ -55,6 +55,15 @@ valeurs statiques -> tokens ##XXX## remplacés par zendure::toHtmlFlux()).
     border: 0.5px solid var(--zf-border);
 }
 .zendure-flux .zf-lines { position: absolute; inset: 0; width: 100%; height: 100%; }
+/* Trait atténué par défaut (flux à l'arrêt) ; ne s'éclaire que si le flux est actif
+   (##XXX_ACTIVE_CLASS## injecté côté PHP selon le seuil défini dans toHtmlFlux()). */
+.zendure-flux .zf-flow-line { opacity: 0.16; transition: opacity 0.4s ease; }
+.zendure-flux .zf-flow-active .zf-flow-line { opacity: 0.55; }
+.zendure-flux .zf-flow-house .zf-flow-line { opacity: 0.20; }
+.zendure-flux .zf-flow-house.zf-flow-active .zf-flow-line { opacity: 0.60; }
+/* Pas de particules tant que le flux est inactif (arrêt réel, pas juste un trait terne) —
+   et le réglage global "Animations" (##ANIMATIONS_CLASS##) coupe tout, même les flux actifs. */
+.zendure-flux .zf-flow:not(.zf-flow-active) .zf-particles,
 .zendure-flux.zc-static .zf-particles,
 .zendure-flux:not(.zc-animated) .zf-particles { display: none; }
 
@@ -128,25 +137,44 @@ valeurs statiques -> tokens ##XXX## remplacés par zendure::toHtmlFlux()).
     </div>
 
     <div class="zf-diagram">
+        <!-- Sens réel du courant (addendum) : le "d" de chaque path est calculé côté PHP
+             selon le signe de la grandeur (import/export réseau, charge/décharge batterie) —
+             les particules suivent donc le vrai sens physique, pas un sens fixe. Chaque flux
+             est aussi marqué inactif (##XXX_ACTIVE_CLASS##) sous un seuil, ce qui coupe ses
+             particules ET atténue son trait (cf. .zf-flow-active dans le <style>). -->
         <svg viewBox="0 0 640 346" class="zf-lines" aria-hidden="true">
             <defs>
-                <path id="pSol##EQ_ID##" d="M320,112 L320,150" />
-                <path id="pGrid##EQ_ID##" d="M162,173 L292,173" />
-                <path id="pBat##EQ_ID##" d="M320,236 L320,196" />
-                <path id="pHouse##EQ_ID##" d="M348,173 L476,173" />
+                <path id="pSol##EQ_ID##" d="##PATH_SOL_D##" />
+                <path id="pGrid##EQ_ID##" d="##PATH_GRID_D##" />
+                <path id="pBat##EQ_ID##" d="##PATH_BAT_D##" />
+                <path id="pHouse##EQ_ID##" d="##PATH_HOUSE_D##" />
             </defs>
-            <use href="#pSol##EQ_ID##" stroke="#EF9F27" stroke-width="2.5" opacity="0.28" />
-            <use href="#pGrid##EQ_ID##" stroke="#378ADD" stroke-width="2.5" opacity="0.28" />
-            <use href="#pBat##EQ_ID##" stroke="#ED93B1" stroke-width="2.5" opacity="0.28" />
-            <use href="#pHouse##EQ_ID##" stroke="#D4537E" stroke-width="3" opacity="0.32" />
-            <g class="zf-particles">
-                <circle r="4" fill="#EF9F27"><animateMotion dur="1.4s" repeatCount="indefinite"><mpath href="#pSol##EQ_ID##" /></animateMotion></circle>
-                <circle r="4" fill="#EF9F27"><animateMotion dur="1.4s" begin="0.7s" repeatCount="indefinite"><mpath href="#pSol##EQ_ID##" /></animateMotion></circle>
-                <circle r="3.5" fill="#378ADD"><animateMotion dur="1.9s" repeatCount="indefinite"><mpath href="#pGrid##EQ_ID##" /></animateMotion></circle>
-                <circle r="4" fill="#ED93B1"><animateMotion dur="1.3s" repeatCount="indefinite"><mpath href="#pBat##EQ_ID##" /></animateMotion></circle>
-                <circle r="4" fill="#ED93B1"><animateMotion dur="1.3s" begin="0.65s" repeatCount="indefinite"><mpath href="#pBat##EQ_ID##" /></animateMotion></circle>
-                <circle r="4.5" fill="#D4537E"><animateMotion dur="1.15s" repeatCount="indefinite"><mpath href="#pHouse##EQ_ID##" /></animateMotion></circle>
-                <circle r="4.5" fill="#D4537E"><animateMotion dur="1.15s" begin="0.38s" repeatCount="indefinite"><mpath href="#pHouse##EQ_ID##" /></animateMotion></circle>
+            <g class="zf-flow zf-flow-sol ##SOL_ACTIVE_CLASS##">
+                <use href="#pSol##EQ_ID##" stroke="#EF9F27" stroke-width="2.5" class="zf-flow-line" />
+                <g class="zf-particles">
+                    <circle r="4" fill="#EF9F27"><animateMotion dur="1.4s" repeatCount="indefinite"><mpath href="#pSol##EQ_ID##" /></animateMotion></circle>
+                    <circle r="4" fill="#EF9F27"><animateMotion dur="1.4s" begin="0.7s" repeatCount="indefinite"><mpath href="#pSol##EQ_ID##" /></animateMotion></circle>
+                </g>
+            </g>
+            <g class="zf-flow zf-flow-grid ##GRID_ACTIVE_CLASS##">
+                <use href="#pGrid##EQ_ID##" stroke="#378ADD" stroke-width="2.5" class="zf-flow-line" />
+                <g class="zf-particles">
+                    <circle r="3.5" fill="#378ADD"><animateMotion dur="1.9s" repeatCount="indefinite"><mpath href="#pGrid##EQ_ID##" /></animateMotion></circle>
+                </g>
+            </g>
+            <g class="zf-flow zf-flow-bat ##BAT_ACTIVE_CLASS##">
+                <use href="#pBat##EQ_ID##" stroke="#ED93B1" stroke-width="2.5" class="zf-flow-line" />
+                <g class="zf-particles">
+                    <circle r="4" fill="#ED93B1"><animateMotion dur="1.3s" repeatCount="indefinite"><mpath href="#pBat##EQ_ID##" /></animateMotion></circle>
+                    <circle r="4" fill="#ED93B1"><animateMotion dur="1.3s" begin="0.65s" repeatCount="indefinite"><mpath href="#pBat##EQ_ID##" /></animateMotion></circle>
+                </g>
+            </g>
+            <g class="zf-flow zf-flow-house ##HOUSE_ACTIVE_CLASS##">
+                <use href="#pHouse##EQ_ID##" stroke="#D4537E" stroke-width="3" class="zf-flow-line" />
+                <g class="zf-particles">
+                    <circle r="4.5" fill="#D4537E"><animateMotion dur="1.15s" repeatCount="indefinite"><mpath href="#pHouse##EQ_ID##" /></animateMotion></circle>
+                    <circle r="4.5" fill="#D4537E"><animateMotion dur="1.15s" begin="0.38s" repeatCount="indefinite"><mpath href="#pHouse##EQ_ID##" /></animateMotion></circle>
+                </g>
             </g>
         </svg>
 

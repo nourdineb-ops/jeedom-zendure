@@ -284,6 +284,7 @@ $eqLogics = eqLogic::byType($plugin->getId());
                         'src_tempo_j1' => '{{Tempo — couleur de demain (J+1)}}',
                         'src_prevision_solaire' => '{{Prévision solaire (kWh)}}',
                         'src_injection' => '{{Injection maison (Zendure) — laisser vide pour utiliser la valeur par défaut}}',
+                        'src_solaire' => '{{Production solaire (dashboard) — laisser vide pour utiliser la valeur par défaut}}',
                     ];
                     foreach ($sources as $key => $label) {
                         echo '<div class="form-group">';
@@ -307,7 +308,7 @@ $eqLogics = eqLogic::byType($plugin->getId());
                         <li>{{Imax abonnement : intensité max souscrite (A), sert à la jauge d'intensité du dashboard.}}</li>
                         <li>{{Période tarifaire (PTEC/HP-HC) et les 3 sources Tempo : utilisées pour le calcul du gain (€) et la stratégie de charge nocturne (charger davantage si demain est en jour Tempo Rouge).}}</li>
                         <li>{{Prévision solaire : utilisée par la boucle lente (hors périmètre direct du démon) pour moduler le SOC cible nocturne.}}</li>
-                        <li>{{Injection maison (Zendure) : le dashboard utilise par défaut la commande "injected_power" (télémétrie Zendure curée). Le démon capture désormais TOUTE la télémétrie brute reçue (une commande "info" par valeur, créée automatiquement au premier signalement, visible dans la liste des commandes de cet équipement) — si vous jugez une autre commande plus fiable pour l'injection (ex. la clé brute "outputHomePower", ou une pince externe), sélectionnez-la ici.}}</li>
+                        <li>{{Injection maison (Zendure) / Production solaire : le dashboard utilise par défaut les commandes curées "injected_power"/"solar_power" (télémétrie Zendure). Le démon capture désormais TOUTE la télémétrie brute reçue (une commande "info" par valeur, créée automatiquement au premier signalement, visible dans la liste des commandes de cet équipement) — si vous jugez une autre commande plus fiable (ex. la clé brute "outputHomePower", ou une pince externe type Tableau_Zendure), sélectionnez-la ici. Le bilan Réseau utilise déjà le même principe via "PAPP réseau".}}</li>
                         <li>{{Toutes ces sources doivent déjà exister comme commandes "info" ailleurs dans Jeedom (téléinfo, RTE Tempo, prévision solaire...) — ce plugin ne les crée pas, il les référence. Exception : les commandes de télémétrie brute Zendure, elles, sont créées automatiquement par ce plugin lui-même.}}</li>
                     </ul>
                 </div>
