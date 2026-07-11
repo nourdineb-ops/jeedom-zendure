@@ -329,10 +329,6 @@ $eqLogics = eqLogic::byType($plugin->getId());
                         </div>
                     </div>
                     <div class="form-group">
-                        <label class="col-sm-3 control-label">{{Hystérésis (W)}}</label>
-                        <div class="col-sm-2">
-                            <input type="number" class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="hysteresis_anti_injection" placeholder="15" />
-                        </div>
                         <label class="col-sm-3 control-label">{{Limites sortie min/max (W)}}</label>
                         <div class="col-sm-1">
                             <input type="number" class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="limite_min_w" placeholder="0" />
@@ -363,6 +359,12 @@ $eqLogics = eqLogic::byType($plugin->getId());
                             <input type="number" class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="seuil_intensite_rouge" placeholder="90" />
                         </div>
                     </div>
+                    <div class="form-group">
+                        <label class="col-sm-3 control-label">{{Cron HP en simulation}}</label>
+                        <div class="col-sm-2">
+                            <input type="checkbox" class="eqLogicAttr" data-l1key="configuration" data-l2key="cron_hp_dry_run" checked />
+                        </div>
+                    </div>
                 </fieldset>
                 <fieldset>
                     <legend><i class="fas fa-database"></i> {{Fréquence de mise à jour}}</legend>
@@ -384,13 +386,13 @@ $eqLogics = eqLogic::byType($plugin->getId());
                 </fieldset>
                 <div class="alert alert-info">
                     <strong>{{Logique de la boucle anti-injection}}</strong>
-                    <p>{{À chaque mesure de la pince/PAPP (grid_power), le démon calcule l'écart entre la puissance réseau mesurée et la marge cible, et reporte cet écart ~1:1 sur la nouvelle limite de sortie de la batterie (régulateur proportionnel, pas d'intégrateur). Convention : grid_power > 0 = import réseau (normal), < 0 = injection (à éviter).}}</p>
+                    <p>{{Reprise ligne à ligne de la branche FAST du scénario Jeedom historique (vérifié le 2026-07-11) : si grid_power >= marge (assez ou trop d'import), la boucle rapide ne fait rien — c'est le cron HP qui s'en charge, toutes les 5 min. Sinon, target = clamp(0, limite_max, grid_power + injected_power - marge), recalculé en absolu à chaque mesure de la pince, jamais depuis une valeur mémorisée. Convention : grid_power > 0 = import réseau (normal), < 0 = injection (à éviter). Pas d'hystérésis (le scénario de référence n'en a pas) : chaque calcul qui passe le cooldown est envoyé, même si la valeur ne change presque pas.}}</p>
                     <ul style="margin-bottom:0;">
                         <li>{{Marge anti-injection (W) : objectif de puissance importée du réseau à maintenir (jamais tout à 0, pour absorber les variations entre deux mesures de la pince). Ex. 30W.}}</li>
                         <li>{{Cooldown (s) : délai minimum entre deux commandes envoyées à la batterie, pour ne pas la solliciter en continu. Ignoré en cas d'injection avérée (voir seuil urgent, non exposé dans cet onglet — cf. urgent_injection_w).}}</li>
-                        <li>{{Hystérésis (W) : en dessous de ce changement de puissance, on ne renvoie pas de commande (évite de spammer la batterie pour des micro-ajustements).}}</li>
                         <li>{{Limites sortie min/max (W) : bornes physiques/souhaitées de la limite de sortie envoyée à la batterie (ex. 0 à 1200W pour un Hyper 2000).}}</li>
                         <li>{{Cette boucle rapide ne joue que sur la décharge (plancher 0W) : elle ne bascule jamais en charge, conformément au scénario Jeedom de référence — la charge programmée reste une décision distincte (stratégie nuit HC, hors périmètre de cette boucle).}}</li>
+                        <li>{{Cron HP en simulation : reproduit la branche HP du scénario (toutes les 5 min, même formule que la boucle rapide) mais se contente de logger ce qu'il ferait (log plugin, niveau info, préfixe "[cronOptimisationHP] [SIMULATION]") sans jamais toucher à l'appareil tant que cette case est cochée.}}</li>
                         <li>{{Imax (A) / Réseau (mono/tri) / Seuils jauge : alimentent uniquement la jauge d'intensité du dashboard "Condensé", aucun impact sur la régulation elle-même.}}</li>
                         <li>{{Intervalle minimum (s) : le démon ne pousse une valeur de télémétrie vers Jeedom que si elle a changé depuis le dernier envoi, sauf si ce délai est dépassé (heartbeat, pour ne jamais laisser une commande "morte" trop longtemps). N'affecte pas l'anti-injection elle-même (qui reste temps réel).}}</li>
                         <li>{{Tolérance de bruit : un écart numérique en dessous de cette valeur n'est pas considéré comme un changement (ex. 3 = les puissances qui frémissent de quelques W en permanence ne déclenchent plus un envoi à chaque trame). Sans tolérance, seules les valeurs stables (SOC%, état...) bénéficient vraiment du filtre.}}</li>

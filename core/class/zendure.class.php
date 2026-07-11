@@ -210,7 +210,6 @@ class zendure extends eqLogic
         $antiInjection = array(
             'marge_w' => $this->getConfiguration('marge_anti_injection', config::byKey('default_marge_anti_injection', 'zendure', 30)),
             'cooldown_s' => $this->getConfiguration('cooldown_anti_injection', config::byKey('default_cooldown_anti_injection', 'zendure', 2)),
-            'hysteresis_w' => $this->getConfiguration('hysteresis_anti_injection', 15),
             'limit_min_w' => $this->getConfiguration('limite_min_w', 0),
             'limit_max_w' => $this->getConfiguration('limite_max_w', 1200),
             'urgent_injection_w' => $this->getConfiguration('urgent_injection_w', -20),
@@ -551,8 +550,72 @@ class zendure extends eqLogic
         log::add('zendure', 'debug', 'postSave eq_id=' . $this->getId() . ' (' . $this->getName() . ')');
         $this->createOrUpdateCommands();
         $this->registerGridPowerListener();
+        self::ensureCronRegistered();
         self::writeDaemonConfig();
         $this->reloadDaemonConfig();
+    }
+
+    /**
+     * Cron HP (addendum, comparaison ligne à ligne avec le scénario Jeedom
+     * historique le 2026-07-11) : la branche périodique (5 min) que ce
+     * scénario exécute en plus de sa branche FAST réactive — même formule
+     * que la boucle rapide du démon, mais sur un rythme lent, pour rattraper
+     * une sous-optimisation (import > marge) que la boucle rapide ignore
+     * volontairement (elle ne réagit qu'à l'injection, jamais à la hausse).
+     *
+     * Volontairement en mode simulation par défaut (config cron_hp_dry_run,
+     * coché) : logue ce qu'il ferait sans jamais toucher à l'appareil, le
+     * temps de valider le comportement en conditions réelles avant activation.
+     */
+    private static function ensureCronRegistered()
+    {
+        $cron = cron::byClassAndFunction('zendure', 'cronOptimisationHP');
+        if (!is_object($cron)) {
+            $cron = new cron();
+            $cron->setClass('zendure');
+            $cron->setFunction('cronOptimisationHP');
+            $cron->setEnable(1);
+            $cron->setDeamon(0);
+            $cron->setSchedule('*/5 * * * *');
+            $cron->save();
+            log::add('zendure', 'info', 'Cron cronOptimisationHP enregistré (*/5 * * * *, mode simulation par défaut)');
+        }
+    }
+
+    public static function cronOptimisationHP()
+    {
+        foreach (self::byType('zendure', true) as $eqLogic) {
+            /* @var zendure $eqLogic */
+            if (!$eqLogic->getIsEnable()) {
+                continue;
+            }
+            $eqLogic->runOptimisationHP();
+        }
+    }
+
+    private function runOptimisationHP()
+    {
+        $grid = (float) $this->getSourceOrDefault('src_grid_papp', 'grid_power');
+        $injected = (float) $this->getSourceOrDefault('src_injection', 'injected_power');
+        $marge = (float) $this->getConfiguration('marge_anti_injection', config::byKey('default_marge_anti_injection', 'zendure', 30));
+        $limitMin = (float) $this->getConfiguration('limite_min_w', 0);
+        $limitMax = (float) $this->getConfiguration('limite_max_w', 1200);
+        $target = (int) round(max($limitMin, min($limitMax, $grid + $injected - $marge)));
+
+        $dryRun = (bool) $this->getConfiguration('cron_hp_dry_run', 1);
+        log::add('zendure', 'info', sprintf(
+            '[cronOptimisationHP]%s eq_id=%d grid=%.1fW injected=%.1fW marge=%.1fW -> cible sortie=%dW',
+            $dryRun ? ' [SIMULATION]' : '',
+            $this->getId(), $grid, $injected, $marge, $target
+        ));
+
+        if ($dryRun) {
+            return;
+        }
+        $cmd = $this->getCmd(null, 'set_output_limit');
+        if (is_object($cmd)) {
+            $cmd->execCmd(array('slider' => $target));
+        }
     }
 
     public function preRemove()
