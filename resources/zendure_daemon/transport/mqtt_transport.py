@@ -214,6 +214,10 @@ class MqttTransport(Transport):
         if not msg.topic.endswith("properties/report"):
             log.debug("Reçu %s -> %s", msg.topic, msg.payload[:300])
             return
+        # Le contenu de properties/report lui-même n'était jamais logué (seul le
+        # reste l'était) — impossible de vérifier ce qu'on reçoit vraiment vs. ce
+        # qu'un autre client (HA) reçoit sur la même trame. Log complet en debug.
+        log.debug("Reçu %s -> %s", msg.topic, msg.payload)
         try:
             data = json.loads(msg.payload.decode("utf-8"))
         except (ValueError, UnicodeDecodeError):

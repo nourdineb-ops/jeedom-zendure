@@ -685,6 +685,13 @@ $eqLogics = eqLogic::byType($plugin->getId());
 
 <script>
 $(function () {
+    // Deep-link ?id=X (utilisé par le titre du widget Flux, cf. flux.html) : ouvre
+    // directement l'équipement au chargement de la page, comme un clic sur sa carte.
+    var deepLinkId = getUrlVars('id');
+    if (deepLinkId) {
+        $('.eqLogicDisplayCard[data-eqlogic_id="' + deepLinkId + '"]').trigger('click');
+    }
+
     $('#sel_mode_connexion').on('change', function () {
         var mode = $(this).val();
         $('#bloc_cloud').toggle(mode == 'cloud');

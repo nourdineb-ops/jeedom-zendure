@@ -342,16 +342,26 @@ class zendure extends eqLogic
 
         $selfconso = $house > 0 ? max(0, min(100, round((1 - ($grid / $house)) * 100))) : 0;
 
-        list($modeIcon, $modeLabel, $batteryArrow) = $this->modeInfo($this->getCmdValue('mode'));
-        $gridArrow = $grid >= 0 ? '↓' : '↑';
+        list($modeIcon, $modeLabel, ) = $this->modeInfo($this->getCmdValue('mode'));
+        // Flèches = sens physique réel de chaque ligne dans le losange (pas un sens
+        // fixe) : Réseau est horizontal (gauche<->hub), donc →/← ; Batterie est
+        // vertical (bas<->hub), donc ↑/↓. Avant, les deux utilisaient ↓/↑, ce qui ne
+        // correspondait à la disposition d'aucun des deux (source de confusion
+        // signalée). → import (vers le hub), ← export ; ↑ décharge (monte vers le
+        // hub), ↓ charge (descend vers la batterie).
+        $gridArrow = $grid >= 0 ? '→' : '←';
+        $batteryArrow = $injected >= 0 ? '↑' : '↓';
 
         // Sens réel du courant dans le losange animé : chaque flux réversible (réseau,
         // batterie) choisit son tracé SVG (import/export, charge/décharge) selon le signe
         // de la grandeur ; en dessous du seuil, le flux est marqué inactif (pas de
         // particules, trait terne) plutôt que de continuer à animer un flux nul.
+        // Coordonnées 0-100, partagées avec les % CSS des noeuds (cf. flux.html) —
+        // corrige le désalignement lignes/cercles (l'ancien viewBox 640x346 ne
+        // correspondait pas au conteneur réel).
         $flowThresholdW = 5.0;
-        $pathGridD = $grid >= 0 ? 'M162,173 L292,173' : 'M292,173 L162,173';
-        $pathBatD = $injected >= 0 ? 'M320,236 L320,196' : 'M320,196 L320,236';
+        $pathGridD = $grid >= 0 ? 'M15,58 L50,58' : 'M50,58 L15,58';
+        $pathBatD = $injected >= 0 ? 'M50,86 L50,58' : 'M50,58 L50,86';
         $solActive = abs($solar) >= $flowThresholdW ? 'zf-flow-active' : '';
         $gridActive = abs($grid) >= $flowThresholdW ? 'zf-flow-active' : '';
         $batActive = abs($injected) >= $flowThresholdW ? 'zf-flow-active' : '';
@@ -382,12 +392,16 @@ class zendure extends eqLogic
             '##EQ_ID##' => $this->getId(),
             '##NAME##' => $this->getName(),
             '##PERIODE_LABEL##' => $periode !== '' ? $periode : '—',
+            // Le badge période (ex. "HPJB") reprend la couleur Tempo du jour au lieu
+            // d'un ambre fixe (signalé comme incohérent avec la pastille Tempo du bas).
+            '##PERIODE_BADGE_FG##' => $tempoToday[0],
+            '##PERIODE_BADGE_BG##' => $tempoToday[1],
             '##MODE_ICON##' => $modeIcon,
             '##MODE_LABEL##' => $modeLabel,
-            '##PATH_SOL_D##' => 'M320,112 L320,150',
+            '##PATH_SOL_D##' => 'M50,20 L50,58',
             '##PATH_GRID_D##' => $pathGridD,
             '##PATH_BAT_D##' => $pathBatD,
-            '##PATH_HOUSE_D##' => 'M348,173 L476,173',
+            '##PATH_HOUSE_D##' => 'M50,58 L85,58',
             '##SOL_ACTIVE_CLASS##' => $solActive,
             '##GRID_ACTIVE_CLASS##' => $gridActive,
             '##BAT_ACTIVE_CLASS##' => $batActive,
@@ -466,6 +480,12 @@ class zendure extends eqLogic
         }
         if (strpos($v, 'bleu') !== false || $v === '1' || $v === 'blue') {
             return array('#1D4ED8', '#BFDBFE', 'Bleu');
+        }
+        // "UNDEFINED"/"UNKNOWN" : la couleur Tempo de demain n'est publiée par RTE
+        // que l'après-midi — état "pas encore connu" légitime, pas une erreur.
+        // Afficher la chaîne brute en majuscules était moche/déroutant (signalé).
+        if ($v === 'undefined' || $v === 'unknown') {
+            return array('#6B7280', 'rgba(127,127,127,0.16)', '—');
         }
         return array('#6B7280', 'rgba(127,127,127,0.16)', $raw);
     }
