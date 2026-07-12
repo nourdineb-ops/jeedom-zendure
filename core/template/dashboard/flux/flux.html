@@ -11,7 +11,8 @@ valeurs statiques -> tokens ##XXX## remplacés par zendure::toHtmlFlux()).
    par un <head> — un fichier .css à part (desktop/css/*.css ou ce flux.css) n'est JAMAIS
    chargé pour ce contexte. Le <style> doit donc être inline dans le template lui-même. */
 .zendure-flux {
-    --zf-surface-0: var(--bg-widget, #1e1e1e);
+    /* Fond transparent (demande explicite) : le widget doit se fondre dans le
+       fond du dashboard, pas imposer sa propre carte sombre. */
     --zf-surface-1: rgba(127, 127, 127, 0.08);
     --zf-surface-2: rgba(127, 127, 127, 0.16);
     --zf-text: var(--text-widget, #eee);
@@ -20,7 +21,7 @@ valeurs statiques -> tokens ##XXX## remplacés par zendure::toHtmlFlux()).
 
     width: 100%;
     max-width: 660px;
-    background: var(--zf-surface-0);
+    background: transparent;
     color: var(--zf-text);
     border-radius: 12px;
     padding: 14px 16px;
@@ -33,7 +34,16 @@ valeurs statiques -> tokens ##XXX## remplacés par zendure::toHtmlFlux()).
     align-items: center;
     margin-bottom: 10px;
 }
-.zendure-flux .zf-title { display: flex; align-items: center; gap: 8px; font-weight: 600; }
+.zendure-flux .zf-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 600;
+    cursor: pointer;
+    text-decoration: none;
+    color: inherit;
+}
+.zendure-flux .zf-title:hover { text-decoration: underline; }
 .zendure-flux .zf-title i { color: #EF9F27; }
 .zendure-flux .zf-badges { display: flex; gap: 6px; }
 .zendure-flux .zf-badge {
@@ -42,17 +52,17 @@ valeurs statiques -> tokens ##XXX## remplacés par zendure::toHtmlFlux()).
     border-radius: 20px;
     background: var(--zf-surface-2);
 }
-.zendure-flux .zf-badge-tarif { color: #854F0B; background: #FAC775; }
 
 .zendure-flux .zf-diagram {
     position: relative;
     width: 100%;
     max-width: 640px;
-    height: 300px;
+    height: 320px;
     margin: 0 auto;
     background: var(--zf-surface-1);
     border-radius: 14px;
     border: 0.5px solid var(--zf-border);
+    overflow: visible;
 }
 .zendure-flux .zf-lines { position: absolute; inset: 0; width: 100%; height: 100%; }
 /* Trait atténué par défaut (flux à l'arrêt) ; ne s'éclaire que si le flux est actif
@@ -83,10 +93,12 @@ valeurs statiques -> tokens ##XXX## remplacés par zendure::toHtmlFlux()).
     line-height: 1.2;
 }
 .zendure-flux .zf-node-lg { width: 96px; height: 96px; }
-.zendure-flux .zf-top { left: 50%; top: 22%; border-color: #EF9F27; }
-.zendure-flux .zf-left { left: 16%; top: 58%; border-color: #378ADD; }
-.zendure-flux .zf-right { left: 84%; top: 58%; border-color: #D4537E; }
-.zendure-flux .zf-bottom { left: 50%; top: 92%; border-color: #ED93B1; }
+.zendure-flux .zf-top { left: 50%; top: 20%; border-color: #EF9F27; }
+.zendure-flux .zf-left { left: 15%; top: 58%; border-color: #378ADD; }
+.zendure-flux .zf-right { left: 85%; top: 58%; border-color: #D4537E; }
+/* 88% et non 92%+ : à 96px de haut, un centre à 92% dans une boîte de 300px
+   dépasse le bord bas du conteneur (débordement constaté). */
+.zendure-flux .zf-bottom { left: 50%; top: 86%; border-color: #ED93B1; }
 .zendure-flux .zf-hub {
     position: absolute; left: 50%; top: 58%; transform: translate(-50%, -50%);
     width: 56px; height: 56px; border-radius: 50%;
@@ -126,12 +138,12 @@ valeurs statiques -> tokens ##XXX## remplacés par zendure::toHtmlFlux()).
 </style>
 <div class="zendure-flux ##ANIMATIONS_CLASS##" data-eqid="##EQ_ID##">
     <div class="zf-header">
-        <div class="zf-title">
+        <a class="zf-title" href="index.php?v=d&amp;plugin=zendure&amp;id=##EQ_ID##" title="Ouvrir la configuration de l'équipement">
             <i class="fas fa-bolt"></i>
             <span>##NAME##</span>
-        </div>
+        </a>
         <div class="zf-badges">
-            <span class="zf-badge zf-badge-tarif"><i class="fas fa-sun"></i> ##PERIODE_LABEL##</span>
+            <span class="zf-badge zf-badge-tarif" style="color:##PERIODE_BADGE_FG##;background:##PERIODE_BADGE_BG##"><i class="fas fa-sun"></i> ##PERIODE_LABEL##</span>
             <span class="zf-badge zf-badge-mode"><i class="fas ##MODE_ICON##"></i> ##MODE_LABEL##</span>
         </div>
     </div>
@@ -141,8 +153,11 @@ valeurs statiques -> tokens ##XXX## remplacés par zendure::toHtmlFlux()).
              selon le signe de la grandeur (import/export réseau, charge/décharge batterie) —
              les particules suivent donc le vrai sens physique, pas un sens fixe. Chaque flux
              est aussi marqué inactif (##XXX_ACTIVE_CLASS##) sous un seuil, ce qui coupe ses
-             particules ET atténue son trait (cf. .zf-flow-active dans le <style>). -->
-        <svg viewBox="0 0 640 346" class="zf-lines" aria-hidden="true">
+             particules ET atténue son trait (cf. .zf-flow-active dans le <style>).
+             viewBox 0-100 partagé avec les % CSS des noeuds (.zf-top/.zf-left/...) : garantit
+             l'alignement quel que soit le ratio réel du conteneur (corrigé — l'ancien viewBox
+             640x346 ne correspondait pas au conteneur réel 640x320, d'où le désalignement). -->
+        <svg viewBox="0 0 100 100" preserveAspectRatio="none" class="zf-lines" aria-hidden="true">
             <defs>
                 <path id="pSol##EQ_ID##" d="##PATH_SOL_D##" />
                 <path id="pGrid##EQ_ID##" d="##PATH_GRID_D##" />
@@ -150,30 +165,30 @@ valeurs statiques -> tokens ##XXX## remplacés par zendure::toHtmlFlux()).
                 <path id="pHouse##EQ_ID##" d="##PATH_HOUSE_D##" />
             </defs>
             <g class="zf-flow zf-flow-sol ##SOL_ACTIVE_CLASS##">
-                <use href="#pSol##EQ_ID##" stroke="#EF9F27" stroke-width="2.5" class="zf-flow-line" />
+                <use href="#pSol##EQ_ID##" stroke="#EF9F27" stroke-width="2.5" vector-effect="non-scaling-stroke" class="zf-flow-line" />
                 <g class="zf-particles">
-                    <circle r="4" fill="#EF9F27"><animateMotion dur="1.4s" repeatCount="indefinite"><mpath href="#pSol##EQ_ID##" /></animateMotion></circle>
-                    <circle r="4" fill="#EF9F27"><animateMotion dur="1.4s" begin="0.7s" repeatCount="indefinite"><mpath href="#pSol##EQ_ID##" /></animateMotion></circle>
+                    <circle r="0.7" fill="#EF9F27"><animateMotion dur="1.4s" repeatCount="indefinite"><mpath href="#pSol##EQ_ID##" /></animateMotion></circle>
+                    <circle r="0.7" fill="#EF9F27"><animateMotion dur="1.4s" begin="0.7s" repeatCount="indefinite"><mpath href="#pSol##EQ_ID##" /></animateMotion></circle>
                 </g>
             </g>
             <g class="zf-flow zf-flow-grid ##GRID_ACTIVE_CLASS##">
-                <use href="#pGrid##EQ_ID##" stroke="#378ADD" stroke-width="2.5" class="zf-flow-line" />
+                <use href="#pGrid##EQ_ID##" stroke="#378ADD" stroke-width="2.5" vector-effect="non-scaling-stroke" class="zf-flow-line" />
                 <g class="zf-particles">
-                    <circle r="3.5" fill="#378ADD"><animateMotion dur="1.9s" repeatCount="indefinite"><mpath href="#pGrid##EQ_ID##" /></animateMotion></circle>
+                    <circle r="0.6" fill="#378ADD"><animateMotion dur="1.9s" repeatCount="indefinite"><mpath href="#pGrid##EQ_ID##" /></animateMotion></circle>
                 </g>
             </g>
             <g class="zf-flow zf-flow-bat ##BAT_ACTIVE_CLASS##">
-                <use href="#pBat##EQ_ID##" stroke="#ED93B1" stroke-width="2.5" class="zf-flow-line" />
+                <use href="#pBat##EQ_ID##" stroke="#ED93B1" stroke-width="2.5" vector-effect="non-scaling-stroke" class="zf-flow-line" />
                 <g class="zf-particles">
-                    <circle r="4" fill="#ED93B1"><animateMotion dur="1.3s" repeatCount="indefinite"><mpath href="#pBat##EQ_ID##" /></animateMotion></circle>
-                    <circle r="4" fill="#ED93B1"><animateMotion dur="1.3s" begin="0.65s" repeatCount="indefinite"><mpath href="#pBat##EQ_ID##" /></animateMotion></circle>
+                    <circle r="0.7" fill="#ED93B1"><animateMotion dur="1.3s" repeatCount="indefinite"><mpath href="#pBat##EQ_ID##" /></animateMotion></circle>
+                    <circle r="0.7" fill="#ED93B1"><animateMotion dur="1.3s" begin="0.65s" repeatCount="indefinite"><mpath href="#pBat##EQ_ID##" /></animateMotion></circle>
                 </g>
             </g>
             <g class="zf-flow zf-flow-house ##HOUSE_ACTIVE_CLASS##">
-                <use href="#pHouse##EQ_ID##" stroke="#D4537E" stroke-width="3" class="zf-flow-line" />
+                <use href="#pHouse##EQ_ID##" stroke="#D4537E" stroke-width="3" vector-effect="non-scaling-stroke" class="zf-flow-line" />
                 <g class="zf-particles">
-                    <circle r="4.5" fill="#D4537E"><animateMotion dur="1.15s" repeatCount="indefinite"><mpath href="#pHouse##EQ_ID##" /></animateMotion></circle>
-                    <circle r="4.5" fill="#D4537E"><animateMotion dur="1.15s" begin="0.38s" repeatCount="indefinite"><mpath href="#pHouse##EQ_ID##" /></animateMotion></circle>
+                    <circle r="0.8" fill="#D4537E"><animateMotion dur="1.15s" repeatCount="indefinite"><mpath href="#pHouse##EQ_ID##" /></animateMotion></circle>
+                    <circle r="0.8" fill="#D4537E"><animateMotion dur="1.15s" begin="0.38s" repeatCount="indefinite"><mpath href="#pHouse##EQ_ID##" /></animateMotion></circle>
                 </g>
             </g>
         </svg>
