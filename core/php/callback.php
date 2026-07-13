@@ -50,6 +50,12 @@ try {
             // veut pas gonfler `history` pour des champs jamais réellement utilisés.
             // L'utilisateur peut l'activer au cas par cas depuis la commande.
             $cmd->setIsHistorized(0);
+            // Masquée par défaut : ce sont des lectures brutes destinées à être
+            // choisies comme source (onglet Sources) ou recomposées par le widget
+            // Flux (cf. zendure::createOrUpdateFluxWidget()), pas à s'afficher en
+            // vrac sur le dashboard entre deux sauvegardes de l'équipement (seul
+            // moment où le grand nettoyage de visibilité de postSave() repasse).
+            $cmd->setIsVisible(0);
             $cmd->save();
             log::add('zendure', 'debug', 'Commande créée à la volée : ' . $logicalId);
         }

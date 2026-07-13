@@ -466,7 +466,6 @@ $eqLogics = eqLogic::byType($plugin->getId());
                         <p><strong>{{Flux}}</strong> <span class="label label-success">{{implémenté}}</span></p>
                         <div class="zendure-flux zf-preview-static">
                             <div class="zf-header">
-                                <div class="zf-title"><i class="fas fa-bolt"></i><span>Panneaux solaires</span></div>
                                 <div class="zf-badges">
                                     <span class="zf-badge zf-badge-tarif"><i class="fas fa-sun"></i> HC</span>
                                     <span class="zf-badge"><i class="fas fa-arrow-down"></i> Décharge</span>
@@ -488,7 +487,7 @@ $eqLogics = eqLogic::byType($plugin->getId());
                                         <line x1="50" y1="52" x2="35" y2="27" stroke="var(--zf-text)" stroke-width="2.5" stroke-linecap="round" />
                                         <circle cx="50" cy="52" r="3.5" fill="var(--zf-text)" />
                                     </svg>
-                                    <div><div class="zf-gauge-value">6.2 <span>A</span></div><div class="zf-gauge-marge"><i class="fas fa-shield-alt"></i> {{marge}} 23.8 A</div></div>
+                                    <div class="zf-gauge-text"><div class="zf-gauge-value">6.2 <span>A</span></div><div class="zf-gauge-marge"><i class="fas fa-shield-alt"></i> {{marge}} 23.8 A</div><div class="zf-gauge-label">{{Intensité réseau}}</div></div>
                                 </div>
                                 <div class="zf-card zf-tempo">
                                     <div class="zf-tempo-row"><span>{{Aujourd'hui}}</span><span class="zf-pill" style="color:#1D4ED8;background:#BFDBFE">Bleu</span></div>
@@ -584,34 +583,36 @@ $eqLogics = eqLogic::byType($plugin->getId());
 .zc-preview .zc-intensite-bar { height: 100%; }
 .zc-preview .zc-footer { margin-top: 6px; text-align: right; opacity: 0.85; }
 
-/* Aperçu "Flux" (onglet IHM) : copie du <style> inline de core/template/dashboard/flux/flux.html,
-   les classes .zendure-flux/.zf-* sont volontairement identiques au vrai template
-   (cf. .zendure-condense ci-dessus pour la même convention). Pas d'animation ni de
-   JS de curseur ici : c'est un aperçu statique avec des valeurs d'exemple. */
+/* Aperçu "Flux" (onglet IHM) : copie du <style> inline de
+   core/template/dashboard/cmd.info.string.flux_widget.html (widget de commande,
+   cf. zendure::createOrUpdateFluxWidget()) — les classes .zendure-flux/.zf-*
+   sont volontairement identiques au vrai template (cf. .zendure-condense
+   ci-dessus pour la même convention), à retenir en sync à chaque évolution du
+   vrai widget. Pas d'animation SVG (zf-lines/zf-particles) ni de JS de curseur
+   ici : c'est un aperçu statique avec des valeurs d'exemple, seuls les nœuds
+   et cartes sont repris. */
 .zendure-flux {
-    --zf-surface-0: var(--bg-widget, #1e1e1e);
     --zf-surface-1: rgba(127, 127, 127, 0.08);
     --zf-surface-2: rgba(127, 127, 127, 0.16);
-    --zf-text: var(--text-widget, #eee);
-    --zf-text-muted: rgba(170, 170, 170, 0.8);
+    --zf-text: var(--txt-color, #333);
+    --zf-text-muted: var(--placeholder-color, rgba(127, 127, 127, 0.8));
     --zf-border: rgba(127, 127, 127, 0.25);
     width: 100%;
     max-width: 660px;
-    background: var(--zf-surface-0);
+    background: transparent;
     color: var(--zf-text);
     border-radius: 12px;
     padding: 14px 16px;
     font-size: 13px;
 }
-.zendure-flux .zf-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
-.zendure-flux .zf-title { display: flex; align-items: center; gap: 8px; font-weight: 600; }
-.zendure-flux .zf-title i { color: #EF9F27; }
+.zendure-flux .zf-header { display: flex; justify-content: flex-end; align-items: center; margin-bottom: 10px; }
 .zendure-flux .zf-badges { display: flex; gap: 6px; }
 .zendure-flux .zf-badge { font-size: 11px; padding: 3px 10px; border-radius: 20px; background: var(--zf-surface-2); }
 .zendure-flux .zf-badge-tarif { color: #854F0B; background: #FAC775; }
 .zendure-flux .zf-diagram {
-    position: relative; width: 100%; max-width: 640px; height: 300px; margin: 0 auto;
+    position: relative; width: 100%; max-width: 640px; height: 320px; margin: 0 auto;
     background: var(--zf-surface-1); border-radius: 14px; border: 0.5px solid var(--zf-border);
+    overflow: visible;
 }
 .zendure-flux .zf-node {
     position: absolute; transform: translate(-50%, -50%); width: 84px; height: 84px;
@@ -620,10 +621,10 @@ $eqLogics = eqLogic::byType($plugin->getId());
     text-align: center; line-height: 1.2;
 }
 .zendure-flux .zf-node-lg { width: 96px; height: 96px; }
-.zendure-flux .zf-top { left: 50%; top: 22%; border-color: #EF9F27; }
-.zendure-flux .zf-left { left: 16%; top: 58%; border-color: #378ADD; }
-.zendure-flux .zf-right { left: 84%; top: 58%; border-color: #D4537E; }
-.zendure-flux .zf-bottom { left: 50%; top: 92%; border-color: #ED93B1; }
+.zendure-flux .zf-top { left: 50%; top: 20%; border-color: #EF9F27; }
+.zendure-flux .zf-left { left: 15%; top: 58%; border-color: #378ADD; }
+.zendure-flux .zf-right { left: 85%; top: 58%; border-color: #D4537E; }
+.zendure-flux .zf-bottom { left: 50%; top: 86%; border-color: #ED93B1; }
 .zendure-flux .zf-hub {
     position: absolute; left: 50%; top: 58%; transform: translate(-50%, -50%);
     width: 56px; height: 56px; border-radius: 50%; background: var(--zf-surface-2);
@@ -634,14 +635,16 @@ $eqLogics = eqLogic::byType($plugin->getId());
 .zendure-flux .zf-value-sm { font-size: 11px; font-weight: 600; }
 .zendure-flux .zf-label { font-size: 9.5px; color: var(--zf-text-muted); }
 .zendure-flux .zf-row2, .zendure-flux .zf-row3 { display: grid; gap: 10px; margin-top: 12px; }
-.zendure-flux .zf-row2 { grid-template-columns: 1fr 1fr; }
-.zendure-flux .zf-row3 { grid-template-columns: repeat(3, 1fr); }
-.zendure-flux .zf-card { background: var(--zf-surface-1); border-radius: 10px; padding: 12px 14px; }
-.zendure-flux .zf-gauge { display: flex; align-items: center; gap: 12px; }
-.zendure-flux .zf-gauge-svg { width: 90px; height: 56px; flex-shrink: 0; }
+.zendure-flux .zf-row2 { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.zendure-flux .zf-row3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.zendure-flux .zf-card { background: var(--zf-surface-1); border-radius: 10px; padding: 12px 14px; overflow: hidden; }
+.zendure-flux .zf-gauge { display: flex; align-items: center; gap: 8px; }
+.zendure-flux .zf-gauge-svg { width: 64px; height: 40px; flex-shrink: 0; }
+.zendure-flux .zf-gauge-text { min-width: 0; flex: 1; }
 .zendure-flux .zf-gauge-value { font-size: 19px; font-weight: 600; }
 .zendure-flux .zf-gauge-value span { font-size: 12px; color: var(--zf-text-muted); }
 .zendure-flux .zf-gauge-marge { font-size: 10.5px; color: #3B6D11; margin-top: 2px; }
+.zendure-flux .zf-gauge-label { font-size: 10px; color: var(--zf-text-muted); }
 .zendure-flux .zf-tempo { display: flex; flex-direction: column; justify-content: center; gap: 8px; }
 .zendure-flux .zf-tempo-row { display: flex; justify-content: space-between; align-items: center; font-size: 11px; color: var(--zf-text-muted); }
 .zendure-flux .zf-pill { font-size: 11px; font-weight: 600; padding: 2px 10px; border-radius: 20px; }
@@ -660,10 +663,14 @@ $eqLogics = eqLogic::byType($plugin->getId());
     font-size: 11px;
     padding: 10px 12px;
 }
-.zendure-flux.zf-preview-static .zf-diagram { height: 220px; }
+/* 272 = 340 (max-width de l'aperçu) * 320/400 (ratio réel du diagramme, cf.
+   .zf-diagram du vrai widget) : garde les 4 noeuds visuellement équidistants
+   du hub même dans cet aperçu statique redimensionné. */
+.zendure-flux.zf-preview-static .zf-diagram { height: 272px; }
 .zendure-flux.zf-preview-static .zf-node { width: 68px; height: 68px; }
 .zendure-flux.zf-preview-static .zf-node-lg { width: 78px; height: 78px; }
 .zendure-flux.zf-preview-static .zf-hub { width: 44px; height: 44px; font-size: 16px; }
+.zendure-flux.zf-preview-static .zf-gauge-svg { width: 46px; height: 29px; }
 .zendure-flux.zf-preview-static .zf-value { font-size: 12px; }
 .zendure-flux.zf-preview-static .zf-gauge-svg { width: 70px; height: 44px; }
 .zendure-flux.zf-preview-static .zf-slider { width: 100%; }

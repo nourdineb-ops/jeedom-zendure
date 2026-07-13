@@ -1,0 +1,622 @@
+<!--
+Widget "Flux" (addendum §14.3, refonte animation) : losange Solaire/Réseau/Maison/
+Batterie animé, jauge d'intensité, Tempo, indicateurs financiers, curseurs de
+pilotage.
+
+Widget de COMMANDE (customtemp natif du plugin, cf. zendure::createOrUpdateFluxWidget()
+et cmd::getWidgetTemplateCode() -> getTemplate('core', $version, $template_name,
+$this->getEqType())), PAS un override eqLogic::toHtml() comme l'ancien flux.html.
+Raison (cf. investigation du widget natif "Energy_info"/distribution_energy.html,
+seul widget dashboard constaté qui n'interrompt JAMAIS son animation) : Jeedom
+remplace intégralement le HTML de tout widget rendu au niveau eqLogic à chaque
+eqLogic::update (jeedom.eqLogic.refreshValue -> eqLogic.empty().appendChild),
+ce qui détruit et relance toute animation SVG en cours. Un widget de commande
+n'est en revanche JAMAIS redessiné après son rendu initial : seules des
+jeedom.cmd.addUpdateFunction() poussent les nouvelles valeurs, en place, dans
+le DOM existant (cf. jeedom.cmd.refreshValue, core/js/cmd.class.js). D'où :
+- une seule commande visible sur le dashboard (flux_widget), toutes les autres
+  masquées côté PHP ;
+- les grandeurs "brutes" (solaire, réseau, batterie, intensité, tempo...) ne
+  sont plus recalculées à chaque rendu HTML côté PHP : leurs ids de commande
+  source sont transmis une fois en paramètres de widget (#SolarId#, #GridId#,
+  ... -> cmd.display.parameters, substitution native de cmd::toHtml()), et
+  TOUTE la logique dérivée (maison = réseau + |batterie|, autoconso %, sens
+  des flèches, tracé SVG selon signe, jauge, couleurs Tempo) est portée en JS
+  ci-dessous, rejouée à chaque poussée de valeur sans jamais toucher au DOM
+  structurel (donc sans jamais interrompre les <animateMotion> en cours).
+-->
+<style>
+/* Convention core confirmée sur plugins/rteEcowatt (core/template/dashboard/*.html) :
+   les fragments de widget dashboard sont injectés directement dans le DOM, sans passage
+   par un <head> — un fichier .css à part n'est jamais chargé pour ce contexte. */
+.zendure-flux {
+    --zf-surface-1: rgba(127, 127, 127, 0.08);
+    --zf-surface-2: rgba(127, 127, 127, 0.16);
+    /* --text-widget n'existe pas dans le core Jeedom (vérifié : aucune définition
+       dans core/themes/*/desktop/colors.css) — le fallback #eee était donc TOUJOURS
+       utilisé, quel que soit le thème, d'où un texte quasi blanc illisible sur le
+       thème clair (constaté). Les vraies variables thème core sont --txt-color
+       (adapté clair/sombre) et --placeholder-color pour une variante atténuée. */
+    --zf-text: var(--txt-color, #333);
+    --zf-text-muted: var(--placeholder-color, rgba(127, 127, 127, 0.8));
+    --zf-border: rgba(127, 127, 127, 0.25);
+
+    width: 100%;
+    max-width: 440px;
+    background: transparent;
+    color: var(--zf-text);
+    border-radius: 12px;
+    padding: 14px 16px;
+    font-size: 13px;
+}
+
+.zendure-flux .zf-header {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    margin-bottom: 10px;
+}
+.zendure-flux .zf-badges { display: flex; gap: 6px; }
+.zendure-flux .zf-badge {
+    font-size: 11px;
+    padding: 3px 10px;
+    border-radius: 20px;
+    background: var(--zf-surface-2);
+}
+
+.zendure-flux .zf-diagram {
+    position: relative;
+    width: 100%;
+    max-width: 400px;
+    /* height fixe en repli (navigateur sans aspect-ratio) : ne vaut que pour la
+       largeur max 400px. aspect-ratio (ci-dessous) la remplace partout où c'est
+       supporté, pour que le ratio 400:320 reste vrai à toute largeur < 400px —
+       condition nécessaire pour que le viewBox SVG en pixels réels (cf. <svg>
+       plus bas) reste aligné 1:1 avec les noeuds positionnés en %, sans jamais
+       recourir à un étirement non uniforme (preserveAspectRatio="none") qui
+       faussait l'épaisseur des traits sous vector-effect="non-scaling-stroke"
+       (signalé : traits trop épais, ne s'arrêtant pas net à l'entrée des cercles —
+       comportement non uniforme non garanti par la spec SVG). 400:320 (plutôt que
+       l'ancien 460:250, trop plat) : signalé que les 4 cercles doivent être
+       équidistants du hub -- avec le hub centré (50%,50%), une même distance R en
+       pixels dans les 4 directions a besoin d'un espace vertical comparable à
+       l'horizontal, ce qu'un ratio trop large-et-plat ne permet pas. */
+    height: 320px;
+    aspect-ratio: 400 / 320;
+    margin: 0 auto;
+    background: var(--zf-surface-1);
+    border-radius: 14px;
+    border: 0.5px solid var(--zf-border);
+    overflow: visible;
+}
+/* z-index explicite plutôt que de compter sur l'ordre du DOM (svg avant les
+   noeuds) : signalé que les traits dépassaient visuellement des cercles —
+   un empilement implicite est trop fragile (toute future réorganisation du
+   markup le casserait silencieusement). Les cercles (opaques) doivent
+   toujours peindre par-dessus les traits pour masquer leurs extrémités. */
+.zendure-flux .zf-lines { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 0; }
+.zendure-flux .zf-flow-line { opacity: 0.16; transition: opacity 0.4s ease; }
+.zendure-flux .zf-flow-active .zf-flow-line { opacity: 0.55; }
+.zendure-flux .zf-flow-house .zf-flow-line { opacity: 0.20; }
+.zendure-flux .zf-flow-house.zf-flow-active .zf-flow-line { opacity: 0.60; }
+.zendure-flux .zf-flow:not(.zf-flow-active) .zf-particles,
+.zendure-flux.zc-static .zf-particles,
+.zendure-flux:not(.zc-animated) .zf-particles { display: none; }
+
+.zendure-flux .zf-node {
+    position: absolute;
+    z-index: 1;
+    transform: translate(-50%, -50%);
+    width: 84px;
+    height: 84px;
+    border-radius: 50%;
+    background: var(--zf-surface-2);
+    border: 2.5px solid var(--zf-border);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    line-height: 1.2;
+}
+.zendure-flux .zf-node-lg { width: 96px; height: 96px; }
+/* Les 4 noeuds sont équidistants du hub (rayon R=100px, hub centré à 50%/50% de
+   .zf-diagram 400x320, cf. commentaire de .zf-diagram) -- pas un simple "20%/
+   80%" arbitraire par axe : signalé que le hub devait être visuellement à
+   égale distance des 4 cercles, ce qu'un décalage en % différent par axe
+   (largeur vs hauteur du diagramme) ne garantit pas. 100/400=25% en
+   horizontal, 100/320=31.25% en vertical -- valeurs différentes en %, mais
+   même distance réelle en pixels une fois combinées à la position du hub. */
+.zendure-flux .zf-top { left: 50%; top: 18.75%; border-color: #EF9F27; }
+.zendure-flux .zf-left { left: 25%; top: 50%; border-color: #378ADD; }
+.zendure-flux .zf-right { left: 75%; top: 50%; border-color: #D4537E; }
+.zendure-flux .zf-bottom { left: 50%; top: 81.25%; border-color: #ED93B1; }
+.zendure-flux .zf-hub {
+    position: absolute; z-index: 2; left: 50%; top: 50%; transform: translate(-50%, -50%);
+    width: 36px; height: 36px; border-radius: 50%;
+    background: var(--zf-surface-2); border: 2px solid var(--zf-border);
+    display: flex; align-items: center; justify-content: center;
+    color: var(--zf-text-muted); font-size: 14px;
+}
+.zendure-flux .zf-value { font-size: 14px; font-weight: 600; margin-top: 2px; }
+.zendure-flux .zf-value-sm { font-size: 11px; font-weight: 600; }
+.zendure-flux .zf-label { font-size: 9.5px; color: var(--zf-text-muted); }
+
+.zendure-flux .zf-row2, .zendure-flux .zf-row3 { display: grid; gap: 10px; margin-top: 12px; }
+/* minmax(0, 1fr), pas 1fr tout court : une piste "1fr" a par défaut un min
+   implicite de "auto" (= min-content de son contenu), donc si le conteneur
+   est plus étroit que prévu (widget de commande vs ancien override eqLogic
+   pleine largeur, cf. commentaire d'en-tête), la carte jauge (SVG figée
+   90px + texte) refuse de rétrécir et écrase la carte Tempo à quasi 0px —
+   constaté : le texte de la carte Tempo passait à un caractère par ligne. */
+.zendure-flux .zf-row2 { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.zendure-flux .zf-row3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+/* overflow:hidden : filet de sécurité — sans lui, un contenu trop large pour
+   une carte étroite (ex. la ligne SVG+texte de la jauge, cf. .zf-gauge) ne se
+   contente pas de déborder dans sa propre carte, il se superpose visuellement
+   au contenu de la carte voisine (constaté : texte de la jauge et de Tempo
+   mélangés/illisibles côte à côte). Dégradation acceptée en repli : le texte
+   peut être coupé dans SA carte plutôt que d'empiéter sur une autre. */
+.zendure-flux .zf-card { background: var(--zf-surface-1); border-radius: 10px; padding: 12px 14px; overflow: hidden; }
+
+.zendure-flux .zf-gauge { display: flex; align-items: center; gap: 8px; }
+.zendure-flux .zf-gauge-svg { width: 64px; height: 40px; flex-shrink: 0; }
+/* min-width:0 : sans ça, un enfant flex ne rétrécit jamais sous la largeur de
+   son contenu (défaut CSS "min-width:auto" sur les items flex) — c'est ce qui
+   forçait le débordement visuel (cf. commentaire de .zf-card ci-dessus). Avec
+   min-width:0, le texte enveloppe normalement sur plusieurs lignes à la place. */
+.zendure-flux .zf-gauge-text { min-width: 0; flex: 1; }
+.zendure-flux .zf-gauge-value { font-size: 19px; font-weight: 600; }
+.zendure-flux .zf-gauge-value span { font-size: 12px; color: var(--zf-text-muted); }
+.zendure-flux .zf-gauge-marge { font-size: 10.5px; color: #3B6D11; margin-top: 2px; }
+.zendure-flux .zf-gauge-label { font-size: 10px; color: var(--zf-text-muted); }
+
+.zendure-flux .zf-tempo { display: flex; flex-direction: column; justify-content: center; gap: 8px; }
+.zendure-flux .zf-tempo-row { display: flex; justify-content: space-between; align-items: center; font-size: 11px; color: var(--zf-text-muted); }
+.zendure-flux .zf-pill { font-size: 11px; font-weight: 600; padding: 2px 10px; border-radius: 20px; }
+
+.zendure-flux .zf-money-label { font-size: 10.5px; color: var(--zf-text-muted); }
+.zendure-flux .zf-money-value { font-size: 17px; font-weight: 600; margin-top: 3px; }
+.zendure-flux .zf-money-gain { background: rgba(76, 217, 100, 0.12); }
+.zendure-flux .zf-money-gain .zf-money-label, .zendure-flux .zf-money-gain .zf-money-value { color: #3B6D11; }
+
+.zendure-flux .zf-pilotage { margin-top: 12px; }
+.zendure-flux .zf-pilotage-title { font-size: 11px; color: var(--zf-text-muted); margin-bottom: 8px; }
+.zendure-flux .zf-slider-row { display: flex; justify-content: space-between; font-size: 11.5px; margin-bottom: 3px; }
+.zendure-flux .zf-slider { width: 100%; }
+
+/* État "hors ligne" (cf. bloc <script>, watchdog sur le dernier push reçu de
+   n'importe quelle commande pilote) : badge d'alerte + diagramme atténué,
+   plutôt qu'une bannière intrusive -- l'info reste visible sans écraser le
+   reste du widget (les cartes Tempo/Gain restent lisibles normalement). */
+.zendure-flux .zf-badge-offline { display: none; color: #B91C1C; background: #FCA5A5; }
+.zendure-flux.zf-offline .zf-badge-offline { display: inline-flex; align-items: center; gap: 4px; }
+.zendure-flux.zf-offline .zf-diagram { opacity: 0.55; }
+</style>
+<div class="zendure-flux #AnimationsOnClass#" id="zf-root-#id#">
+    <div class="zf-header">
+        <div class="zf-badges">
+            <span class="zf-badge zf-badge-offline" id="zf-offlineBadge-#id#"><i class="fas fa-exclamation-triangle"></i> Hors ligne</span>
+            <span class="zf-badge zf-badge-tarif" id="zf-periodebadge-#id#"><i class="fas fa-sun"></i> <span id="zf-periodeLabel-#id#">—</span></span>
+            <span class="zf-badge zf-badge-mode"><i class="fas fa-pause" id="zf-modeicon-#id#"></i> <span id="zf-modeLabel-#id#">—</span></span>
+        </div>
+    </div>
+
+    <div class="zf-diagram">
+        <!-- viewBox en pixels réels (400x320, cf. .zf-diagram { aspect-ratio: 400/320 }),
+             PAS en unités abstraites 0-100 étirées via preserveAspectRatio="none" comme
+             avant : cet étirement non uniforme faussait l'épaisseur de vector-effect=
+             "non-scaling-stroke" et déformait les particules circulaires en ellipses
+             (comportement non garanti par la spec SVG sous scale non uniforme — signalé
+             en usage réel : traits trop épais, ne s'arrêtant pas net à l'entrée des
+             cercles). Avec .zf-diagram verrouillé au même ratio 400:320 à toute largeur,
+             le scale appliqué au SVG est TOUJOURS uniforme, donc fiable.
+
+             Les tracés ci-dessous s'arrêtent au BORD de chaque cercle (centre ∓ rayon),
+             pas à son centre (signalé : même avec l'empilement z-index correct, les
+             cercles ont un fond translucide -- rgba(...,0.16), cf. --zf-surface-2 -- donc
+             un trait qui court jusqu'au centre reste visible PAR TRANSPARENCE ; le seul
+             masquage fiable est de ne jamais dessiner de trait sous l'empreinte d'un
+             cercle). Rayons : noeuds standards 42 (84px / 2), noeud Maison 48 (96px / 2,
+             cf. .zf-node-lg), hub 18 (36px / 2). Centres, tous à distance R=100px du hub
+             (signalé : les 4 cercles doivent être équidistants, cf. positions % de
+             .zf-top/.zf-left/.zf-right/.zf-bottom/.zf-hub) : Solaire (200,60), Réseau
+             (100,160), Maison (300,160), Batterie (200,260), Hub (200,160). Le "d" de
+             chaque tracé réversible (réseau, batterie) est mis à jour en JS selon le
+             signe de la grandeur (import/export, charge/décharge) — cf. setPath(), mêmes
+             points de bord que ci-dessous. -->
+        <svg viewBox="0 0 400 320" class="zf-lines" aria-hidden="true">
+            <defs>
+                <path id="pSol#id#" d="M200,102 L200,142" />
+                <path id="pGrid#id#" d="M142,160 L182,160" />
+                <path id="pBat#id#" d="M200,218 L200,178" />
+                <path id="pHouse#id#" d="M218,160 L252,160" />
+            </defs>
+            <g class="zf-flow zf-flow-sol" id="gSol#id#">
+                <use href="#pSol#id#" stroke="#EF9F27" stroke-width="1.5" vector-effect="non-scaling-stroke" class="zf-flow-line" />
+                <g class="zf-particles">
+                    <circle r="3" fill="#EF9F27"><animateMotion dur="1.4s" repeatCount="indefinite"><mpath href="#pSol#id#" /></animateMotion></circle>
+                    <circle r="3" fill="#EF9F27"><animateMotion dur="1.4s" begin="0.7s" repeatCount="indefinite"><mpath href="#pSol#id#" /></animateMotion></circle>
+                </g>
+            </g>
+            <g class="zf-flow zf-flow-grid" id="gGrid#id#">
+                <use href="#pGrid#id#" stroke="#378ADD" stroke-width="1.5" vector-effect="non-scaling-stroke" class="zf-flow-line" />
+                <g class="zf-particles">
+                    <circle r="2.5" fill="#378ADD"><animateMotion dur="1.9s" repeatCount="indefinite"><mpath href="#pGrid#id#" /></animateMotion></circle>
+                </g>
+            </g>
+            <g class="zf-flow zf-flow-bat" id="gBat#id#">
+                <use href="#pBat#id#" stroke="#ED93B1" stroke-width="1.5" vector-effect="non-scaling-stroke" class="zf-flow-line" />
+                <g class="zf-particles">
+                    <circle r="3" fill="#ED93B1"><animateMotion dur="1.3s" repeatCount="indefinite"><mpath href="#pBat#id#" /></animateMotion></circle>
+                    <circle r="3" fill="#ED93B1"><animateMotion dur="1.3s" begin="0.65s" repeatCount="indefinite"><mpath href="#pBat#id#" /></animateMotion></circle>
+                </g>
+            </g>
+            <g class="zf-flow zf-flow-house" id="gHouse#id#">
+                <use href="#pHouse#id#" stroke="#D4537E" stroke-width="2" vector-effect="non-scaling-stroke" class="zf-flow-line" />
+                <g class="zf-particles">
+                    <circle r="3.5" fill="#D4537E"><animateMotion dur="1.15s" repeatCount="indefinite"><mpath href="#pHouse#id#" /></animateMotion></circle>
+                    <circle r="3.5" fill="#D4537E"><animateMotion dur="1.15s" begin="0.38s" repeatCount="indefinite"><mpath href="#pHouse#id#" /></animateMotion></circle>
+                </g>
+            </g>
+        </svg>
+
+        <div class="zf-node zf-top">
+            <i class="fas fa-sun" style="color:#EF9F27"></i>
+            <span class="zf-value" id="zf-solarW-#id#">0 W</span>
+            <span class="zf-label">Solaire</span>
+        </div>
+        <div class="zf-node zf-left">
+            <i class="fas fa-plug" style="color:#378ADD"></i>
+            <span class="zf-value" style="color:#378ADD"><span id="zf-gridArrow-#id#">→</span> <span id="zf-gridW-#id#">0 W</span></span>
+            <span class="zf-label">Réseau</span>
+        </div>
+        <div class="zf-hub"><i class="fas fa-bolt"></i></div>
+        <div class="zf-node zf-right zf-node-lg">
+            <i class="fas fa-home" style="color:#D4537E"></i>
+            <span class="zf-value" id="zf-houseW-#id#">0 W</span>
+            <span class="zf-label"><i class="fas fa-leaf"></i> <span id="zf-selfconsoPct-#id#">0</span>%</span>
+        </div>
+        <div class="zf-node zf-bottom">
+            <span class="zf-value"><span id="zf-soc-#id#">0</span>%</span>
+            <i class="fas fa-battery-three-quarters" style="color:#ED93B1"></i>
+            <span class="zf-value-sm" style="color:#D4537E"><span id="zf-batteryArrow-#id#">↓</span> <span id="zf-batteryW-#id#">0 W</span></span>
+        </div>
+    </div>
+
+    <div class="zf-row2">
+        <div class="zf-card zf-gauge">
+            <svg viewBox="0 0 100 62" class="zf-gauge-svg" aria-hidden="true">
+                <path d="M14,52 A36,36 0 0 1 71.2,22.9" fill="none" stroke="#639922" stroke-width="7" stroke-linecap="round" />
+                <path d="M71.2,22.9 A36,36 0 0 1 84.2,40.9" fill="none" stroke="#EF9F27" stroke-width="7" />
+                <path d="M84.2,40.9 A36,36 0 0 1 86,52" fill="none" stroke="#E24B4A" stroke-width="7" stroke-linecap="round" />
+                <line id="zf-needle-#id#" x1="50" y1="52" x2="50" y2="22" stroke="var(--zf-text)" stroke-width="2.5" stroke-linecap="round" />
+                <circle cx="50" cy="52" r="3.5" fill="var(--zf-text)" />
+            </svg>
+            <div class="zf-gauge-text">
+                <div class="zf-gauge-value"><span id="zf-intensiteA-#id#">0</span> <span>A</span></div>
+                <div class="zf-gauge-marge"><i class="fas fa-shield-alt"></i> marge <span id="zf-margeA-#id#">0</span> A</div>
+                <div class="zf-gauge-label">Intensité réseau</div>
+            </div>
+        </div>
+        <div class="zf-card zf-tempo">
+            <div class="zf-tempo-row">
+                <span>Tempo aujourd'hui</span>
+                <span class="zf-pill" id="zf-tempoToday-#id#">—</span>
+            </div>
+            <div class="zf-tempo-row">
+                <span>Demain (J+1)</span>
+                <span class="zf-pill" id="zf-tempoTomorrow-#id#">—</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="zf-row3">
+        <div class="zf-card zf-money zf-money-gain">
+            <div class="zf-money-label"><i class="fas fa-coins"></i> Gain Zendure · jour</div>
+            <div class="zf-money-value">+ <span id="zf-gainJour-#id#">0.00</span> €</div>
+        </div>
+        <div class="zf-card zf-money">
+            <div class="zf-money-label"><i class="fas fa-calendar-minus"></i> Dépense veille</div>
+            <div class="zf-money-value"><span id="zf-depenseVeille-#id#">0.00</span> €</div>
+        </div>
+        <div class="zf-card zf-money">
+            <div class="zf-money-label"><i class="fas fa-calendar-day"></i> Dépense jour</div>
+            <div class="zf-money-value"><span id="zf-depenseJour-#id#">0.00</span> €</div>
+        </div>
+    </div>
+
+    <div class="zf-card zf-pilotage">
+        <div class="zf-pilotage-title"><i class="fas fa-sliders-h"></i> Pilotage</div>
+        <div class="zf-row2">
+            <div>
+                <div class="zf-slider-row"><span>Limite sortie AC</span><span class="zf-slider-value" id="zf-out-val-#id#">0 W</span></div>
+                <input type="range" min="0" max="#OutputLimitMaxW#" value="0" step="10" class="zf-slider" id="zf-out-#id#" />
+            </div>
+            <div>
+                <div class="zf-slider-row"><span>SOC minimum</span><span class="zf-slider-value" id="zf-socmin-val-#id#">0%</span></div>
+                <input type="range" min="0" max="100" value="0" step="1" class="zf-slider" id="zf-socmin-#id#" />
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+(function () {
+    var id = '#id#';
+    var cfg = {
+        solarId: #SolarId#,
+        gridId: #GridId#,
+        injectedId: #InjectedId#,
+        intensiteId: #IntensiteId#,
+        socId: #SocId#,
+        modeId: #ModeId#,
+        gainJourId: #GainJourId#,
+        depenseVeilleId: #DepenseVeilleId#,
+        depenseJourId: #DepenseJourId#,
+        periodeId: #PeriodeId#,
+        tempoTodayId: #TempoTodayId#,
+        tempoTomorrowId: #TempoTomorrowId#,
+        outputLimitId: #OutputLimitId#,
+        setOutputLimitId: #SetOutputLimitId#,
+        setSocMinId: #SetSocMinId#,
+        imaxA: #ImaxA#,
+        outputLimitMaxW: #OutputLimitMaxW#,
+        flowThresholdW: #FlowThresholdW#,
+        heartbeatS: #HeartbeatS#,
+        eqLogicId: #EqLogicId#
+    };
+
+    var root = document.getElementById('zf-root-' + id);
+
+    var state = {
+        solar: 0, grid: 0, injected: 0, soc: 0, intensite: 0, mode: '',
+        periode: '', tempoToday: '', tempoTomorrow: '',
+        gainJour: 0, depenseVeille: 0, depenseJour: 0,
+        outputLimit: 0, socMin: 0
+    };
+
+    function el(key) { return document.getElementById('zf-' + key + '-' + id); }
+    function setText(key, value) { var e = el(key); if (e) e.textContent = value; }
+
+    // Portage JS de zendure::tempoColorInfo() (PHP, supprimée : le widget Flux
+    // est désormais une commande, recolorée en direct côté client).
+    function tempoColorInfo(raw) {
+        var v = String(raw == null ? '' : raw).toLowerCase().trim();
+        if (v === '') return ['#6B7280', 'rgba(127,127,127,0.16)', '—'];
+        if (v.indexOf('roug') >= 0 || v === '3' || v === 'red') return ['#B91C1C', '#FCA5A5', 'Rouge'];
+        if (v.indexOf('blanc') >= 0 || v === '2' || v === 'white') return ['#854F0B', '#FDE68A', 'Blanc'];
+        if (v.indexOf('bleu') >= 0 || v === '1' || v === 'blue') return ['#1D4ED8', '#BFDBFE', 'Bleu'];
+        if (v === 'undefined' || v === 'unknown') return ['#6B7280', 'rgba(127,127,127,0.16)', '—'];
+        return ['#6B7280', 'rgba(127,127,127,0.16)', raw];
+    }
+
+    // Portage JS de zendure::modeInfo() (icône + libellé seulement, la flèche
+    // du losange batterie est recalculée séparément selon le sens réel du flux).
+    function modeInfo(mode) {
+        mode = String(mode == null ? '' : mode);
+        if (mode === '2') return ['fa-arrow-down', 'Décharge'];
+        if (mode === '1') return ['fa-arrow-up', 'Charge'];
+        var lc = mode.toLowerCase();
+        if (lc.indexOf('décharge') >= 0 || lc.indexOf('decharge') >= 0 || lc.indexOf('discharg') >= 0) return ['fa-arrow-down', 'Décharge'];
+        if (lc.indexOf('charge') >= 0) return ['fa-arrow-up', 'Charge'];
+        return ['fa-pause', mode !== '' ? mode : 'Veille'];
+    }
+
+    function setPath(pid, d) {
+        var p = document.getElementById(pid + id);
+        if (p) p.setAttribute('d', d);
+    }
+
+    function setActive(gid, isActive) {
+        var g = document.getElementById(gid + id);
+        if (g) g.classList.toggle('zf-flow-active', !!isActive);
+    }
+
+    // Vitesse des particules proportionnelle à l'intensité du flux (demande
+    // explicite, cf. widget natif Energy_info/distribution_energy.html et sa
+    // fonction circleRate()) : plus la puissance est élevée, plus dur est petit.
+    var MIN_DUR = 0.6, MAX_DUR = 2.2, REF_W = 2000;
+    function setSpeed(gid, powerW) {
+        var g = document.getElementById(gid + id);
+        if (!g) return;
+        var ratio = Math.min(1, Math.abs(powerW) / REF_W);
+        var dur = (MAX_DUR - ratio * (MAX_DUR - MIN_DUR)).toFixed(2) + 's';
+        g.querySelectorAll('animateMotion').forEach(function (a) { a.setAttribute('dur', dur); });
+    }
+
+    function fmtEuro(v) {
+        var n = parseFloat(v);
+        if (isNaN(n)) n = 0;
+        return n.toFixed(2);
+    }
+
+    function recompute() {
+        var solar = parseFloat(state.solar) || 0;
+        var grid = parseFloat(state.grid) || 0;
+        var injected = parseFloat(state.injected) || 0;
+        var house = grid + Math.abs(injected);
+        var selfconso = house > 0 ? Math.max(0, Math.min(100, Math.round((1 - (grid / house)) * 100))) : 0;
+
+        setText('solarW', Math.round(solar) + ' W');
+        setText('houseW', Math.round(house) + ' W');
+        setText('selfconsoPct', selfconso);
+        setText('gridArrow', grid >= 0 ? '→' : '←');
+        setText('gridW', Math.round(Math.abs(grid)) + ' W');
+        setText('batteryArrow', injected >= 0 ? '↑' : '↓');
+        setText('batteryW', Math.round(Math.abs(injected)) + ' W');
+        setText('soc', Math.round(parseFloat(state.soc) || 0));
+
+        setPath('pGrid', grid >= 0 ? 'M142,160 L182,160' : 'M182,160 L142,160');
+        setPath('pBat', injected >= 0 ? 'M200,218 L200,178' : 'M200,178 L200,218');
+
+        setActive('gSol', Math.abs(solar) >= cfg.flowThresholdW);
+        setActive('gGrid', Math.abs(grid) >= cfg.flowThresholdW);
+        setActive('gBat', Math.abs(injected) >= cfg.flowThresholdW);
+        setActive('gHouse', Math.abs(house) >= cfg.flowThresholdW);
+        setSpeed('gSol', solar);
+        setSpeed('gGrid', grid);
+        setSpeed('gBat', injected);
+        setSpeed('gHouse', house);
+
+        var intensite = parseFloat(state.intensite) || 0;
+        var pct = cfg.imaxA > 0 ? Math.min(100, (intensite / cfg.imaxA) * 100) : 0;
+        var angleRad = (180 - (pct / 100) * 180) * Math.PI / 180;
+        var needle = el('needle');
+        if (needle) {
+            needle.setAttribute('x2', (50 + 30 * Math.cos(angleRad)).toFixed(1));
+            needle.setAttribute('y2', (52 - 30 * Math.sin(angleRad)).toFixed(1));
+        }
+        setText('intensiteA', Math.round(intensite * 10) / 10);
+        setText('margeA', Math.round((cfg.imaxA - intensite) * 10) / 10);
+
+        var mi = modeInfo(state.mode);
+        var modeIcon = document.getElementById('zf-modeicon-' + id);
+        if (modeIcon) modeIcon.setAttribute('class', 'fas ' + mi[0]);
+        setText('modeLabel', mi[1]);
+
+        var tt = tempoColorInfo(state.tempoToday);
+        var badge = document.getElementById('zf-periodebadge-' + id);
+        if (badge) { badge.style.color = tt[0]; badge.style.background = tt[1]; }
+        setText('periodeLabel', state.periode || '—');
+
+        var pillToday = el('tempoToday');
+        if (pillToday) { pillToday.style.color = tt[0]; pillToday.style.background = tt[1]; pillToday.textContent = tt[2]; }
+        var tm = tempoColorInfo(state.tempoTomorrow);
+        var pillTomorrow = el('tempoTomorrow');
+        if (pillTomorrow) { pillTomorrow.style.color = tm[0]; pillTomorrow.style.background = tm[1]; pillTomorrow.textContent = tm[2]; }
+
+        setText('gainJour', fmtEuro(state.gainJour));
+        setText('depenseVeille', fmtEuro(state.depenseVeille));
+        setText('depenseJour', fmtEuro(state.depenseJour));
+    }
+
+    function syncSlider(prefix, rawValue, suffix) {
+        var val = Math.round(parseFloat(rawValue) || 0);
+        var input = document.getElementById('zf-' + prefix + '-' + id);
+        var label = document.getElementById('zf-' + prefix + '-val-' + id);
+        if (input) input.value = val;
+        if (label) label.textContent = val + suffix;
+    }
+
+    // Watchdog "hors ligne" : le démon republie chaque commande au moins toutes
+    // les heartbeatS secondes même sans changement (heartbeat, cf. TelemetryThrottle
+    // Python) -- si AUCUNE des commandes pilotes n'a poussé de valeur depuis plus de
+    // 2x ce délai, la coupure est réelle (pas juste un flux resté stable), cf.
+    // commentaire de HeartbeatS côté PHP (createOrUpdateFluxWidget()). x2 plutôt que
+    // x1 : marge contre la gigue réseau/démon normale, pour éviter les faux positifs
+    // à chaque cycle un peu en retard.
+    var lastSeenTs = Date.now();
+    var isOffline = false;
+    var OFFLINE_TEXT_KEYS = ['solarW', 'houseW', 'gridW', 'batteryW', 'soc', 'selfconsoPct', 'intensiteA', 'margeA'];
+
+    function markOffline() {
+        if (isOffline) return;
+        isOffline = true;
+        if (root) root.classList.add('zf-offline');
+        OFFLINE_TEXT_KEYS.forEach(function (key) { setText(key, '—'); });
+        setText('gridArrow', '—');
+        setText('batteryArrow', '—');
+        setText('modeLabel', 'Hors ligne');
+        var modeIcon = document.getElementById('zf-modeicon-' + id);
+        if (modeIcon) modeIcon.setAttribute('class', 'fas fa-exclamation-triangle');
+        // Plus de particules sur les 4 flux : rien de fiable à animer sans télémétrie
+        // fraîche (cf. .zf-flow:not(.zf-flow-active) .zf-particles { display:none }).
+        setActive('gSol', false);
+        setActive('gGrid', false);
+        setActive('gBat', false);
+        setActive('gHouse', false);
+    }
+
+    // Applique une valeur SANS toucher au chrono du watchdog : utilisée pour la
+    // lecture initiale (jeedom.cmd.execute au chargement) qui renvoie la dernière
+    // valeur connue EN BASE, sans son âge -- la traiter comme une preuve de vie
+    // "à l'instant" masquerait une coupure déjà ancienne pendant tout un cycle de
+    // seuil après chaque rechargement de page (cf. fetchLastSeen(), qui corrige
+    // la vraie base de temps juste après). applyValue() (plus bas) est réservée
+    // aux poussées live (addUpdateFunction), les seules qui prouvent une vraie
+    // activité récente du démon.
+    function initApplyValue(key, value) {
+        state[key] = value;
+        recompute();
+        if (key === 'outputLimit') syncSlider('out', value, ' W');
+        if (key === 'socMin') syncSlider('socmin', value, '%');
+    }
+
+    function applyValue(key, value) {
+        lastSeenTs = Date.now();
+        isOffline = false;
+        if (root) root.classList.remove('zf-offline');
+        initApplyValue(key, value);
+    }
+
+    // Une commande pilote par grandeur affichée : lecture initiale (valeur
+    // déjà connue de Jeedom, pas de sollicitation matérielle sur une commande
+    // "info") puis abonnement en direct via addUpdateFunction — jamais de
+    // redessin du widget entier, cf. commentaire d'en-tête du fichier.
+    var driverMap = {
+        solar: cfg.solarId, grid: cfg.gridId, injected: cfg.injectedId,
+        intensite: cfg.intensiteId, soc: cfg.socId, mode: cfg.modeId,
+        periode: cfg.periodeId, tempoToday: cfg.tempoTodayId, tempoTomorrow: cfg.tempoTomorrowId,
+        gainJour: cfg.gainJourId, depenseVeille: cfg.depenseVeilleId, depenseJour: cfg.depenseJourId,
+        outputLimit: cfg.outputLimitId, socMin: cfg.setSocMinId
+    };
+    Object.keys(driverMap).forEach(function (key) {
+        var cmdId = driverMap[key];
+        if (!cmdId) return;
+        jeedom.cmd.execute({
+            id: cmdId, cache: 0, notify: false,
+            success: function (value) { initApplyValue(key, value); }
+        });
+        jeedom.cmd.addUpdateFunction(String(cmdId), function (_options) {
+            applyValue(key, _options.value);
+        });
+    });
+    recompute();
+
+    // Vérification périodique du silence plutôt qu'un unique setTimeout : la tuile
+    // dashboard peut rester ouverte des heures, il faut réévaluer en continu (et
+    // repasser hors ligne si une coupure survient bien après le chargement initial).
+    var offlineThresholdMs = Math.max(cfg.heartbeatS, 60) * 2 * 1000;
+    setInterval(function () {
+        if (Date.now() - lastSeenTs > offlineThresholdMs) markOffline();
+    }, 15000);
+
+    // Corrige la base de temps du watchdog juste après le chargement (cf.
+    // commentaire d'initApplyValue()) : un seul aller-retour réseau, pas un
+    // polling -- la détection continue reste ensuite 100% locale (pushes live).
+    // Best-effort : en cas d'échec (réseau, session), lastSeenTs reste à
+    // Date.now() (valeur posée à l'init) -- le watchdog continue de fonctionner
+    // pour toute coupure future, juste sans correction rétroactive de l'état
+    // au chargement.
+    function fetchLastSeen() {
+        if (!cfg.eqLogicId) return;
+        var body = 'action=lastSeen&eqLogic_id=' + encodeURIComponent(cfg.eqLogicId);
+        fetch('plugins/zendure/core/ajax/zendure.ajax.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: body
+        }).then(function (r) { return r.json(); }).then(function (data) {
+            if (data.state !== 'ok' || !data.result || !data.result.lastSeenMs) return;
+            lastSeenTs = data.result.lastSeenMs;
+            if (Date.now() - lastSeenTs > offlineThresholdMs) markOffline();
+        }).catch(function () { /* best-effort, cf. commentaire ci-dessus */ });
+    }
+    fetchLastSeen();
+
+    var outEl = document.getElementById('zf-out-' + id);
+    if (outEl) {
+        outEl.addEventListener('input', function () { syncSlider('out', outEl.value, ' W'); });
+        outEl.addEventListener('change', function () {
+            jeedom.cmd.execute({ id: cfg.setOutputLimitId, value: outEl.value });
+        });
+    }
+    var socminEl = document.getElementById('zf-socmin-' + id);
+    if (socminEl) {
+        socminEl.addEventListener('input', function () { syncSlider('socmin', socminEl.value, '%'); });
+        socminEl.addEventListener('change', function () {
+            jeedom.cmd.execute({ id: cfg.setSocMinId, value: socminEl.value });
+        });
+    }
+})();
+</script>
