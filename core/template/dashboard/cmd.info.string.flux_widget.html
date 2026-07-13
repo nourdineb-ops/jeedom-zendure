@@ -290,8 +290,8 @@ le DOM existant (cf. jeedom.cmd.refreshValue, core/js/cmd.class.js). D'où :
                 <path d="M14,52 A36,36 0 0 1 71.2,22.9" fill="none" stroke="#639922" stroke-width="7" stroke-linecap="round" />
                 <path d="M71.2,22.9 A36,36 0 0 1 84.2,40.9" fill="none" stroke="#EF9F27" stroke-width="7" />
                 <path d="M84.2,40.9 A36,36 0 0 1 86,52" fill="none" stroke="#E24B4A" stroke-width="7" stroke-linecap="round" />
-                <line id="zf-needle-#id#" x1="50" y1="52" x2="50" y2="22" stroke="var(--zf-text)" stroke-width="2.5" stroke-linecap="round" />
-                <circle cx="50" cy="52" r="3.5" fill="var(--zf-text)" />
+                <line id="zf-needle-#id#" x1="50" y1="52" x2="50" y2="22" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" />
+                <circle cx="50" cy="52" r="3.5" fill="currentColor" />
             </svg>
             <div class="zf-gauge-text">
                 <div class="zf-gauge-value"><span id="zf-intensiteA-#id#">0</span> <span>A</span></div>
@@ -435,28 +435,32 @@ le DOM existant (cf. jeedom.cmd.refreshValue, core/js/cmd.class.js). D'où :
         var solar = parseFloat(state.solar) || 0;
         var grid = parseFloat(state.grid) || 0;
         var injected = parseFloat(state.injected) || 0;
-        var house = grid + Math.abs(injected);
+        // Signée (grid + injected), PAS Math.abs(injected) : "Maison" = ce qui est
+        // prélevé au réseau + ce que Zendure envoie (décharge, positif, s'ajoute à
+        // la fourniture) ou consomme (charge, négatif, vient en déduction) --
+        // demande explicite. Avec abs(), une charge alimentée depuis le réseau
+        // était comptée deux fois : une fois dans la hausse de "grid" mesurée par
+        // la pince, une deuxième fois rajoutée par-dessus, gonflant la
+        // consommation maison affichée pendant toute charge sur secteur.
+        var house = grid + injected;
         var selfconso = house > 0 ? Math.max(0, Math.min(100, Math.round((1 - (grid / house)) * 100))) : 0;
 
-        setText('solarW', Math.round(solar) + ' W');
-        setText('houseW', Math.round(house) + ' W');
-        setText('selfconsoPct', selfconso);
+        // Réseau / Intensité (cf. teleinfo/pince externe, PAS Zendure) : toujours
+        // recalculés en direct ici, jamais gelés par isOffline ci-dessous --
+        // demande explicite ("ce qui vient du réseau doit rester"). "Maison" en
+        // dépend directement (cf. formule ci-dessus) donc reste également à jour,
+        // même si la contribution Zendure qu'elle contient est figée sur sa
+        // dernière valeur connue pendant une coupure (pas de meilleure estimation
+        // disponible, mais pas de raison de masquer la partie réseau qui elle
+        // reste fiable).
         setText('gridArrow', grid >= 0 ? '→' : '←');
         setText('gridW', Math.round(Math.abs(grid)) + ' W');
-        setText('batteryArrow', injected >= 0 ? '↑' : '↓');
-        setText('batteryW', Math.round(Math.abs(injected)) + ' W');
-        setText('soc', Math.round(parseFloat(state.soc) || 0));
-
+        setText('houseW', Math.round(house) + ' W');
+        setText('selfconsoPct', selfconso);
         setPath('pGrid', grid >= 0 ? 'M142,160 L182,160' : 'M182,160 L142,160');
-        setPath('pBat', injected >= 0 ? 'M200,218 L200,178' : 'M200,178 L200,218');
-
-        setActive('gSol', Math.abs(solar) >= cfg.flowThresholdW);
         setActive('gGrid', Math.abs(grid) >= cfg.flowThresholdW);
-        setActive('gBat', Math.abs(injected) >= cfg.flowThresholdW);
         setActive('gHouse', Math.abs(house) >= cfg.flowThresholdW);
-        setSpeed('gSol', solar);
         setSpeed('gGrid', grid);
-        setSpeed('gBat', injected);
         setSpeed('gHouse', house);
 
         var intensite = parseFloat(state.intensite) || 0;
@@ -470,10 +474,39 @@ le DOM existant (cf. jeedom.cmd.refreshValue, core/js/cmd.class.js). D'où :
         setText('intensiteA', Math.round(intensite * 10) / 10);
         setText('margeA', Math.round((cfg.imaxA - intensite) * 10) / 10);
 
-        var mi = modeInfo(state.mode);
-        var modeIcon = document.getElementById('zf-modeicon-' + id);
-        if (modeIcon) modeIcon.setAttribute('class', 'fas ' + mi[0]);
-        setText('modeLabel', mi[1]);
+        // Solaire / Batterie / SOC / Mode : uniquement des informations Zendure --
+        // seules celles-ci sont gelées ("—", plus de particules) pendant une
+        // coupure (cf. isOffline plus bas), jamais le réseau ci-dessus.
+        if (isOffline) {
+            setText('solarW', '—');
+            setText('batteryArrow', '—');
+            setText('batteryW', '—');
+            setText('soc', '—');
+            // Un seul badge "Hors ligne" (cf. .zf-badge-offline dans le header) --
+            // pas de doublon ici (signalé : le badge mode affichait aussi "Hors
+            // ligne" en plus du badge rouge). "—" neutre : le mode réel est
+            // simplement inconnu pendant la coupure, pas une nouvelle info à annoncer.
+            setText('modeLabel', '—');
+            var modeIconOff = document.getElementById('zf-modeicon-' + id);
+            if (modeIconOff) modeIconOff.setAttribute('class', 'fas fa-pause');
+            setActive('gSol', false);
+            setActive('gBat', false);
+        } else {
+            setText('solarW', Math.round(solar) + ' W');
+            setText('batteryArrow', injected >= 0 ? '↑' : '↓');
+            setText('batteryW', Math.round(Math.abs(injected)) + ' W');
+            setText('soc', Math.round(parseFloat(state.soc) || 0));
+            setPath('pBat', injected >= 0 ? 'M200,218 L200,178' : 'M200,178 L200,218');
+            setActive('gSol', Math.abs(solar) >= cfg.flowThresholdW);
+            setActive('gBat', Math.abs(injected) >= cfg.flowThresholdW);
+            setSpeed('gSol', solar);
+            setSpeed('gBat', injected);
+
+            var mi = modeInfo(state.mode);
+            var modeIcon = document.getElementById('zf-modeicon-' + id);
+            if (modeIcon) modeIcon.setAttribute('class', 'fas ' + mi[0]);
+            setText('modeLabel', mi[1]);
+        }
 
         var tt = tempoColorInfo(state.tempoToday);
         var badge = document.getElementById('zf-periodebadge-' + id);
@@ -501,31 +534,33 @@ le DOM existant (cf. jeedom.cmd.refreshValue, core/js/cmd.class.js). D'où :
 
     // Watchdog "hors ligne" : le démon republie chaque commande au moins toutes
     // les heartbeatS secondes même sans changement (heartbeat, cf. TelemetryThrottle
-    // Python) -- si AUCUNE des commandes pilotes n'a poussé de valeur depuis plus de
-    // 2x ce délai, la coupure est réelle (pas juste un flux resté stable), cf.
+    // Python) -- si AUCUNE des commandes VRAIMENT issues de Zendure (cf.
+    // ZENDURE_ONLY_KEYS ci-dessous) n'a poussé de valeur depuis plus de 2x ce
+    // délai, la coupure est réelle (pas juste un flux resté stable), cf.
     // commentaire de HeartbeatS côté PHP (createOrUpdateFluxWidget()). x2 plutôt que
     // x1 : marge contre la gigue réseau/démon normale, pour éviter les faux positifs
-    // à chaque cycle un peu en retard.
+    // à chaque cycle un peu en retard. L'affichage (masquage "—" + arrêt des
+    // particules) vit dans recompute() (cf. bloc `if (isOffline)`), rejoué à
+    // chaque poussée quelle que soit sa source -- pas ici, pour ne jamais
+    // dupliquer/désynchroniser la logique d'un seul rendu.
     var lastSeenTs = Date.now();
     var isOffline = false;
-    var OFFLINE_TEXT_KEYS = ['solarW', 'houseW', 'gridW', 'batteryW', 'soc', 'selfconsoPct', 'intensiteA', 'margeA'];
 
-    function markOffline() {
-        if (isOffline) return;
-        isOffline = true;
-        if (root) root.classList.add('zf-offline');
-        OFFLINE_TEXT_KEYS.forEach(function (key) { setText(key, '—'); });
-        setText('gridArrow', '—');
-        setText('batteryArrow', '—');
-        setText('modeLabel', 'Hors ligne');
-        var modeIcon = document.getElementById('zf-modeicon-' + id);
-        if (modeIcon) modeIcon.setAttribute('class', 'fas fa-exclamation-triangle');
-        // Plus de particules sur les 4 flux : rien de fiable à animer sans télémétrie
-        // fraîche (cf. .zf-flow:not(.zf-flow-active) .zf-particles { display:none }).
-        setActive('gSol', false);
-        setActive('gGrid', false);
-        setActive('gBat', false);
-        setActive('gHouse', false);
+    // Seules ces grandeurs sont de la VRAIE télémétrie Zendure (solaire, batterie,
+    // SOC, mode) : seules elles doivent (a) prouver que le démon est vivant et (b)
+    // être gelées en coupure. Réseau/Intensité viennent d'une source externe
+    // (teleinfo/pince, cf. retour "ce qui vient du réseau doit rester") : leurs
+    // poussées mettent à jour l'affichage comme d'habitude (cf. recompute()) mais
+    // ne doivent ni faire repartir le chrono, ni faire disparaître le badge --
+    // sinon une simple mise à jour Réseau masquerait à tort une vraie coupure
+    // Zendure en cours (constaté).
+    var ZENDURE_ONLY_KEYS = { solar: true, injected: true, soc: true, mode: true };
+
+    function setOfflineState(value) {
+        if (isOffline === value) return;
+        isOffline = value;
+        if (root) root.classList.toggle('zf-offline', value);
+        recompute();
     }
 
     // Applique une valeur SANS toucher au chrono du watchdog : utilisée pour la
@@ -534,8 +569,8 @@ le DOM existant (cf. jeedom.cmd.refreshValue, core/js/cmd.class.js). D'où :
     // "à l'instant" masquerait une coupure déjà ancienne pendant tout un cycle de
     // seuil après chaque rechargement de page (cf. fetchLastSeen(), qui corrige
     // la vraie base de temps juste après). applyValue() (plus bas) est réservée
-    // aux poussées live (addUpdateFunction), les seules qui prouvent une vraie
-    // activité récente du démon.
+    // aux poussées live (addUpdateFunction), les seules qui peuvent prouver une
+    // vraie activité récente du démon (et seulement pour ZENDURE_ONLY_KEYS).
     function initApplyValue(key, value) {
         state[key] = value;
         recompute();
@@ -544,9 +579,10 @@ le DOM existant (cf. jeedom.cmd.refreshValue, core/js/cmd.class.js). D'où :
     }
 
     function applyValue(key, value) {
-        lastSeenTs = Date.now();
-        isOffline = false;
-        if (root) root.classList.remove('zf-offline');
+        if (ZENDURE_ONLY_KEYS[key]) {
+            lastSeenTs = Date.now();
+            setOfflineState(false);
+        }
         initApplyValue(key, value);
     }
 
@@ -579,7 +615,7 @@ le DOM existant (cf. jeedom.cmd.refreshValue, core/js/cmd.class.js). D'où :
     // repasser hors ligne si une coupure survient bien après le chargement initial).
     var offlineThresholdMs = Math.max(cfg.heartbeatS, 60) * 2 * 1000;
     setInterval(function () {
-        if (Date.now() - lastSeenTs > offlineThresholdMs) markOffline();
+        if (Date.now() - lastSeenTs > offlineThresholdMs) setOfflineState(true);
     }, 15000);
 
     // Corrige la base de temps du watchdog juste après le chargement (cf.
@@ -599,7 +635,7 @@ le DOM existant (cf. jeedom.cmd.refreshValue, core/js/cmd.class.js). D'où :
         }).then(function (r) { return r.json(); }).then(function (data) {
             if (data.state !== 'ok' || !data.result || !data.result.lastSeenMs) return;
             lastSeenTs = data.result.lastSeenMs;
-            if (Date.now() - lastSeenTs > offlineThresholdMs) markOffline();
+            if (Date.now() - lastSeenTs > offlineThresholdMs) setOfflineState(true);
         }).catch(function () { /* best-effort, cf. commentaire ci-dessus */ });
     }
     fetchLastSeen();

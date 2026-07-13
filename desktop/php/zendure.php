@@ -319,6 +319,16 @@ $eqLogics = eqLogic::byType($plugin->getId());
                 <fieldset>
                     <legend><i class="fas fa-balance-scale"></i> {{Comportement}}</legend>
                     <div class="form-group">
+                        <label class="col-sm-3 control-label">{{Connexion active}}</label>
+                        <div class="col-sm-2">
+                            <input type="checkbox" class="eqLogicAttr" data-l1key="configuration" data-l2key="connexion_active" checked />
+                        </div>
+                        <label class="col-sm-3 control-label">{{Anti-injection active}}</label>
+                        <div class="col-sm-2">
+                            <input type="checkbox" class="eqLogicAttr" data-l1key="configuration" data-l2key="anti_injection_active" checked />
+                        </div>
+                    </div>
+                    <div class="form-group">
                         <label class="col-sm-3 control-label">{{Marge anti-injection (W)}}</label>
                         <div class="col-sm-2">
                             <input type="number" class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="marge_anti_injection" placeholder="30" />
@@ -384,10 +394,81 @@ $eqLogics = eqLogic::byType($plugin->getId());
                         </div>
                     </div>
                 </fieldset>
+                <fieldset>
+                    <legend><i class="fas fa-euro-sign"></i> {{Tarifs}}</legend>
+                    <div class="form-group">
+                        <label class="col-sm-3 control-label">{{Type de contrat}}</label>
+                        <div class="col-sm-3">
+                            <select id="sel_type_contrat" class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="type_contrat">
+                                <option value="base">{{Base}}</option>
+                                <option value="hphc">{{Heures Pleines / Heures Creuses}}</option>
+                                <option value="tempo" selected>{{Tempo}}</option>
+                            </select>
+                        </div>
+                        <label class="col-sm-3 control-label">{{Mise à jour auto (mensuelle)}}</label>
+                        <div class="col-sm-2">
+                            <input type="checkbox" class="eqLogicAttr" data-l1key="configuration" data-l2key="maj_tarifs_auto" />
+                        </div>
+                    </div>
+                    <div id="bloc_tarif_base">
+                        <div class="form-group">
+                            <label class="col-sm-3 control-label">{{Prix du kWh (€)}}</label>
+                            <div class="col-sm-2">
+                                <input type="number" step="0.0001" class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="tarif_base" />
+                            </div>
+                        </div>
+                    </div>
+                    <div id="bloc_tarif_hphc">
+                        <div class="form-group">
+                            <label class="col-sm-3 control-label">{{Prix HC (€/kWh)}}</label>
+                            <div class="col-sm-2">
+                                <input type="number" step="0.0001" class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="tarif_hphc_hc" />
+                            </div>
+                            <label class="col-sm-3 control-label">{{Prix HP (€/kWh)}}</label>
+                            <div class="col-sm-2">
+                                <input type="number" step="0.0001" class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="tarif_hphc_hp" />
+                            </div>
+                        </div>
+                    </div>
+                    <div id="bloc_tarif_tempo">
+                        <div class="form-group">
+                            <label class="col-sm-3 control-label">{{Bleu — HC / HP (€/kWh)}}</label>
+                            <div class="col-sm-2">
+                                <input type="number" step="0.0001" class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="tarif_tempo_bleu_hc" />
+                            </div>
+                            <div class="col-sm-2">
+                                <input type="number" step="0.0001" class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="tarif_tempo_bleu_hp" />
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label class="col-sm-3 control-label">{{Blanc — HC / HP (€/kWh)}}</label>
+                            <div class="col-sm-2">
+                                <input type="number" step="0.0001" class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="tarif_tempo_blanc_hc" />
+                            </div>
+                            <div class="col-sm-2">
+                                <input type="number" step="0.0001" class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="tarif_tempo_blanc_hp" />
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label class="col-sm-3 control-label">{{Rouge — HC / HP (€/kWh)}}</label>
+                            <div class="col-sm-2">
+                                <input type="number" step="0.0001" class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="tarif_tempo_rouge_hc" />
+                            </div>
+                            <div class="col-sm-2">
+                                <input type="number" step="0.0001" class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="tarif_tempo_rouge_hp" />
+                            </div>
+                        </div>
+                    </div>
+                    <div class="alert alert-info">
+                        {{Ces prix alimentent le calcul du gain/dépense (€). Toujours éditables à la main : la mise à jour auto (si activée) les écrase une fois par mois depuis open-dpe.fr (source qui couvre Base/HP-HC/Tempo en un seul appel), avec un bémol de fiabilité assumé — elle est alimentée par un pipeline PDF→LLM mensuel côté source. En cas d'échec (réseau, format inattendu), les prix existants ne sont jamais effacés ni écrasés par une valeur invalide : la saisie manuelle reste le filet de sécurité.}}
+                    </div>
+                </fieldset>
                 <div class="alert alert-info">
                     <strong>{{Logique de la boucle anti-injection}}</strong>
                     <p>{{Reprise ligne à ligne de la branche FAST du scénario Jeedom historique (vérifié le 2026-07-11) : si grid_power >= marge (assez ou trop d'import), la boucle rapide ne fait rien — c'est le cron HP qui s'en charge, toutes les 5 min. Sinon, target = clamp(0, limite_max, grid_power + injected_power - marge), recalculé en absolu à chaque mesure de la pince, jamais depuis une valeur mémorisée. Convention : grid_power > 0 = import réseau (normal), < 0 = injection (à éviter). Pas d'hystérésis (le scénario de référence n'en a pas) : chaque calcul qui passe le cooldown est envoyé, même si la valeur ne change presque pas.}}</p>
                     <ul style="margin-bottom:0;">
+                        <li>{{Connexion active : décochez pour couper complètement la connexion MQTT du démon vers ce boîtier (déconnexion propre, y compris la sortie du "Mode intelligent" sur l'appli mobile) — utile pour cohabiter avec un autre pilote du même compte cloud (ex. Home Assistant) : deux clients connectés simultanément avec les mêmes identifiants se coupent mutuellement la session. Décocher ici libère la session sans désinstaller le plugin ; les autres réglages de cet équipement restent intacts pour une réactivation ultérieure.}}</li>
+                        <li>{{Anti-injection active : décochez pour couper la boucle rapide ET le cron HP (mais pas la connexion elle-même) — le plugin continue de recevoir la télémétrie et d'afficher le dashboard, mais ne commande plus jamais la limite de sortie. Utile si un autre outil (scénario, HA...) pilote déjà cet appareil et que seule la régulation doit être neutralisée.}}</li>
                         <li>{{Marge anti-injection (W) : objectif de puissance importée du réseau à maintenir (jamais tout à 0, pour absorber les variations entre deux mesures de la pince). Ex. 30W.}}</li>
                         <li>{{Cooldown (s) : délai minimum entre deux commandes envoyées à la batterie, pour ne pas la solliciter en continu. Ignoré en cas d'injection avérée (voir seuil urgent, non exposé dans cet onglet — cf. urgent_injection_w).}}</li>
                         <li>{{Limites sortie min/max (W) : bornes physiques/souhaitées de la limite de sortie envoyée à la batterie (ex. 0 à 1200W pour un Hyper 2000).}}</li>
@@ -703,6 +784,13 @@ $(function () {
         var mode = $(this).val();
         $('#bloc_cloud').toggle(mode == 'cloud');
         $('#bloc_local').toggle(mode == 'local');
+    }).trigger('change');
+
+    $('#sel_type_contrat').on('change', function () {
+        var type = $(this).val();
+        $('#bloc_tarif_base').toggle(type == 'base');
+        $('#bloc_tarif_hphc').toggle(type == 'hphc');
+        $('#bloc_tarif_tempo').toggle(type == 'tempo');
     }).trigger('change');
 
     // Sélecteur natif de commande (onglet Sources) — pattern confirmé fonctionnel

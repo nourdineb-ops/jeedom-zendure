@@ -43,6 +43,12 @@ from typing import Optional
 
 @dataclass
 class AntiInjectionConfig:
+    # Coupure complète de la boucle rapide (config équipement, cf. "enabled" ->
+    # anti_injection_active côté PHP) : demande explicite pour permettre de
+    # cohabiter avec un autre pilote du même appareil (ex. Home Assistant) sans
+    # que ce démon ne continue à envoyer des limites de sortie en parallèle.
+    # True par défaut : ne change rien au comportement des installs existantes.
+    enabled: bool = True
     marge_w: float = 30.0
     cooldown_s: float = 2.0
     limit_min_w: float = 0.0
@@ -77,6 +83,9 @@ class AntiInjectionRegulator:
         maison (télémétrie réelle, jamais une valeur qu'on a nous-même commandée)."""
         now = now if now is not None else time.monotonic()
         cfg = self._cfg
+
+        if not cfg.enabled:
+            return None
 
         if grid_power_w >= cfg.marge_w:
             # On importe assez (ou trop) : pas de risque d'injection immédiat,
