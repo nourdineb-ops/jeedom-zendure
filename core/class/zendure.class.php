@@ -46,6 +46,11 @@ class zendure extends eqLogic
      */
     const COMPUTED_COMMANDS = array(
         'gain_jour' => array('Gain Zendure (jour)', 'numeric', '€'),
+        'gain_veille' => array('Gain veille (J-1)', 'numeric', '€'),
+        'gain_solaire_jour' => array('Gain solaire (jour)', 'numeric', '€'),
+        'gain_solaire_veille' => array('Gain solaire (veille)', 'numeric', '€'),
+        'gain_batterie_jour' => array('Gain batterie (jour)', 'numeric', '€'),
+        'gain_batterie_veille' => array('Gain batterie (veille)', 'numeric', '€'),
         'depense_veille' => array('Dépense veille (J-1)', 'numeric', '€'),
         'depense_jour' => array('Dépense jour', 'numeric', '€'),
         'jauge_intensite_marge' => array('Marge intensité (Imax - IINST)', 'numeric', 'A'),
@@ -185,6 +190,15 @@ class zendure extends eqLogic
         $equipments = array();
         foreach (self::byType('zendure', true) as $eqLogic) {
             /* @var zendure $eqLogic */
+            // Équipement absent de la liste -> le démon (reload_config(), cf.
+            // zendure_daemon.py) le détecte comme "disparu" et coupe proprement
+            // sa connexion MQTT (Device.stop(), y compris le repli smartMode).
+            // C'est le levier demandé pour cohabiter avec un autre pilote (Home
+            // Assistant) sur le même compte cloud : décocher "Connexion active"
+            // libère la session MQTT partagée sans désinstaller le plugin.
+            if (!$eqLogic->getConfiguration('connexion_active', 1)) {
+                continue;
+            }
             $equipments[] = $eqLogic->toDaemonConfig();
         }
         $config = array(
@@ -208,6 +222,13 @@ class zendure extends eqLogic
         // Chaîne de repli à 3 niveaux : valeur de cet eqLogic -> défaut global du
         // plugin (config::byKey, réglé sur la page racine) -> défaut codé en dur.
         $antiInjection = array(
+            // Coupure complète de la boucle rapide + du cron HP (cf.
+            // runOptimisationHP()) : demande explicite pour pouvoir cohabiter
+            // avec un autre pilote du même appareil (ex. Home Assistant) sans
+            // que ce plugin ne continue à commander la limite de sortie en
+            // parallèle. Actif par défaut (1) : ne change rien aux installs
+            // existantes tant que l'utilisateur ne décoche pas explicitement.
+            'enabled' => (bool) $this->getConfiguration('anti_injection_active', 1),
             'marge_w' => $this->getConfiguration('marge_anti_injection', config::byKey('default_marge_anti_injection', 'zendure', 30)),
             'cooldown_s' => $this->getConfiguration('cooldown_anti_injection', config::byKey('default_cooldown_anti_injection', 'zendure', 2)),
             'limit_min_w' => $this->getConfiguration('limite_min_w', 0),
@@ -451,7 +472,9 @@ class zendure extends eqLogic
         log::add('zendure', 'debug', 'postSave eq_id=' . $this->getId() . ' (' . $this->getName() . ')');
         $this->ensureFluxTileSize();
         $this->createOrUpdateCommands();
-        $this->registerGridPowerListener();
+        $this->registerTelemetryListener('src_grid_papp', 'grid_power', 'onGridPowerEvent');
+        $this->registerTelemetryListener('src_solaire', 'solar_power', 'onSolarPowerEvent');
+        $this->registerTelemetryListener('src_injection', 'injected_power', 'onInjectedPowerEvent');
         self::ensureCronRegistered();
         self::writeDaemonConfig();
         $this->reloadDaemonConfig();
@@ -514,16 +537,23 @@ class zendure extends eqLogic
      */
     private static function ensureCronRegistered()
     {
-        $cron = cron::byClassAndFunction('zendure', 'cronOptimisationHP');
+        self::ensureCron('cronOptimisationHP', '*/5 * * * *', 'Cron cronOptimisationHP enregistré (*/5 * * * *, mode simulation par défaut)');
+        self::ensureCron('cronRolloverMinuit', '0 0 * * *', 'Cron cronRolloverMinuit enregistré (0 0 * * *, bascule jour -> veille)');
+        self::ensureCron('cronRecupererTarifs', '0 3 1 * *', 'Cron cronRecupererTarifs enregistré (0 3 1 * *, récupération mensuelle des tarifs)');
+    }
+
+    private static function ensureCron($function, $schedule, $logMessage)
+    {
+        $cron = cron::byClassAndFunction('zendure', $function);
         if (!is_object($cron)) {
             $cron = new cron();
             $cron->setClass('zendure');
-            $cron->setFunction('cronOptimisationHP');
+            $cron->setFunction($function);
             $cron->setEnable(1);
             $cron->setDeamon(0);
-            $cron->setSchedule('*/5 * * * *');
+            $cron->setSchedule($schedule);
             $cron->save();
-            log::add('zendure', 'info', 'Cron cronOptimisationHP enregistré (*/5 * * * *, mode simulation par défaut)');
+            log::add('zendure', 'info', $logMessage);
         }
     }
 
@@ -540,6 +570,13 @@ class zendure extends eqLogic
 
     private function runOptimisationHP()
     {
+        if (!$this->getConfiguration('anti_injection_active', 1)) {
+            // Coupure complète (même flag que la boucle rapide côté démon, cf.
+            // toDaemonConfig()) : pas même un log de simulation, pour ne pas
+            // laisser croire que le plugin surveille encore quoi que ce soit
+            // pendant qu'un autre pilote (Home Assistant) est aux commandes.
+            return;
+        }
         $grid = (float) $this->getSourceOrDefault('src_grid_papp', 'grid_power');
         $injected = (float) $this->getSourceOrDefault('src_injection', 'injected_power');
         $marge = (float) $this->getConfiguration('marge_anti_injection', config::byKey('default_marge_anti_injection', 'zendure', 30));
@@ -563,9 +600,162 @@ class zendure extends eqLogic
         }
     }
 
+    public static function cronRolloverMinuit()
+    {
+        foreach (self::byType('zendure', true) as $eqLogic) {
+            /* @var zendure $eqLogic */
+            $eqLogic->runRolloverMinuit();
+        }
+    }
+
+    /**
+     * Bascule jour -> veille à minuit (reprise du scénario "Zendure_PTEC_Minuit") :
+     * gain_jour/depense_jour n'ont de sens qu'à l'échelle d'une journée, veille
+     * n'est qu'un instantané figé du dernier total jour avant remise à 0.
+     */
+    private function runRolloverMinuit()
+    {
+        $rollovers = array(
+            'depense_jour' => 'depense_veille',
+            'gain_solaire_jour' => 'gain_solaire_veille',
+            'gain_batterie_jour' => 'gain_batterie_veille',
+        );
+        foreach ($rollovers as $jourId => $veilleId) {
+            $jourValue = (float) $this->getCmdValue($jourId);
+            $veilleCmd = $this->getCmd(null, $veilleId);
+            $jourCmd = $this->getCmd(null, $jourId);
+            if (is_object($veilleCmd)) {
+                $veilleCmd->event($jourValue);
+            }
+            if (is_object($jourCmd)) {
+                $jourCmd->event(0);
+            }
+        }
+        $this->recomputeGainTotal('jour');
+        $this->recomputeGainTotal('veille');
+        log::add('zendure', 'info', 'cronRolloverMinuit eq_id=' . $this->getId() . ' : bascule jour -> veille effectuée');
+    }
+
+    public static function cronRecupererTarifs()
+    {
+        foreach (self::byType('zendure', true) as $eqLogic) {
+            /* @var zendure $eqLogic */
+            if (!$eqLogic->getConfiguration('maj_tarifs_auto', 0)) {
+                continue;
+            }
+            $eqLogic->runRecupererTarifs();
+        }
+    }
+
+    /**
+     * Récupération mensuelle des tarifs auprès d'open-dpe.fr, seule source retenue
+     * pour les 3 types de contrat (Base/HP-HC/Tempo en un seul JSON) — bémol de
+     * fiabilité assumé (pipeline PDF->LLM mensuel côté source). Échec réseau/format
+     * inattendu -> log warning, prix existants inchangés (jamais de crash, jamais
+     * de prix vidé) : ces champs restent éditables à la main dans tous les cas.
+     */
+    private function runRecupererTarifs()
+    {
+        try {
+            $this->fetchTarifsOpenDpe();
+        } catch (Exception $e) {
+            log::add('zendure', 'warning', 'runRecupererTarifs eq_id=' . $this->getId() . ' : ' . $e->getMessage());
+        }
+    }
+
+    private function fetchTarifsOpenDpe()
+    {
+        $json = self::httpGetJson('https://open-dpe.fr/api/v1/electricity.php?tarif=EDF_bleu');
+        $options = $json['options'] ?? null;
+        if (!is_array($options)) {
+            throw new Exception('réponse open-dpe.fr inattendue (pas de clé "options") : ' . json_encode($json));
+        }
+
+        $type = $this->getConfiguration('type_contrat', 'tempo');
+        $updated = false;
+
+        if ($type == 'base') {
+            if ($this->applyTarif('tarif_base', $options['base']['prix_kWh'] ?? null)) {
+                $updated = true;
+            }
+        } elseif ($type == 'hphc') {
+            if ($this->applyTarif('tarif_hphc_hc', $options['heures_creuses']['prix_kWh']['HC'] ?? null)) {
+                $updated = true;
+            }
+            if ($this->applyTarif('tarif_hphc_hp', $options['heures_creuses']['prix_kWh']['HP'] ?? null)) {
+                $updated = true;
+            }
+        } else {
+            // Nommage tempo non confirmé en conditions réelles à date (seuls
+            // options.base/options.heures_creuses l'ont été côté open-dpe.fr) : à
+            // valider dès la première exécution réelle du cron, échoue proprement
+            // (warning + tarifs inchangés) si la structure diffère.
+            $tempo = $options['tempo']['prix_kWh'] ?? null;
+            if (!is_array($tempo)) {
+                throw new Exception('pas de clé "options.tempo.prix_kWh" pour un contrat Tempo');
+            }
+            foreach (array('bleu', 'blanc', 'rouge') as $couleur) {
+                if ($this->applyTarif('tarif_tempo_' . $couleur . '_hc', $tempo[$couleur]['HC'] ?? null)) {
+                    $updated = true;
+                }
+                if ($this->applyTarif('tarif_tempo_' . $couleur . '_hp', $tempo[$couleur]['HP'] ?? null)) {
+                    $updated = true;
+                }
+            }
+        }
+
+        if ($updated) {
+            $this->save(true);
+            log::add('zendure', 'info', 'runRecupererTarifs eq_id=' . $this->getId() . ' : tarifs mis à jour depuis open-dpe.fr');
+        }
+    }
+
+    private function applyTarif($configKey, $value)
+    {
+        if (!is_numeric($value)) {
+            log::add('zendure', 'warning', 'runRecupererTarifs eq_id=' . $this->getId() . ' : champ ' . $configKey . ' absent/non numérique dans la réponse open-dpe.fr');
+            return false;
+        }
+        $this->setConfiguration($configKey, (float) $value);
+        return true;
+    }
+
+    /**
+     * Client HTTP minimal pour le cron de récupération de tarifs (curl brut, pas de
+     * helper HTTP dédié utilisé ailleurs dans ce plugin — cf. sendToDaemon() pour le
+     * seul autre client réseau du plugin). Timeout court : un cron mensuel ne doit
+     * jamais bloquer le scheduler Jeedom en cas d'API indisponible.
+     */
+    private static function httpGetJson($url)
+    {
+        $ch = curl_init($url);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 5);
+        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5);
+        curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+        $body = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $error = curl_error($ch);
+        curl_close($ch);
+
+        if ($body === false) {
+            throw new Exception('requête ' . $url . ' échouée : ' . $error);
+        }
+        if ($httpCode < 200 || $httpCode >= 300) {
+            throw new Exception('requête ' . $url . ' -> HTTP ' . $httpCode);
+        }
+        $json = json_decode($body, true);
+        if (!is_array($json)) {
+            throw new Exception('réponse ' . $url . ' non JSON : ' . substr($body, 0, 200));
+        }
+        return $json;
+    }
+
     public function preRemove()
     {
-        $this->removeGridPowerListener();
+        $this->removeTelemetryListener('onGridPowerEvent');
+        $this->removeTelemetryListener('onSolarPowerEvent');
+        $this->removeTelemetryListener('onInjectedPowerEvent');
     }
 
     public function postRemove()
@@ -733,41 +923,49 @@ class zendure extends eqLogic
     }
 
     /**
-     * Enregistre un listener core sur la commande source de la pince (src_intensite /
-     * src_grid_papp, cf. addendum §11 étage 2). Chaîne réelle : pince -> listener ->
-     * ce callback PHP -> socket démon -> décision -> MQTT (addendum §12).
+     * Enregistre un listener core sur une commande source de télémétrie (grid/solaire/
+     * injection, cf. addendum §11 étage 2 pour le cas grid historique). Chaîne réelle
+     * (grid) : pince -> listener -> ce callback PHP -> socket démon -> décision -> MQTT
+     * (addendum §12) ; (solaire/injection) : télémétrie Zendure (callback.php) ->
+     * listener -> accumulation gain (cf. accumulateEuro()).
      *
      * Signature confirmée contre core/class/listener.class.php (VM) et l'usage réel
      * dans plugins/alarm/core/class/alarm.class.php : pas de setClassId/setPluginId/
      * byPluginId (n'existent pas dans le core) — le ciblage de la commande écoutée se
      * fait via addEvent($cmdId), et le filtrage par instance via l'`option` passée à
      * byClassAndFunction().
+     *
+     * resolveSourceCmdOrDefault() (pas resolveSourceCmd()) : l'onglet Sources invite
+     * explicitement à laisser src_solaire/src_injection vides ("valeur par défaut"),
+     * le listener doit donc s'accrocher à la commande interne curée dans ce cas plutôt
+     * que de ne s'enregistrer sur rien — sinon le moteur gain/dépense resterait
+     * silencieusement à 0 tant que l'utilisateur n'a rien configuré.
      */
-    private function registerGridPowerListener()
+    private function registerTelemetryListener($configKey, $defaultLogicalId, $eventFunction)
     {
-        $cmd = $this->resolveSourceCmd('src_grid_papp');
+        $cmd = $this->resolveSourceCmdOrDefault($configKey, $defaultLogicalId);
         if (!is_object($cmd)) {
-            $this->removeGridPowerListener();
+            $this->removeTelemetryListener($eventFunction);
             return;
         }
 
         $option = array('eq_id' => $this->getId());
-        $listener = listener::byClassAndFunction('zendure', 'onGridPowerEvent', $option);
+        $listener = listener::byClassAndFunction('zendure', $eventFunction, $option);
         if (!is_object($listener)) {
             $listener = new listener();
         }
         $listener->setClass('zendure');
-        $listener->setFunction('onGridPowerEvent');
+        $listener->setFunction($eventFunction);
         $listener->setOption($option);
         $listener->emptyEvent();
         $listener->addEvent($cmd->getId());
         $listener->save();
-        log::add('zendure', 'debug', 'registerGridPowerListener eq_id=' . $this->getId() . ' -> cmd_id=' . $cmd->getId());
+        log::add('zendure', 'debug', 'registerTelemetryListener(' . $eventFunction . ') eq_id=' . $this->getId() . ' -> cmd_id=' . $cmd->getId());
     }
 
-    private function removeGridPowerListener()
+    private function removeTelemetryListener($eventFunction)
     {
-        $listener = listener::byClassAndFunction('zendure', 'onGridPowerEvent', array('eq_id' => $this->getId()));
+        $listener = listener::byClassAndFunction('zendure', $eventFunction, array('eq_id' => $this->getId()));
         if (is_object($listener)) {
             $listener->remove();
         }
@@ -776,7 +974,8 @@ class zendure extends eqLogic
     /**
      * Callback statique invoqué par le core lors du déclenchement du listener
      * (changement de valeur de la commande pince). Relaie vers le démon via le
-     * socket local — jamais d'accès direct MQTT depuis PHP (brief §9bis).
+     * socket local — jamais d'accès direct MQTT depuis PHP (brief §9bis) — et
+     * alimente en plus le moteur dépense (même événement source, deux effets).
      */
     public static function onGridPowerEvent($_options)
     {
@@ -791,6 +990,153 @@ class zendure extends eqLogic
             'eq_id' => (int) $eqId,
             'value_w' => (float) $value,
         ));
+
+        $eqLogic = eqLogic::byId((int) $eqId);
+        if (is_object($eqLogic)) {
+            // Convention grid_power > 0 = import réseau (normal), < 0 = injection (à
+            // éviter) — cf. toHtmlCondense(). La dépense ne compte jamais l'export.
+            $eqLogic->accumulateEuro('depense_jour', (float) $value);
+        }
+    }
+
+    /**
+     * Télémétrie Zendure solaire (cf. moteur gain/dépense) : accumulation directe,
+     * pas de relais démon (contrairement à onGridPowerEvent, qui pilote aussi
+     * l'anti-injection).
+     */
+    public static function onSolarPowerEvent($_options)
+    {
+        self::onTelemetryAccumulationEvent($_options, 'gain_solaire_jour');
+    }
+
+    /**
+     * Télémétrie Zendure injection maison (puissance déchargée par la batterie,
+     * cf. moteur gain/dépense) : même principe qu'onSolarPowerEvent.
+     */
+    public static function onInjectedPowerEvent($_options)
+    {
+        self::onTelemetryAccumulationEvent($_options, 'gain_batterie_jour');
+    }
+
+    private static function onTelemetryAccumulationEvent($_options, $cumulLogicalId)
+    {
+        $eqId = $_options['eq_id'] ?? null;
+        $value = $_options['value'] ?? null;
+        if ($eqId === null || $value === null) {
+            return;
+        }
+        $eqLogic = eqLogic::byId((int) $eqId);
+        if (is_object($eqLogic)) {
+            $eqLogic->accumulateEuro($cumulLogicalId, (float) $value);
+        }
+    }
+
+    /**
+     * Coeur du moteur gain/dépense : intègre une puissance instantanée (W) dans le
+     * temps depuis le dernier passage, valorisée au tarif courant, et l'ajoute à la
+     * commande cumulative $cumulLogicalId (depense_jour / gain_solaire_jour /
+     * gain_batterie_jour). dt est dérivé de collectDate() de la commande cumulative
+     * elle-même : pas de nouvel état séparé à maintenir.
+     */
+    private function accumulateEuro($cumulLogicalId, $valueW)
+    {
+        $cmd = $this->getCmd(null, $cumulLogicalId);
+        if (!is_object($cmd)) {
+            return;
+        }
+
+        $lastCollect = $cmd->getCollectDate();
+        if (empty($lastCollect)) {
+            // Premier passage (commande jamais collectée, ou tout juste remise à 0 par
+            // le rollover minuit) : pas de dt exploitable, on amorce collectDate() pour
+            // le prochain événement plutôt que d'intégrer un dt aberrant.
+            $cmd->event((float) $cmd->execCmd());
+            return;
+        }
+        $dt = time() - strtotime($lastCollect);
+        if ($dt <= 0) {
+            return;
+        }
+
+        // Seuil hors-ligne : même facteur x2 que le watchdog JS du widget Flux (cf.
+        // cmd.info.string.flux_widget.html, commentaire HeartbeatS) — au-delà, c'est
+        // une vraie coupure (démon arrêté, Jeedom redémarré...), pas juste un flux
+        // stable ; on n'intègre jamais à l'aveugle sur ce trou.
+        $offlineThresholdS = 2 * (float) $this->getConfiguration('telemetry_min_interval_s', 300);
+        if ($dt > $offlineThresholdS) {
+            $cmd->event((float) $cmd->execCmd());
+            return;
+        }
+
+        // Ne compte que le sens positif (import réseau / production solaire /
+        // décharge batterie), jamais l'export — même convention que l'ancien
+        // scénario Jeedom de référence.
+        $kwh = max(0, $valueW) * $dt / 3600 / 1000;
+        $euros = $kwh * $this->currentTariffEurPerKwh();
+        $cmd->event((float) $cmd->execCmd() + $euros);
+
+        if ($cumulLogicalId == 'gain_solaire_jour' || $cumulLogicalId == 'gain_batterie_jour') {
+            $this->recomputeGainTotal('jour');
+        }
+    }
+
+    /**
+     * gain_jour/gain_veille sont des valeurs DÉRIVÉES (jamais accumulées
+     * indépendamment) : recalculées à chaque mise à jour d'un des deux compteurs
+     * détaillés, pour ne jamais risquer de drift entre le total affiché sur la
+     * tuile et le détail solaire/batterie.
+     */
+    private function recomputeGainTotal($suffix)
+    {
+        $solaire = (float) $this->getCmdValue('gain_solaire_' . $suffix);
+        $batterie = (float) $this->getCmdValue('gain_batterie_' . $suffix);
+        $cmd = $this->getCmd(null, 'gain_' . $suffix);
+        if (is_object($cmd)) {
+            $cmd->event($solaire + $batterie);
+        }
+    }
+
+    /**
+     * Résout le prix courant du kWh (€) selon type_contrat (config, onglet
+     * Comportement -> fieldset Tarifs) : source unique consultée par le moteur
+     * d'accumulation, qui ne sait pas si un prix vient d'une saisie manuelle ou
+     * du cron de récupération mensuelle (cronRecupererTarifs).
+     */
+    private function currentTariffEurPerKwh()
+    {
+        $type = $this->getConfiguration('type_contrat', 'tempo');
+
+        if ($type == 'base') {
+            return (float) $this->getConfiguration('tarif_base', 0);
+        }
+
+        if ($type == 'hphc') {
+            $periode = strtolower((string) $this->getConfiguredSourceValue('src_periode_tarif'));
+            if (strpos($periode, 'hc') !== false) {
+                return (float) $this->getConfiguration('tarif_hphc_hc', 0);
+            }
+            if (strpos($periode, 'hp') !== false) {
+                return (float) $this->getConfiguration('tarif_hphc_hp', 0);
+            }
+            log::add('zendure', 'warning', 'currentTariffEurPerKwh(hphc) eq_id=' . $this->getId() . ' : période "' . $periode . '" non reconnue, tarif 0');
+            return 0.0;
+        }
+
+        // tempo : src_tempo_now attendu au format historique "HCJB"/"HPJR"/... (2
+        // premiers caractères HP/HC, 2 suivants JB/JW/JR = Bleu/Blanc/Rouge), cf.
+        // scénario Jeedom de référence (id 184 "Zendure_PTEC_Minuit").
+        $now = strtoupper((string) $this->getConfiguredSourceValue('src_tempo_now'));
+        $hpHc = substr($now, 0, 2);
+        $couleurCode = substr($now, 2, 2);
+        $couleurs = array('JB' => 'bleu', 'JW' => 'blanc', 'JR' => 'rouge');
+        $couleur = $couleurs[$couleurCode] ?? null;
+        $periodeKey = $hpHc == 'HP' ? 'hp' : ($hpHc == 'HC' ? 'hc' : null);
+
+        if ($couleur === null || $periodeKey === null) {
+            log::add('zendure', 'warning', 'currentTariffEurPerKwh(tempo) eq_id=' . $this->getId() . ' : src_tempo_now "' . $now . '" non reconnu, tarif 0');
+            return 0.0;
+        }
+        return (float) $this->getConfiguration('tarif_tempo_' . $couleur . '_' . $periodeKey, 0);
     }
 
     public function reloadDaemonConfig()
