@@ -283,7 +283,8 @@ $eqLogics = eqLogic::byType($plugin->getId());
                         'src_tempo_now' => '{{Tempo — période courante (HP/HC + couleur, ex. HCJB)}}',
                         'src_tempo_j' => '{{Tempo — couleur du jour}}',
                         'src_tempo_j1' => '{{Tempo — couleur de demain (J+1)}}',
-                        'src_prevision_solaire' => '{{Prévision solaire (kWh)}}',
+                        'src_prevision_solaire' => '{{Prévision solaire J+0 (Wh)}}',
+                        'src_prevision_solaire_j1' => '{{Prévision solaire J+1 (Wh)}}',
                         'src_injection' => '{{Injection maison (Zendure) — laisser vide pour utiliser la valeur par défaut}}',
                         'src_solaire' => '{{Production solaire (dashboard) — laisser vide pour utiliser la valeur par défaut}}',
                     ];
@@ -465,6 +466,22 @@ $eqLogics = eqLogic::byType($plugin->getId());
                     </div>
                     <div class="alert alert-info">
                         {{Ces prix alimentent le calcul du gain/dépense (€). Toujours éditables à la main : la mise à jour auto (si activée) les écrase une fois par mois depuis open-dpe.fr (source qui couvre Base/HP-HC/Tempo en un seul appel), avec un bémol de fiabilité assumé — elle est alimentée par un pipeline PDF→LLM mensuel côté source. En cas d'échec (réseau, format inattendu), les prix existants ne sont jamais effacés ni écrasés par une valeur invalide : la saisie manuelle reste le filet de sécurité.}}
+                    </div>
+                </fieldset>
+                <fieldset>
+                    <legend><i class="fas fa-moon"></i> {{Stratégie nuit}}</legend>
+                    <div class="form-group">
+                        <label class="col-sm-3 control-label">{{Stratégie nuit active}}</label>
+                        <div class="col-sm-2">
+                            <input type="checkbox" class="eqLogicAttr" data-l1key="configuration" data-l2key="strategie_nuit_active" />
+                        </div>
+                        <label class="col-sm-3 control-label">{{Stratégie nuit en simulation}}</label>
+                        <div class="col-sm-2">
+                            <input type="checkbox" class="eqLogicAttr" data-l1key="configuration" data-l2key="strategie_nuit_dry_run" checked />
+                        </div>
+                    </div>
+                    <div class="alert alert-info">
+                        {{Cron à 00h00 : bascule l'appareil en charge (mode Entrée, sortie 0W) et fixe un SOC cible (SOC maximum) selon la couleur Tempo de demain et la prévision solaire du jour à venir (source "Prévision solaire", cf. onglet Sources — nécessite un plugin externe type Solcast). Reprise de la logique de l'ancien scénario Jeedom de référence : Tempo Rouge demain -> charge à 100% ; Tempo Bleu + prévision solaire ≥ 4 kWh -> 60% (laisser de la place au solaire) ; sinon 80% par défaut. Piège de fraîcheur du cache géré automatiquement : si la prévision "J+0" de la source n'a pas encore été rafraîchie aujourd'hui (typique avant le rafraîchissement matinal de Solcast, souvent ~6h), la "J+1" du cache d'hier est utilisée à la place — elle correspond alors au bon jour calendaire. Stratégie nuit en simulation : logue la décision (niveau info, préfixe "[cronStrategieNuit] [SIMULATION]") sans jamais toucher à l'appareil tant que cette case est cochée.}}
                     </div>
                 </fieldset>
                 <div class="alert alert-info">
