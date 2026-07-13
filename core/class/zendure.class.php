@@ -251,18 +251,20 @@ class zendure extends eqLogic
 
     /**
      * Point d'extension standard eqLogic pour personnaliser l'affichage dashboard.
-     * Aiguille selon le sélecteur `template_dashboard` (addendum §14.3). Seul
-     * "Condensé" est implémenté en v1 ; Flux/Historique retombent sur le rendu
-     * par défaut en attendant (cf. changelog).
+     * Aiguille selon le sélecteur `template_dashboard` (addendum §14.3).
+     * "Condensé" reste un override total (petit widget statique, pas d'animation
+     * à préserver entre rafraîchissements). "Flux" retombe désormais sur le rendu
+     * standard eqLogic (parent::toHtml) : le losange animé est un widget de
+     * COMMANDE (zendure::flux_widget, cf. createOrUpdateFluxWidget()), pas un
+     * override ici — nécessaire pour que ses animations SVG ne soient jamais
+     * détruites/relancées par le remplacement intégral du HTML qu'effectue
+     * Jeedom sur tout widget rendu au niveau eqLogic (jeedom.eqLogic.refreshValue).
      */
     public function toHtml($_version = 'dashboard')
     {
         $template = $this->getConfiguration('template_dashboard', 'condense');
         if ($template == 'condense') {
             return $this->toHtmlCondense();
-        }
-        if ($template == 'flux') {
-            return $this->toHtmlFlux();
         }
         return parent::toHtml($_version);
     }
@@ -318,125 +320,6 @@ class zendure extends eqLogic
     }
 
     /**
-     * Template "Flux" (addendum §14.3) : losange animé Solaire/Réseau/Maison/Batterie,
-     * jauge d'intensité, Tempo, indicateurs financiers, curseurs de pilotage. Réutilise
-     * les mêmes signaux et la même formule de bilan que toHtmlCondense() (grid[PAPP]+injected
-     * pour la puissance maison) pour rester cohérent entre gabarits.
-     */
-    private function toHtmlFlux()
-    {
-        $path = dirname(__FILE__) . '/../template/dashboard/flux/flux.html';
-        $html = file_get_contents($path);
-
-        // Chaque grandeur du losange est désormais "source ou défaut" (cf. échange sur
-        // le choix de la commande la plus fiable, illustré sur l'injection puis étendu
-        // au solaire) : src_xxx vide -> comportement historique inchangé.
-        $solar = (float) $this->getSourceOrDefault('src_solaire', 'solar_power');
-        // Cf. toHtmlCondense() : "Réseau" doit être la vraie mesure externe (pince/PAPP),
-        // pas la télémétrie interne Zendure grid_power (souvent 0, ne reflète que ce que
-        // le boîtier lui-même tire du réseau, pas la consommation réelle du foyer).
-        $grid = (float) $this->getSourceOrDefault('src_grid_papp', 'grid_power');
-        $injected = (float) $this->getSourceOrDefault('src_injection', 'injected_power');
-        $house = $grid + abs($injected);
-        $soc = round((float) $this->getCmdValue('soc'));
-
-        $selfconso = $house > 0 ? max(0, min(100, round((1 - ($grid / $house)) * 100))) : 0;
-
-        list($modeIcon, $modeLabel, ) = $this->modeInfo($this->getCmdValue('mode'));
-        // Flèches = sens physique réel de chaque ligne dans le losange (pas un sens
-        // fixe) : Réseau est horizontal (gauche<->hub), donc →/← ; Batterie est
-        // vertical (bas<->hub), donc ↑/↓. Avant, les deux utilisaient ↓/↑, ce qui ne
-        // correspondait à la disposition d'aucun des deux (source de confusion
-        // signalée). → import (vers le hub), ← export ; ↑ décharge (monte vers le
-        // hub), ↓ charge (descend vers la batterie).
-        $gridArrow = $grid >= 0 ? '→' : '←';
-        $batteryArrow = $injected >= 0 ? '↑' : '↓';
-
-        // Sens réel du courant dans le losange animé : chaque flux réversible (réseau,
-        // batterie) choisit son tracé SVG (import/export, charge/décharge) selon le signe
-        // de la grandeur ; en dessous du seuil, le flux est marqué inactif (pas de
-        // particules, trait terne) plutôt que de continuer à animer un flux nul.
-        // Coordonnées 0-100, partagées avec les % CSS des noeuds (cf. flux.html) —
-        // corrige le désalignement lignes/cercles (l'ancien viewBox 640x346 ne
-        // correspondait pas au conteneur réel).
-        $flowThresholdW = 5.0;
-        $pathGridD = $grid >= 0 ? 'M15,58 L50,58' : 'M50,58 L15,58';
-        $pathBatD = $injected >= 0 ? 'M50,86 L50,58' : 'M50,58 L50,86';
-        $solActive = abs($solar) >= $flowThresholdW ? 'zf-flow-active' : '';
-        $gridActive = abs($grid) >= $flowThresholdW ? 'zf-flow-active' : '';
-        $batActive = abs($injected) >= $flowThresholdW ? 'zf-flow-active' : '';
-        $houseActive = abs($house) >= $flowThresholdW ? 'zf-flow-active' : '';
-
-        $imax = (float) $this->getConfiguration('imax_ampere', 30);
-        $intensite = (float) $this->getConfiguredSourceValue('src_intensite');
-        $pct = $imax > 0 ? min(100, ($intensite / $imax) * 100) : 0;
-        $angleRad = deg2rad(180 - ($pct / 100) * 180);
-        $gaugeX = round(50 + 30 * cos($angleRad), 1);
-        $gaugeY = round(52 - 30 * sin($angleRad), 1);
-
-        $periode = (string) $this->getCmdValue('periode_tarif');
-        if ($periode === '') {
-            $periode = (string) $this->getConfiguredSourceValue('src_tempo_now');
-        }
-
-        $tempoToday = $this->tempoColorInfo($this->getConfiguredSourceValue('src_tempo_j'));
-        $tempoTomorrow = $this->tempoColorInfo($this->getConfiguredSourceValue('src_tempo_j1'));
-
-        $outputLimitCmd = $this->getCmd(null, 'set_output_limit');
-        $socMinCmd = $this->getCmd(null, 'set_soc_min');
-
-        $animationsOn = $this->getConfiguration('animations_actives', 1);
-
-        $tokens = array(
-            '##ANIMATIONS_CLASS##' => $animationsOn ? 'zc-animated' : '',
-            '##EQ_ID##' => $this->getId(),
-            '##NAME##' => $this->getName(),
-            '##PERIODE_LABEL##' => $periode !== '' ? $periode : '—',
-            // Le badge période (ex. "HPJB") reprend la couleur Tempo du jour au lieu
-            // d'un ambre fixe (signalé comme incohérent avec la pastille Tempo du bas).
-            '##PERIODE_BADGE_FG##' => $tempoToday[0],
-            '##PERIODE_BADGE_BG##' => $tempoToday[1],
-            '##MODE_ICON##' => $modeIcon,
-            '##MODE_LABEL##' => $modeLabel,
-            '##PATH_SOL_D##' => 'M50,20 L50,58',
-            '##PATH_GRID_D##' => $pathGridD,
-            '##PATH_BAT_D##' => $pathBatD,
-            '##PATH_HOUSE_D##' => 'M50,58 L85,58',
-            '##SOL_ACTIVE_CLASS##' => $solActive,
-            '##GRID_ACTIVE_CLASS##' => $gridActive,
-            '##BAT_ACTIVE_CLASS##' => $batActive,
-            '##HOUSE_ACTIVE_CLASS##' => $houseActive,
-            '##SOLAR_W##' => round($solar),
-            '##GRID_ARROW##' => $gridArrow,
-            '##GRID_W##' => round(abs($grid)),
-            '##HOUSE_W##' => round($house),
-            '##HOUSE_SELFCONSO_PCT##' => $selfconso,
-            '##SOC##' => $soc,
-            '##BATTERY_ARROW##' => $batteryArrow,
-            '##BATTERY_W##' => round(abs($injected)),
-            '##GAUGE_X##' => $gaugeX,
-            '##GAUGE_Y##' => $gaugeY,
-            '##INTENSITE_A##' => round($intensite, 1),
-            '##INTENSITE_MARGE_A##' => round($imax - $intensite, 1),
-            '##TEMPO_TODAY_FG##' => $tempoToday[0],
-            '##TEMPO_TODAY_BG##' => $tempoToday[1],
-            '##TEMPO_TODAY_LABEL##' => $tempoToday[2],
-            '##TEMPO_TOMORROW_FG##' => $tempoTomorrow[0],
-            '##TEMPO_TOMORROW_BG##' => $tempoTomorrow[1],
-            '##TEMPO_TOMORROW_LABEL##' => $tempoTomorrow[2],
-            '##GAIN_JOUR##' => number_format((float) $this->getCmdValue('gain_jour'), 2),
-            '##DEPENSE_VEILLE##' => number_format((float) $this->getCmdValue('depense_veille'), 2),
-            '##DEPENSE_JOUR##' => number_format((float) $this->getCmdValue('depense_jour'), 2),
-            '##OUTPUT_LIMIT_W##' => round((float) $this->getCmdValue('output_limit')),
-            '##OUTPUT_LIMIT_MAX##' => round((float) $this->getConfiguration('limite_max_w', 1200)),
-            '##SOC_MIN##' => round((float) $this->getCmdValue('set_soc_min')),
-            '##CMD_SET_OUTPUT_LIMIT_ID##' => is_object($outputLimitCmd) ? $outputLimitCmd->getId() : 0,
-            '##CMD_SET_SOC_MIN_ID##' => is_object($socMinCmd) ? $socMinCmd->getId() : 0,
-        );
-        return str_replace(array_keys($tokens), array_values($tokens), $html);
-    }
-
-    /**
      * Traduit la commande "mode" (acMode brut de la télémétrie Zendure : 1=charge,
      * 2=décharge, cf. commentaire de set_mode dans mqtt_transport.py) en [icône
      * FontAwesome, libellé, flèche] pour l'affichage. acMode arrive en entier (1/2),
@@ -462,33 +345,11 @@ class zendure extends eqLogic
         return array('fa-pause', $mode !== '' ? $mode : 'Veille', '↔');
     }
 
-    /**
-     * Traduit une couleur Tempo (source externe, ex. "Bleu"/"Blanc"/"Rouge" ou code
-     * numérique 1/2/3) en [couleur texte, couleur fond, libellé] pour les pastilles Flux.
-     */
-    private function tempoColorInfo($raw)
-    {
-        $v = strtolower(trim((string) $raw));
-        if ($v === '') {
-            return array('#6B7280', 'rgba(127,127,127,0.16)', '—');
-        }
-        if (strpos($v, 'roug') !== false || $v === '3' || $v === 'red') {
-            return array('#B91C1C', '#FCA5A5', 'Rouge');
-        }
-        if (strpos($v, 'blanc') !== false || $v === '2' || $v === 'white') {
-            return array('#854F0B', '#FDE68A', 'Blanc');
-        }
-        if (strpos($v, 'bleu') !== false || $v === '1' || $v === 'blue') {
-            return array('#1D4ED8', '#BFDBFE', 'Bleu');
-        }
-        // "UNDEFINED"/"UNKNOWN" : la couleur Tempo de demain n'est publiée par RTE
-        // que l'après-midi — état "pas encore connu" légitime, pas une erreur.
-        // Afficher la chaîne brute en majuscules était moche/déroutant (signalé).
-        if ($v === 'undefined' || $v === 'unknown') {
-            return array('#6B7280', 'rgba(127,127,127,0.16)', '—');
-        }
-        return array('#6B7280', 'rgba(127,127,127,0.16)', $raw);
-    }
+    // tempoColorInfo() a été porté en JS (cf. cmd.info.string.flux_widget.html,
+    // fonction tempoColorInfo) : le widget Flux est désormais une commande
+    // (cf. createOrUpdateFluxWidget()) dont les valeurs Tempo doivent être
+    // recolorées en direct côté client à chaque mise à jour, sans aller-retour
+    // serveur — plus utilisé côté PHP.
 
     /**
      * Lit la dernière valeur connue d'une commande "info" par son logicalId
@@ -553,6 +414,26 @@ class zendure extends eqLogic
         }
     }
 
+    /**
+     * Comme resolveSourceCmd(), mais retombe sur une commande interne du
+     * plugin (par logicalId) si rien n'est configuré — pendant PHP de
+     * getSourceOrDefault(), mais renvoie l'objet cmd (pour en extraire l'id
+     * côté widget Flux, cf. createOrUpdateFluxWidget()) plutôt que sa valeur.
+     */
+    private function resolveSourceCmdOrDefault($configKey, $defaultLogicalId)
+    {
+        $cmd = $this->resolveSourceCmd($configKey);
+        if (is_object($cmd)) {
+            return $cmd;
+        }
+        return $this->getCmd(null, $defaultLogicalId);
+    }
+
+    private static function cmdIdOrZero($cmd)
+    {
+        return is_object($cmd) ? $cmd->getId() : 0;
+    }
+
     public function preInsert()
     {
     }
@@ -568,11 +449,55 @@ class zendure extends eqLogic
     public function postSave()
     {
         log::add('zendure', 'debug', 'postSave eq_id=' . $this->getId() . ' (' . $this->getName() . ')');
+        $this->ensureFluxTileSize();
         $this->createOrUpdateCommands();
         $this->registerGridPowerListener();
         self::ensureCronRegistered();
         self::writeDaemonConfig();
         $this->reloadDaemonConfig();
+    }
+
+    /**
+     * La tuile eqLogic ("largeur"/"hauteur" définies via getDisplay(), poignée de
+     * redimensionnement du dashboard) partent par défaut sur `auto` — sous
+     * Packery, ça revient à une petite cellule de grille, pas à la taille du
+     * contenu (contrairement à l'ancien override eqLogic::toHtml() du gabarit
+     * Flux, qui ne passait jamais par ce mécanisme et s'affichait donc sans
+     * contrainte). Constaté après bascule vers le widget de commande : le
+     * losange/jauge/Tempo/cartes financières se retrouvaient tassés dans une
+     * tuile bien plus étroite/basse que prévu (dernier exemple en date : le
+     * bloc Pilotage tronqué de quelques px en bas après l'agrandissement du
+     * diagramme 400x320, cf. équidistance des noeuds). On force donc une
+     * taille de départ raisonnable UNE SEULE FOIS par dimension (si
+     * l'utilisateur n'a jamais redimensionné la tuile lui-même) ; ensuite
+     * libre à lui d'ajuster via la poignée, sans que ce code ne revienne
+     * écraser son choix.
+     */
+    private function ensureFluxTileSize()
+    {
+        if ($this->getConfiguration('template_dashboard', 'condense') != 'flux') {
+            return;
+        }
+        $changed = false;
+        // Anciens défauts auto successifs (660px, puis 480px), avant les itérations
+        // de retour utilisateur sur la largeur/proportions du widget — jamais des
+        // valeurs choisies par l'utilisateur, donc toujours sûr de les réaligner sur
+        // le défaut courant plutôt que de les figer.
+        $width = $this->getDisplay('width');
+        if ($width == '' || $width == '660px' || $width == '480px') {
+            $this->setDisplay('width', '460px');
+            $changed = true;
+        }
+        // Jamais forcée avant (le besoin n'est apparu qu'avec le diagramme 400x320) :
+        // seule une valeur vide est donc un ancien défaut ici, pas de lignée à gérer.
+        $height = $this->getDisplay('height');
+        if ($height == '') {
+            $this->setDisplay('height', '680px');
+            $changed = true;
+        }
+        if ($changed) {
+            $this->save(true);
+        }
     }
 
     /**
@@ -697,6 +622,114 @@ class zendure extends eqLogic
             $cmd->setSubType($def[1]);
             $cmd->save();
         }
+
+        // Toutes les commandes ci-dessus (info/action/calculées, + celles créées
+        // à la volée par callback.php pour la télémétrie brute non listée, cf.
+        // son commentaire "capture désormais TOUTE la télémétrie") sont la
+        // matière première du widget Flux, pas des lectures destinées à être
+        // affichées telles quelles sur le dashboard (le losange les recompose).
+        // On masque donc tout sauf flux_widget lui-même, plutôt que d'énumérer
+        // une liste figée — sinon toute nouvelle clé Zendure découverte à la
+        // volée réapparaîtrait en vrac sur le dashboard (constaté : ~80 commandes
+        // brutes visibles après ce changement, avant ce correctif).
+        foreach ($this->getCmd() as $cmd) {
+            if ($cmd->getLogicalId() == 'flux_widget') {
+                continue;
+            }
+            if ($cmd->getIsVisible() != 0) {
+                $cmd->setIsVisible(0);
+                $cmd->save();
+            }
+        }
+
+        $this->createOrUpdateFluxWidget();
+    }
+
+    /**
+     * Commande hôte du widget "Flux" (addendum §14.3, refonte animation) : un
+     * widget au niveau COMMANDE (customTemplate zendure::flux_widget), pas un
+     * override eqLogic::toHtml() — cf. investigation du widget natif
+     * "Energy_info"/distribution_energy.html. Raison du changement : Jeedom
+     * remplace intégralement le HTML d'un widget eqLogic à chaque
+     * eqLogic::update (jeedom.eqLogic.refreshValue -> eqLogic.empty().append),
+     * ce qui fige/relance toute animation SVG en cours. Un widget de commande
+     * n'est jamais redessiné : seules des jeedom.cmd.addUpdateFunction()
+     * poussent les nouvelles valeurs, en place, dans le DOM existant (cf.
+     * jeedom.cmd.refreshValue). D'où : une seule commande visible ("flux_widget"),
+     * toutes les autres masquées ci-dessus, et les ids des commandes "pilotes"
+     * (celles dont la valeur doit rafraîchir le losange en direct) transmis en
+     * paramètres de widget (cmd.display.parameters -> tokens #Xxx# natifs,
+     * cf. cmd::toHtml() core) plutôt que recalculés côté PHP à chaque rendu.
+     */
+    private function createOrUpdateFluxWidget()
+    {
+        $cmd = $this->getCmd(null, 'flux_widget');
+        if (!is_object($cmd)) {
+            $cmd = new zendureCmd();
+            $cmd->setLogicalId('flux_widget');
+            $cmd->setEqLogic_id($this->getId());
+            $cmd->setType('info');
+        }
+        $cmd->setName('Flux');
+        $cmd->setSubType('string');
+        $cmd->setIsHistorized(0);
+        $cmd->setIsVisible(1);
+        $cmd->setOrder(0);
+        $cmd->setTemplate('dashboard', 'zendure::flux_widget');
+        $cmd->setTemplate('mobile', 'core::default');
+
+        $solarCmd = $this->resolveSourceCmdOrDefault('src_solaire', 'solar_power');
+        $gridCmd = $this->resolveSourceCmdOrDefault('src_grid_papp', 'grid_power');
+        $injectedCmd = $this->resolveSourceCmdOrDefault('src_injection', 'injected_power');
+        $intensiteCmd = $this->resolveSourceCmd('src_intensite');
+
+        // "Période" reprend la même priorité que toHtmlFlux() historique :
+        // la commande interne periode_tarif si elle a déjà une valeur, sinon
+        // la source Tempo externe configurée (src_tempo_now).
+        $periodeInternalCmd = $this->getCmd(null, 'periode_tarif');
+        $periodeCmd = (is_object($periodeInternalCmd) && (string) $periodeInternalCmd->execCmd() !== '')
+            ? $periodeInternalCmd
+            : $this->resolveSourceCmd('src_tempo_now');
+
+        $setOutputLimitCmd = $this->getCmd(null, 'set_output_limit');
+        $setSocMinCmd = $this->getCmd(null, 'set_soc_min');
+
+        $parameters = array(
+            'SolarId' => self::cmdIdOrZero($solarCmd),
+            'GridId' => self::cmdIdOrZero($gridCmd),
+            'InjectedId' => self::cmdIdOrZero($injectedCmd),
+            'IntensiteId' => self::cmdIdOrZero($intensiteCmd),
+            'SocId' => self::cmdIdOrZero($this->getCmd(null, 'soc')),
+            'ModeId' => self::cmdIdOrZero($this->getCmd(null, 'mode')),
+            'GainJourId' => self::cmdIdOrZero($this->getCmd(null, 'gain_jour')),
+            'DepenseVeilleId' => self::cmdIdOrZero($this->getCmd(null, 'depense_veille')),
+            'DepenseJourId' => self::cmdIdOrZero($this->getCmd(null, 'depense_jour')),
+            'PeriodeId' => self::cmdIdOrZero($periodeCmd),
+            'TempoTodayId' => self::cmdIdOrZero($this->resolveSourceCmd('src_tempo_j')),
+            'TempoTomorrowId' => self::cmdIdOrZero($this->resolveSourceCmd('src_tempo_j1')),
+            'OutputLimitId' => self::cmdIdOrZero($this->getCmd(null, 'output_limit')),
+            'SetOutputLimitId' => self::cmdIdOrZero($setOutputLimitCmd),
+            'SetSocMinId' => self::cmdIdOrZero($setSocMinCmd),
+            'ImaxA' => (float) $this->getConfiguration('imax_ampere', 30),
+            'OutputLimitMaxW' => (float) $this->getConfiguration('limite_max_w', 1200),
+            'FlowThresholdW' => 5,
+            'AnimationsOnClass' => $this->getConfiguration('animations_actives', 1) ? 'zc-animated' : '',
+            // Détection "hors ligne" côté widget (JS, cf. commentaire d'en-tête du
+            // template) : le démon republie chaque clé de télémétrie au moins
+            // toutes les telemetry_min_interval_s secondes même sans changement
+            // (heartbeat, cf. TelemetryThrottle côté Python) -- un widget qui n'a
+            // reçu AUCUNE poussée de commande depuis plus que ce délai (marge
+            // incluse) signale donc une vraie coupure démon/MQTT, pas juste un
+            // flux stable.
+            'HeartbeatS' => (float) $this->getConfiguration('telemetry_min_interval_s', 300),
+            // Pour l'appel AJAX lastSeen (cf. core/ajax/zendure.ajax.php) qui corrige
+            // la base de temps du watchdog au chargement de la page -- resolveSourceCmd
+            // /getCmd() n'exposent que des ids de COMMANDE, il faut l'id de l'eqLogic
+            // lui-même pour cet appel-là.
+            'EqLogicId' => $this->getId(),
+        );
+        $cmd->setDisplay('parameters', $parameters);
+        $cmd->save();
     }
 
     /**

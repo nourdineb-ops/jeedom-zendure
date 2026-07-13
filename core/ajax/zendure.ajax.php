@@ -13,11 +13,49 @@ try {
     require_once dirname(__FILE__) . '/../../../../core/php/core.inc.php';
     include_file('core', 'authentification', 'php');
 
+    ajax::init();
+
+    // Watchdog "hors ligne" du widget Flux (cf. cmd.info.string.flux_widget.html,
+    // fonction fetchLastSeen()) : appelé au chargement du dashboard, PAS depuis
+    // l'écran de config de l'équipement -- contrairement à debugCapture/listCommands
+    // ci-dessous, un simple utilisateur (profil "user", pas admin) peut légitimement
+    // consulter le dashboard, donc isConnect() simple plutôt que isConnect('admin').
+    // Pourquoi cet appel existe : jeedom.cmd.execute() au chargement du widget
+    // renvoie la dernière valeur connue en base SANS son âge -- le widget la
+    // recevait comme une preuve de vie "à l'instant", masquant une coupure déjà
+    // ancienne pendant tout un cycle de seuil après chaque rechargement de page
+    // (signalé : badge "Hors ligne" absent alors que le device était réellement
+    // muet depuis 40+ minutes). Un seul appel réseau au chargement suffit : la
+    // suite de la détection reste 100% locale (pushes live via addUpdateFunction).
+    if (init('action') == 'lastSeen') {
+        if (!isConnect()) {
+            throw new Exception(__('401 - Accès non autorisé', __FILE__));
+        }
+        $eqLogic = eqLogic::byId(init('eqLogic_id'));
+        if (!is_object($eqLogic) || $eqLogic->getEqType_name() != 'zendure') {
+            throw new Exception(__('Équipement Zendure introuvable', __FILE__));
+        }
+        $latestMs = 0;
+        foreach (array('solar_power', 'grid_power', 'injected_power', 'soc', 'mode') as $lid) {
+            $cmd = $eqLogic->getCmd(null, $lid);
+            if (!is_object($cmd)) {
+                continue;
+            }
+            $date = $cmd->getCollectDate(1);
+            if ($date == '') {
+                continue;
+            }
+            $ms = strtotime($date) * 1000;
+            if ($ms > $latestMs) {
+                $latestMs = $ms;
+            }
+        }
+        ajax::success(array('lastSeenMs' => $latestMs));
+    }
+
     if (!isConnect('admin')) {
         throw new Exception(__('401 - Accès non autorisé', __FILE__));
     }
-
-    ajax::init();
 
     if (init('action') == 'debugCapture') {
         $eqLogic = eqLogic::byId(init('eqLogic_id'));
