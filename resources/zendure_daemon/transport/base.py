@@ -45,6 +45,10 @@ class Transport(ABC):
         """Pousse le seuil SOC minimum (%), propriété minSoc."""
 
     @abstractmethod
+    def set_soc_max(self, percent: int) -> None:
+        """Pousse le seuil SOC maximum/cible de charge (%), propriété socSet."""
+
+    @abstractmethod
     def set_smart_mode(self, enabled: bool) -> None:
         """Pousse la propriété smartMode (0/1). Le firmware Zendure semble déjà la
         déduire lui-même dès qu'une commande deviceAutomation arrive (constaté via

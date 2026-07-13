@@ -38,6 +38,7 @@ class zendure extends eqLogic
         'set_output_limit' => array('Limite sortie AC (W)', 'slider'),
         'set_input_limit' => array('Limite entrée AC (W)', 'slider'),
         'set_soc_min' => array('SOC minimum', 'slider'),
+        'set_soc_max' => array('SOC maximum', 'slider'),
         'debug_capture_1h' => array('Capture télémétrie complète (1h)', 'other'),
     );
 
@@ -598,6 +599,16 @@ class zendure extends eqLogic
         if (is_object($cmd)) {
             $cmd->execCmd(array('slider' => $target));
         }
+        // Même correctif que la boucle rapide côté démon (cf.
+        // Device.on_grid_power()) : pousser la valeur commandée directement sur
+        // la commande info output_limit plutôt que d'attendre son écho
+        // télémétrie (non fiable, cf. README "Points ouverts") -- sinon le
+        // curseur "Limite sortie AC" du widget reste figé après une action du
+        // cron HP.
+        $outputInfoCmd = $this->getCmd(null, 'output_limit');
+        if (is_object($outputInfoCmd)) {
+            $outputInfoCmd->event($target);
+        }
     }
 
     public static function cronRolloverMinuit()
@@ -751,6 +762,33 @@ class zendure extends eqLogic
         return $json;
     }
 
+    /**
+     * Lecture des N dernières lignes d'un fichier de log, pour le panneau debug
+     * du widget Flux (core/ajax/zendure.ajax.php, action tailLogs). Ne lit que
+     * les derniers 64 Ko du fichier plutôt que le fichier entier -- ces logs
+     * (surtout celui du démon, niveau debug) peuvent grossir vite, pas question
+     * de tout charger en mémoire à chaque poll du widget (~ toutes les 3s).
+     * Repli en clair si un fichier fait moins de 64 Ko ou n'existe pas encore.
+     */
+    public static function tailLogFile($path, $lines)
+    {
+        if (!is_file($path) || !is_readable($path)) {
+            return array();
+        }
+        $size = filesize($path);
+        $chunk = 65536;
+        $fh = fopen($path, 'r');
+        if ($fh === false) {
+            return array();
+        }
+        fseek($fh, max(0, $size - $chunk));
+        $content = stream_get_contents($fh);
+        fclose($fh);
+
+        $all = preg_split('/\r\n|\r|\n/', trim((string) $content));
+        return array_slice($all, -$lines);
+    }
+
     public function preRemove()
     {
         $this->removeTelemetryListener('onGridPowerEvent');
@@ -882,7 +920,10 @@ class zendure extends eqLogic
             : $this->resolveSourceCmd('src_tempo_now');
 
         $setOutputLimitCmd = $this->getCmd(null, 'set_output_limit');
+        $setInputLimitCmd = $this->getCmd(null, 'set_input_limit');
         $setSocMinCmd = $this->getCmd(null, 'set_soc_min');
+        $setSocMaxCmd = $this->getCmd(null, 'set_soc_max');
+        $setModeCmd = $this->getCmd(null, 'set_mode');
 
         $parameters = array(
             'SolarId' => self::cmdIdOrZero($solarCmd),
@@ -898,10 +939,29 @@ class zendure extends eqLogic
             'TempoTodayId' => self::cmdIdOrZero($this->resolveSourceCmd('src_tempo_j')),
             'TempoTomorrowId' => self::cmdIdOrZero($this->resolveSourceCmd('src_tempo_j1')),
             'OutputLimitId' => self::cmdIdOrZero($this->getCmd(null, 'output_limit')),
+            'InputLimitId' => self::cmdIdOrZero($this->getCmd(null, 'input_limit')),
+            // MinSocRawId/SocMaxRawId : PAS les commandes action set_soc_min/set_soc_max
+            // elles-mêmes -- jeedom.cmd.execute() sur une commande de type "action" la
+            // DÉCLENCHE (même sans valeur), il ne fait pas qu'en lire la valeur (signalé :
+            // curseurs qui redéclenchaient l'action en boucle avec une valeur vide dès le
+            // chargement du widget, cf. warning démon "valeur invalide... : None" répété).
+            // minSoc/socSet sont les commandes "info" brutes créées à la volée par
+            // callback.php à partir de la télémétrie réelle du boîtier (cf.
+            // resources/zendure_daemon/telemetry_map.py, pas d'alias curé pour celles-ci) :
+            // lecture sûre, ET reflète la vraie valeur actuelle du boîtier (pas seulement
+            // la dernière commande envoyée par ce widget). Échelle x10 côté device
+            // (confirmé : minSoc=400 bru => 40% affiché côté app/HA) -- division par 10
+            // faite en JS à l'affichage.
+            'MinSocRawId' => self::cmdIdOrZero($this->getCmd(null, 'minSoc')),
+            'SocMaxRawId' => self::cmdIdOrZero($this->getCmd(null, 'socSet')),
             'SetOutputLimitId' => self::cmdIdOrZero($setOutputLimitCmd),
+            'SetInputLimitId' => self::cmdIdOrZero($setInputLimitCmd),
             'SetSocMinId' => self::cmdIdOrZero($setSocMinCmd),
+            'SetSocMaxId' => self::cmdIdOrZero($setSocMaxCmd),
+            'SetModeActionId' => self::cmdIdOrZero($setModeCmd),
             'ImaxA' => (float) $this->getConfiguration('imax_ampere', 30),
             'OutputLimitMaxW' => (float) $this->getConfiguration('limite_max_w', 1200),
+            'InputLimitMaxW' => (float) $this->getConfiguration('limite_entree_max_w', 1200),
             'FlowThresholdW' => 5,
             'AnimationsOnClass' => $this->getConfiguration('animations_actives', 1) ? 'zc-animated' : '',
             // Détection "hors ligne" côté widget (JS, cf. commentaire d'en-tête du
@@ -917,6 +977,12 @@ class zendure extends eqLogic
             // /getCmd() n'exposent que des ids de COMMANDE, il faut l'id de l'eqLogic
             // lui-même pour cet appel-là.
             'EqLogicId' => $this->getId(),
+            // Panneau debug (cf. desktop/php/zendure.php, onglet IHM) : classe CSS
+            // conditionnelle plutôt qu'un param booléen brut, même convention que
+            // AnimationsOnClass ci-dessus -- le panneau existe toujours dans le DOM
+            // (pas de aller-retour serveur pour l'afficher/masquer), juste montré/
+            // caché en CSS selon que l'utilisateur a coché l'option.
+            'DebugOnClass' => $this->getConfiguration('debug_widget_actif', 0) ? 'zf-debug-on' : '',
         );
         $cmd->setDisplay('parameters', $parameters);
         $cmd->save();

@@ -346,6 +346,10 @@ $eqLogics = eqLogic::byType($plugin->getId());
                         <div class="col-sm-1">
                             <input type="number" class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="limite_max_w" placeholder="1200" />
                         </div>
+                        <label class="col-sm-3 control-label">{{Limite entrée max (W)}}</label>
+                        <div class="col-sm-2">
+                            <input type="number" class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="limite_entree_max_w" placeholder="1200" />
+                        </div>
                     </div>
                     <div class="form-group">
                         <label class="col-sm-3 control-label">{{Imax (A)}}</label>
@@ -499,6 +503,12 @@ $eqLogics = eqLogic::byType($plugin->getId());
                             <input type="checkbox" class="eqLogicAttr" data-l1key="configuration" data-l2key="animations_actives" checked />
                         </div>
                     </div>
+                    <div class="form-group">
+                        <label class="col-sm-3 control-label">{{Panneau debug (widget Flux)}}</label>
+                        <div class="col-sm-2">
+                            <input type="checkbox" class="eqLogicAttr" data-l1key="configuration" data-l2key="debug_widget_actif" />
+                        </div>
+                    </div>
                 </fieldset>
                 <div class="alert alert-info">
                     <strong>{{À quoi sert cet onglet}}</strong>
@@ -507,6 +517,7 @@ $eqLogics = eqLogic::byType($plugin->getId());
                         <li>{{Flux : losange animé Solaire/Réseau/Maison/Batterie, jauge d'intensité, Tempo J/J+1, indicateurs financiers et curseurs de pilotage (limite de sortie AC, SOC minimum).}}</li>
                         <li>{{Historique : pas encore implémenté — en le sélectionnant, l'équipement retombe sur l'affichage générique Jeedom (liste de commandes), sans plantage mais sans le rendu visuel prévu à terme.}}</li>
                         <li>{{Animations : désactivez si vous préférez un rendu statique (utile sur mobile/tablette).}}</li>
+                        <li>{{Panneau debug : ajoute un bandeau repliable en bas du widget Flux avec les dernières lignes des logs démon + plugin, actualisées automatiquement (~3s). Pensez à le désactiver une fois le diagnostic terminé (appels réseau périodiques tant qu'il est ouvert).}}</li>
                     </ul>
                 </div>
 

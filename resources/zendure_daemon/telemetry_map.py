@@ -20,7 +20,16 @@ CURATED_ALIASES = {
     "outputHomePower": "injected_power",
     "gridInputPower": "grid_power",
     "electricLevel": "soc",
-    "outputLimit": "output_limit",
+    # outputLimit PAS aliasé sur output_limit (contrairement à inputLimit) : ce
+    # champ télémétrie dérive spontanément côté appareil, sans rapport avec la
+    # valeur réellement commandée (constaté, cf. README "Points ouverts" +
+    # reproduit en direct : après une action de la boucle rapide, un écho
+    # tardif de ce champ écrasait la valeur qu'on venait tout juste de pousser
+    # nous-mêmes, cf. Device.on_grid_power()/runOptimisationHP()). output_limit
+    # est désormais alimentée UNIQUEMENT par nos propres pushs (source de
+    # vérité = ce qu'on a réellement commandé), jamais par cet écho appareil.
+    # La clé brute "outputLimit" reste quand même créée à la volée (comme
+    # toute télémétrie non aliasée) si besoin de la consulter à part.
     "inputLimit": "input_limit",
     "acMode": "mode",
 }

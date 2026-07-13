@@ -109,7 +109,20 @@ class MqttTransport(Transport):
         self._publish_property("acMode", int(mode))
 
     def set_soc_min(self, percent: int) -> None:
-        self._publish_property("minSoc", int(percent))
+        # Facteur x10 côté device (confirmé dans zendure_ha : ZendureNumber(...,
+        # factor=10) pour minSoc/socSet, cf. async_set_native_value ->
+        # onwrite(factor * value)) -- sans lui, régler 40% envoyait en réalité 4%
+        # au boîtier (signalé : le curseur SOC minimum ne faisait pas ce qu'il
+        # affichait).
+        self._publish_property("minSoc", int(percent) * 10)
+
+    def set_soc_max(self, percent: int) -> None:
+        # Même mécanique que set_soc_min (propriété socSet, même facteur x10) :
+        # c'est le SOC cible où la charge s'arrête (affiché "SOC maximum" côté
+        # app/HA) -- absent du plugin jusqu'ici alors que c'est, avec la limite
+        # de sortie, l'un des deux leviers réellement utilisés pour piloter la
+        # charge en HC (retour utilisateur).
+        self._publish_property("socSet", int(percent) * 10)
 
     def set_smart_mode(self, enabled: bool) -> None:
         self._publish_property("smartMode", 1 if enabled else 0)
