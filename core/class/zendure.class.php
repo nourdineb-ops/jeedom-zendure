@@ -541,6 +541,7 @@ class zendure extends eqLogic
         self::ensureCron('cronOptimisationHP', '*/5 * * * *', 'Cron cronOptimisationHP enregistré (*/5 * * * *, mode simulation par défaut)');
         self::ensureCron('cronRolloverMinuit', '0 0 * * *', 'Cron cronRolloverMinuit enregistré (0 0 * * *, bascule jour -> veille)');
         self::ensureCron('cronRecupererTarifs', '0 3 1 * *', 'Cron cronRecupererTarifs enregistré (0 3 1 * *, récupération mensuelle des tarifs)');
+        self::ensureCron('cronStrategieNuit', '0 0 * * *', 'Cron cronStrategieNuit enregistré (0 0 * * *, mode simulation par défaut)');
     }
 
     private static function ensureCron($function, $schedule, $logMessage)
@@ -609,6 +610,122 @@ class zendure extends eqLogic
         if (is_object($outputInfoCmd)) {
             $outputInfoCmd->event($target);
         }
+    }
+
+    public static function cronStrategieNuit()
+    {
+        foreach (self::byType('zendure', true) as $eqLogic) {
+            /* @var zendure $eqLogic */
+            if (!$eqLogic->getIsEnable()) {
+                continue;
+            }
+            $eqLogic->runStrategieNuit();
+        }
+    }
+
+    /**
+     * Décide le SOC cible de charge nocturne (00h-06h HC) selon Tempo demain +
+     * prévision solaire du jour à venir -- portage de la logique de l'ancien
+     * scénario Jeedom de référence (Tempo Rouge demain -> charge max ; Tempo
+     * Bleu + bonne prévision solaire -> laisser de la place au solaire ;
+     * sinon cas standard), avec deux différences volontaires par rapport à
+     * l'original :
+     * - utilise set_soc_max (SOC maximum/cible de charge, propriété socSet)
+     *   et non set_soc_min : l'ancien scénario pilotait déjà ce qui est
+     *   fonctionnellement le PLAFOND de charge, mais avant que la distinction
+     *   min/max ne soit comprise sur ce device (cf. retour utilisateur
+     *   2026-07-13 comparant avec les curseurs HA) elle passait par la seule
+     *   commande "SOC" alors disponible.
+     * - résout la prévision via resolveForecastKwh() (cf. juste en dessous),
+     *   qui compense le décalage de cache d'une source externe à
+     *   rafraîchissement matinal (ex. Solcast, ~6h) plutôt que de lire "J+0"
+     *   en aveugle.
+     * Volontairement en simulation par défaut (config strategie_nuit_dry_run,
+     * coché), comme cronOptimisationHP : logue la décision sans jamais
+     * toucher à l'appareil tant que la fonctionnalité n'a pas été validée en
+     * conditions réelles.
+     */
+    private function runStrategieNuit()
+    {
+        if (!$this->getConfiguration('strategie_nuit_active', 0)) {
+            return;
+        }
+
+        $tempoJ1Cmd = $this->resolveSourceCmd('src_tempo_j1');
+        $tempoTomorrow = is_object($tempoJ1Cmd) ? strtoupper(trim((string) $tempoJ1Cmd->execCmd())) : '';
+        $forecastKwh = $this->resolveForecastKwh();
+
+        $socMinTarget = 20;
+        $socMaxTarget = 100;
+        if (strpos($tempoTomorrow, 'ROUG') !== false || $tempoTomorrow === 'RED') {
+            $socTarget = $socMaxTarget;
+            $reason = 'Tempo demain = Rouge -> charge max';
+        } elseif ((strpos($tempoTomorrow, 'BLEU') !== false || $tempoTomorrow === 'BLUE') && $forecastKwh !== null && $forecastKwh >= 4.0) {
+            $socTarget = max($socMinTarget, 60);
+            $reason = 'Tempo demain = Bleu + prévision solaire >= 4kWh -> laisser de la place au solaire';
+        } else {
+            $socTarget = 80;
+            $reason = 'cas standard';
+        }
+
+        $dryRun = (bool) $this->getConfiguration('strategie_nuit_dry_run', 1);
+        log::add('zendure', 'info', sprintf(
+            '[cronStrategieNuit]%s eq_id=%d tempoDemain=%s prevision=%s -> SOC cible=%d%% (%s)',
+            $dryRun ? ' [SIMULATION]' : '',
+            $this->getId(),
+            $tempoTomorrow !== '' ? $tempoTomorrow : '?',
+            $forecastKwh !== null ? number_format($forecastKwh, 1) . 'kWh' : '?',
+            $socTarget,
+            $reason
+        ));
+
+        if ($dryRun) {
+            return;
+        }
+
+        $modeCmd = $this->getCmd(null, 'set_mode');
+        if (is_object($modeCmd)) {
+            $modeCmd->execCmd(array('select' => 1)); // 1 = input/charge
+        }
+        $outLimitCmd = $this->getCmd(null, 'set_output_limit');
+        if (is_object($outLimitCmd)) {
+            $outLimitCmd->execCmd(array('slider' => 0));
+        }
+        $socMaxCmd = $this->getCmd(null, 'set_soc_max');
+        if (is_object($socMaxCmd)) {
+            $socMaxCmd->execCmd(array('slider' => $socTarget));
+        }
+    }
+
+    /**
+     * Résout la prévision solaire "du jour à venir" en kWh, en compensant le
+     * décalage de cache d'une source externe à rafraîchissement matinal (ex.
+     * Solcast, ~6h) : si la commande J+0 n'a pas encore été recollectée
+     * aujourd'hui (cron à 00h00, donc avant ce rafraîchissement), son
+     * étiquetage -- et celui de J+1 -- reste ancré sur le dernier
+     * rafraîchissement (hier ~6h) ; ce qui était alors "J+1" correspond donc
+     * au jour calendaire actuel, pas "J+0" (signalé par l'utilisateur).
+     * Bascule automatique sur J+1 dans ce cas, sans dépendre d'une heure de
+     * rafraîchissement figée en dur (peut varier selon la source).
+     */
+    private function resolveForecastKwh()
+    {
+        $j0Cmd = $this->resolveSourceCmd('src_prevision_solaire');
+        if (!is_object($j0Cmd)) {
+            return null;
+        }
+        $collectDate = $j0Cmd->getCollectDate(1);
+        $refreshedToday = $collectDate != '' && substr($collectDate, 0, 10) === date('Y-m-d');
+        $cmd = $j0Cmd;
+        if (!$refreshedToday) {
+            $j1Cmd = $this->resolveSourceCmd('src_prevision_solaire_j1');
+            if (is_object($j1Cmd)) {
+                $cmd = $j1Cmd;
+            }
+        }
+        // Source attendue en Wh (cf. Solcast "Prévision J+x", label onglet
+        // Sources) -- conversion en kWh pour le seuil de décision ci-dessus.
+        return ((float) $cmd->execCmd()) / 1000;
     }
 
     public static function cronRolloverMinuit()
