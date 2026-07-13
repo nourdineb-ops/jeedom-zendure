@@ -53,6 +53,23 @@ try {
         ajax::success(array('lastSeenMs' => $latestMs));
     }
 
+    // Panneau debug du widget Flux (cf. cmd.info.string.flux_widget.html, fonction
+    // fetchLogTail()) : mêmes raisons d'accès que lastSeen ci-dessus -- visible
+    // depuis le dashboard, donc isConnect() simple, pas 'admin'. Lit les N
+    // dernières lignes des 2 logs pertinents (démon Python + plugin PHP) plutôt
+    // que d'exposer le fichier entier : c'est un aperçu "très synthétique", pas
+    // un visualiseur de logs complet (qui existe déjà nativement dans Jeedom).
+    if (init('action') == 'tailLogs') {
+        if (!isConnect()) {
+            throw new Exception(__('401 - Accès non autorisé', __FILE__));
+        }
+        $lines = max(1, min(100, (int) init('lines', 15)));
+        ajax::success(array(
+            'daemon' => zendure::tailLogFile(log::getPathToLog('zendure_daemon'), $lines),
+            'plugin' => zendure::tailLogFile(log::getPathToLog('zendure'), $lines),
+        ));
+    }
+
     if (!isConnect('admin')) {
         throw new Exception(__('401 - Accès non autorisé', __FILE__));
     }

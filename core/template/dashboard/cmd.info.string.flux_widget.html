@@ -182,8 +182,20 @@ le DOM existant (cf. jeedom.cmd.refreshValue, core/js/cmd.class.js). D'où :
 
 .zendure-flux .zf-pilotage { margin-top: 12px; }
 .zendure-flux .zf-pilotage-title { font-size: 11px; color: var(--zf-text-muted); margin-bottom: 8px; }
-.zendure-flux .zf-slider-row { display: flex; justify-content: space-between; font-size: 11.5px; margin-bottom: 3px; }
+.zendure-flux .zf-slider-row { display: flex; justify-content: space-between; align-items: center; font-size: 11.5px; margin-bottom: 3px; }
 .zendure-flux .zf-slider { width: 100%; }
+.zendure-flux .zf-mode-select { font-size: 11.5px; background: var(--zf-surface-2); color: var(--zf-text); border: 1px solid var(--zf-border); border-radius: 6px; padding: 2px 6px; }
+
+/* Panneau debug (cf. desktop/php/zendure.php, onglet IHM -> debug_widget_actif) :
+   toujours dans le DOM, affiché/masqué en CSS via .zf-debug-on sur la racine --
+   le JS de polling (fetchLogTail()) ne se déclenche que si ce panneau est
+   visible (cf. plus bas), pas de requêtes réseau superflues sinon. */
+.zendure-flux .zf-debug { display: none; margin-top: 12px; }
+.zendure-flux.zf-debug-on .zf-debug { display: block; }
+.zendure-flux .zf-debug-title { font-size: 11px; color: var(--zf-text-muted); margin-bottom: 6px; display: flex; align-items: center; gap: 6px; }
+.zendure-flux .zf-debug-log { max-height: 160px; overflow-y: auto; font-family: monospace; font-size: 10px; line-height: 1.5; white-space: pre-wrap; word-break: break-all; }
+.zendure-flux .zf-debug-line { border-bottom: 1px solid var(--zf-border); padding: 1px 0; }
+.zendure-flux .zf-debug-src { color: var(--zf-text-muted); }
 
 /* État "hors ligne" (cf. bloc <script>, watchdog sur le dernier push reçu de
    n'importe quelle commande pilote) : badge d'alerte + diagramme atténué,
@@ -193,7 +205,7 @@ le DOM existant (cf. jeedom.cmd.refreshValue, core/js/cmd.class.js). D'où :
 .zendure-flux.zf-offline .zf-badge-offline { display: inline-flex; align-items: center; gap: 4px; }
 .zendure-flux.zf-offline .zf-diagram { opacity: 0.55; }
 </style>
-<div class="zendure-flux #AnimationsOnClass#" id="zf-root-#id#">
+<div class="zendure-flux #AnimationsOnClass# #DebugOnClass#" id="zf-root-#id#">
     <div class="zf-header">
         <div class="zf-badges">
             <span class="zf-badge zf-badge-offline" id="zf-offlineBadge-#id#"><i class="fas fa-exclamation-triangle"></i> Hors ligne</span>
@@ -334,10 +346,32 @@ le DOM existant (cf. jeedom.cmd.refreshValue, core/js/cmd.class.js). D'où :
                 <input type="range" min="0" max="#OutputLimitMaxW#" value="0" step="10" class="zf-slider" id="zf-out-#id#" />
             </div>
             <div>
+                <div class="zf-slider-row"><span>Limite entrée AC</span><span class="zf-slider-value" id="zf-in-val-#id#">0 W</span></div>
+                <input type="range" min="0" max="#InputLimitMaxW#" value="0" step="10" class="zf-slider" id="zf-in-#id#" />
+            </div>
+        </div>
+        <div class="zf-row2">
+            <div>
                 <div class="zf-slider-row"><span>SOC minimum</span><span class="zf-slider-value" id="zf-socmin-val-#id#">0%</span></div>
                 <input type="range" min="0" max="100" value="0" step="1" class="zf-slider" id="zf-socmin-#id#" />
             </div>
+            <div>
+                <div class="zf-slider-row"><span>SOC maximum</span><span class="zf-slider-value" id="zf-socmax-val-#id#">0%</span></div>
+                <input type="range" min="0" max="100" value="0" step="1" class="zf-slider" id="zf-socmax-#id#" />
+            </div>
         </div>
+        <div class="zf-slider-row" style="margin-top:8px;">
+            <span>Mode de fonctionnement AC</span>
+            <select class="zf-mode-select" id="zf-modeselect-#id#">
+                <option value="1">Entrée (charge)</option>
+                <option value="2">Sortie (décharge)</option>
+            </select>
+        </div>
+    </div>
+
+    <div class="zf-card zf-debug">
+        <div class="zf-debug-title"><i class="fas fa-bug"></i> Debug (démon + plugin, dernières lignes)</div>
+        <div class="zf-debug-log" id="zf-debuglog-#id#"></div>
     </div>
 </div>
 
@@ -358,10 +392,17 @@ le DOM existant (cf. jeedom.cmd.refreshValue, core/js/cmd.class.js). D'où :
         tempoTodayId: #TempoTodayId#,
         tempoTomorrowId: #TempoTomorrowId#,
         outputLimitId: #OutputLimitId#,
+        inputLimitId: #InputLimitId#,
+        minSocRawId: #MinSocRawId#,
+        socMaxRawId: #SocMaxRawId#,
         setOutputLimitId: #SetOutputLimitId#,
+        setInputLimitId: #SetInputLimitId#,
         setSocMinId: #SetSocMinId#,
+        setSocMaxId: #SetSocMaxId#,
+        setModeActionId: #SetModeActionId#,
         imaxA: #ImaxA#,
         outputLimitMaxW: #OutputLimitMaxW#,
+        inputLimitMaxW: #InputLimitMaxW#,
         flowThresholdW: #FlowThresholdW#,
         heartbeatS: #HeartbeatS#,
         eqLogicId: #EqLogicId#
@@ -373,7 +414,7 @@ le DOM existant (cf. jeedom.cmd.refreshValue, core/js/cmd.class.js). D'où :
         solar: 0, grid: 0, injected: 0, soc: 0, intensite: 0, mode: '',
         periode: '', tempoToday: '', tempoTomorrow: '',
         gainJour: 0, depenseVeille: 0, depenseJour: 0,
-        outputLimit: 0, socMin: 0
+        outputLimit: 0, inputLimit: 0, socMinRaw: 0, socMaxRaw: 0
     };
 
     function el(key) { return document.getElementById('zf-' + key + '-' + id); }
@@ -532,6 +573,20 @@ le DOM existant (cf. jeedom.cmd.refreshValue, core/js/cmd.class.js). D'où :
         if (label) label.textContent = val + suffix;
     }
 
+    // Synchronise le sélecteur de mode sur la vraie valeur acMode (commande
+    // "mode" en lecture) : "1"/"2" (numérique) ou "charge"/"décharge" (texte
+    // libre selon la source), cf. modeInfo() pour la même tolérance de format.
+    function syncModeSelect(rawValue) {
+        var select = document.getElementById('zf-modeselect-' + id);
+        if (!select) return;
+        var v = String(rawValue == null ? '' : rawValue).toLowerCase();
+        if (v === '1' || v.indexOf('charge') === 0 || v.indexOf('entr') >= 0) {
+            select.value = '1';
+        } else if (v === '2' || v.indexOf('decharg') >= 0 || v.indexOf('décharg') >= 0 || v.indexOf('sorti') >= 0) {
+            select.value = '2';
+        }
+    }
+
     // Watchdog "hors ligne" : le démon republie chaque commande au moins toutes
     // les heartbeatS secondes même sans changement (heartbeat, cf. TelemetryThrottle
     // Python) -- si AUCUNE des commandes VRAIMENT issues de Zendure (cf.
@@ -575,7 +630,12 @@ le DOM existant (cf. jeedom.cmd.refreshValue, core/js/cmd.class.js). D'où :
         state[key] = value;
         recompute();
         if (key === 'outputLimit') syncSlider('out', value, ' W');
-        if (key === 'socMin') syncSlider('socmin', value, '%');
+        if (key === 'inputLimit') syncSlider('in', value, ' W');
+        // minSoc/socSet (télémétrie brute device, cf. commentaire de MinSocRawId
+        // côté PHP) sont stockées à l'échelle x10 -- /10 pour l'affichage en %.
+        if (key === 'socMinRaw') syncSlider('socmin', (parseFloat(value) || 0) / 10, '%');
+        if (key === 'socMaxRaw') syncSlider('socmax', (parseFloat(value) || 0) / 10, '%');
+        if (key === 'mode') syncModeSelect(value);
     }
 
     function applyValue(key, value) {
@@ -595,7 +655,8 @@ le DOM existant (cf. jeedom.cmd.refreshValue, core/js/cmd.class.js). D'où :
         intensite: cfg.intensiteId, soc: cfg.socId, mode: cfg.modeId,
         periode: cfg.periodeId, tempoToday: cfg.tempoTodayId, tempoTomorrow: cfg.tempoTomorrowId,
         gainJour: cfg.gainJourId, depenseVeille: cfg.depenseVeilleId, depenseJour: cfg.depenseJourId,
-        outputLimit: cfg.outputLimitId, socMin: cfg.setSocMinId
+        outputLimit: cfg.outputLimitId, inputLimit: cfg.inputLimitId,
+        socMinRaw: cfg.minSocRawId, socMaxRaw: cfg.socMaxRawId
     };
     Object.keys(driverMap).forEach(function (key) {
         var cmdId = driverMap[key];
@@ -640,18 +701,68 @@ le DOM existant (cf. jeedom.cmd.refreshValue, core/js/cmd.class.js). D'où :
     }
     fetchLastSeen();
 
-    var outEl = document.getElementById('zf-out-' + id);
-    if (outEl) {
-        outEl.addEventListener('input', function () { syncSlider('out', outEl.value, ' W'); });
-        outEl.addEventListener('change', function () {
-            jeedom.cmd.execute({ id: cfg.setOutputLimitId, value: outEl.value });
+    // Panneau debug (cf. desktop/php/zendure.php, onglet IHM -> debug_widget_actif) :
+    // aucune requête réseau tant que l'option est décochée (root.classList sans
+    // .zf-debug-on, cf. CSS -- le panneau est alors juste display:none dans le
+    // DOM, jamais interrogé). Polling simple (pas de websocket/SSE : un aperçu
+    // "très synthétique" toutes les 3s suffit largement pour du diagnostic ---
+    // demande explicite, à désactiver une fois le diagnostic terminé).
+    function escapeHtml(s) {
+        var div = document.createElement('div');
+        div.textContent = String(s == null ? '' : s);
+        return div.innerHTML;
+    }
+    function fetchLogTail() {
+        if (!cfg.eqLogicId) return;
+        var body = 'action=tailLogs&eqLogic_id=' + encodeURIComponent(cfg.eqLogicId) + '&lines=12';
+        fetch('plugins/zendure/core/ajax/zendure.ajax.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: body
+        }).then(function (r) { return r.json(); }).then(function (data) {
+            if (data.state !== 'ok' || !data.result) return;
+            var box = document.getElementById('zf-debuglog-' + id);
+            if (!box) return;
+            var lines = [];
+            (data.result.daemon || []).forEach(function (l) { lines.push({ src: 'démon', text: l }); });
+            (data.result.plugin || []).forEach(function (l) { lines.push({ src: 'plugin', text: l }); });
+            box.innerHTML = lines.map(function (l) {
+                return '<div class="zf-debug-line"><span class="zf-debug-src">[' + l.src + ']</span> ' + escapeHtml(l.text) + '</div>';
+            }).join('');
+            box.scrollTop = box.scrollHeight;
+        }).catch(function () { /* best-effort, panneau diagnostic seulement */ });
+    }
+    if (root && root.classList.contains('zf-debug-on')) {
+        fetchLogTail();
+        setInterval(fetchLogTail, 3000);
+    }
+
+    // jeedom.cmd.execute() attend `value` en JSON (cf. core/ajax/cmd.ajax.php,
+    // is_json(init('value'), array())) : une valeur brute ("20") est un JSON
+    // scalaire valide mais PAS un tableau, donc systématiquement rejetée au
+    // profit du tableau vide -- zendureCmd::execute() ne trouvait alors jamais
+    // 'slider'/'select' et envoyait toujours null au démon (signalé : les
+    // curseurs bougeaient visuellement sans jamais rien commander au boîtier,
+    // cf. warning démon "valeur invalide pour set_soc_min : None"). Il faut
+    // explicitement {slider: ...} ou {select: ...} (même convention que
+    // cmd_set_slider()/cmd_set_select_safe() de l'ancien scénario Jeedom).
+    function bindSlider(elId, cmdId, prefix, suffix) {
+        var el = document.getElementById(elId);
+        if (!el) return;
+        el.addEventListener('input', function () { syncSlider(prefix, el.value, suffix); });
+        el.addEventListener('change', function () {
+            jeedom.cmd.execute({ id: cmdId, value: { slider: el.value } });
         });
     }
-    var socminEl = document.getElementById('zf-socmin-' + id);
-    if (socminEl) {
-        socminEl.addEventListener('input', function () { syncSlider('socmin', socminEl.value, '%'); });
-        socminEl.addEventListener('change', function () {
-            jeedom.cmd.execute({ id: cfg.setSocMinId, value: socminEl.value });
+    bindSlider('zf-out-' + id, cfg.setOutputLimitId, 'out', ' W');
+    bindSlider('zf-in-' + id, cfg.setInputLimitId, 'in', ' W');
+    bindSlider('zf-socmin-' + id, cfg.setSocMinId, 'socmin', '%');
+    bindSlider('zf-socmax-' + id, cfg.setSocMaxId, 'socmax', '%');
+
+    var modeSelectEl = document.getElementById('zf-modeselect-' + id);
+    if (modeSelectEl) {
+        modeSelectEl.addEventListener('change', function () {
+            jeedom.cmd.execute({ id: cfg.setModeActionId, value: { select: modeSelectEl.value } });
         });
     }
 })();

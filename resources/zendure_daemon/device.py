@@ -96,6 +96,7 @@ class Device:
         "set_output_limit": "set_output_limit",
         "set_input_limit": "set_input_limit",
         "set_soc_min": "set_soc_min",
+        "set_soc_max": "set_soc_max",
         "set_mode": "set_mode",
     }
 
@@ -133,6 +134,15 @@ class Device:
             self.eq_id, value_w, self._last_injected_w, action.power_w,
         )
         self._transport.set_output_limit(action.power_w)
+        # Pousse la valeur commandée à Jeedom immédiatement, sans attendre un écho
+        # télémétrie de l'appareil : le champ outputLimit renvoyé par l'appareil
+        # n'est pas fiable comme miroir temps réel (constaté : dérive spontanée
+        # sans action de notre part, cf. README "Points ouverts") -- si on
+        # attendait cet écho, le curseur "Limite sortie AC" du widget restait
+        # visuellement figé pendant que la boucle rapide agissait réellement
+        # (signalé). On connaît la valeur avec certitude ici, on la publie donc
+        # nous-même plutôt que de dépendre du device pour se la confirmer.
+        self._callback.send_event(self.eq_id, {"output_limit": action.power_w})
 
     def _on_telemetry(self, frame: TelemetryFrame) -> None:
         # La trame report Zendure peut porter des données hors du wrapper "properties"
