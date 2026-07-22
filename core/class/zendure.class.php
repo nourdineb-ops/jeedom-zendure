@@ -252,6 +252,14 @@ class zendure extends eqLogic
             // ne réduit presque rien sur ce type de valeur — constaté en direct).
             'telemetry_min_interval_s' => (int) $this->getConfiguration('telemetry_min_interval_s', config::byKey('default_telemetry_min_interval_s', 'zendure', 300)),
             'telemetry_noise_threshold' => (float) $this->getConfiguration('telemetry_noise_threshold', config::byKey('default_telemetry_noise_threshold', 'zendure', 3)),
+            // Secours BLE (cf. device.py::maybe_ble_failover) : désactivé par défaut,
+            // ne se déclenche de toute façon que si la télémétrie MQTT est déjà
+            // muette -- ne concerne jamais l'écriture (lecture seule, cf.
+            // transport/ble_fallback.py), et cadencé sur le cron HP (5 min), pas une
+            // connexion permanente (demande explicite : cohabitation avec
+            // TheengsGateway sur le même adaptateur Bluetooth).
+            'ble_failover_active' => (bool) $this->getConfiguration('ble_failover_active', 0),
+            'ble_address' => $this->getConfiguration('ble_address', ''),
         );
 
         if ($mode == 'cloud') {

@@ -402,6 +402,22 @@ $eqLogics = eqLogic::byType($plugin->getId());
                     </div>
                 </fieldset>
                 <fieldset>
+                    <legend><i class="fas fa-bluetooth-b"></i> {{Secours Bluetooth (BLE)}}</legend>
+                    <div class="form-group">
+                        <label class="col-sm-3 control-label">{{Secours BLE actif}}</label>
+                        <div class="col-sm-2">
+                            <input type="checkbox" class="eqLogicAttr" data-l1key="configuration" data-l2key="ble_failover_active" />
+                        </div>
+                        <label class="col-sm-3 control-label">{{Adresse MAC Bluetooth}}</label>
+                        <div class="col-sm-3">
+                            <input type="text" class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="ble_address" placeholder="94:C9:60:C7:5F:EA" />
+                        </div>
+                    </div>
+                    <div class="alert alert-info">
+                        {{Désactivé par défaut. Quand la télémétrie MQTT/cloud devient muette (WiFi du boîtier instable) et que cette option est cochée, le démon tente une lecture ponctuelle en direct par Bluetooth (adresse MAC ci-dessus, cf. app Zendure ou un scan BLE pour la trouver) -- lecture seule, aucune commande n'est jamais envoyée par ce canal. Cadencé sur le cron HP (5 min), PAS une connexion permanente : volontairement occasionnel et borné dans le temps pour ne pas monopoliser un adaptateur Bluetooth déjà utilisé par ailleurs (ex. relevés de température BLE via TheengsGateway) -- ne se déclenche de toute façon que si la télémétrie est déjà confirmée muette, jamais en fonctionnement normal.}}
+                    </div>
+                </fieldset>
+                <fieldset>
                     <legend><i class="fas fa-euro-sign"></i> {{Tarifs}}</legend>
                     <div class="form-group">
                         <label class="col-sm-3 control-label">{{Type de contrat}}</label>

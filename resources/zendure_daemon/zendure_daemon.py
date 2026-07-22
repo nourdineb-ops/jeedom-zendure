@@ -32,6 +32,13 @@ log = logging.getLogger("zendure.daemon")
 # grandeur que le SCAN_INTERVAL de l'intégration Home Assistant zendure_ha).
 TELEMETRY_POLL_S = 60
 
+# Cadence du secours BLE (cf. device.py::maybe_ble_failover, transport/ble_fallback.py) :
+# demande explicite de l'utilisateur -- alignée sur le cron HP côté PHP (5 min),
+# pas sur TELEMETRY_POLL_S, pour rester une vérification occasionnelle et ne pas
+# créer de contention avec le scan passif d'un autre consommateur du même
+# adaptateur Bluetooth (TheengsGateway).
+BLE_FAILOVER_POLL_S = 300
+
 
 class ZendureDaemon:
     def __init__(self, args: argparse.Namespace):
@@ -112,6 +119,7 @@ class ZendureDaemon:
 
         self.start()
         last_poll = time.monotonic()
+        last_ble_failover = time.monotonic()
         while self._running:
             time.sleep(1)
             now = time.monotonic()
@@ -121,6 +129,10 @@ class ZendureDaemon:
                 for device in self._devices.values():
                     device.request_telemetry()
                     device.check_telemetry_staleness()
+            if now - last_ble_failover >= BLE_FAILOVER_POLL_S:
+                last_ble_failover = now
+                for device in self._devices.values():
+                    device.maybe_ble_failover()
 
 
 def parse_args() -> argparse.Namespace:

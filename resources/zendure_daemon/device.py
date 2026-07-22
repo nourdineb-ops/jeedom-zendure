@@ -5,6 +5,7 @@ scénario Jeedom ou config quotidienne ; elle n'a pas besoin d'être temps réel
 n'est donc pas modélisée ici.
 """
 
+import asyncio
 import logging
 import time
 from typing import Optional
@@ -12,6 +13,7 @@ from typing import Optional
 from regulation.anti_injection import AntiInjectionConfig, AntiInjectionRegulator
 from telemetry_map import translate_properties
 from telemetry_throttle import TelemetryThrottle
+from transport.ble_fallback import fetch_ble_snapshot
 from transport.base import TelemetryFrame, Transport
 from transport.factory import build_transport
 
@@ -26,6 +28,13 @@ DEBUG_CAPTURE_DURATION_S = 3600.0
 # (cf. mqtt_transport.py) : la connexion peut très bien être stable pendant que
 # l'appareil, lui, est injoignable.
 TELEMETRY_STALE_S = 300.0
+
+# Durée max d'une session de secours BLE (connexion + handshake + lecture),
+# cf. transport/ble_fallback.py -- bornée volontairement courte pour limiter la
+# contention avec le scan passif d'un autre consommateur du même adaptateur
+# Bluetooth (TheengsGateway, relevés de température, cf. échange utilisateur
+# 2026-07-22).
+BLE_FAILOVER_TIMEOUT_S = 20.0
 
 log = logging.getLogger("zendure.device")
 
@@ -49,6 +58,8 @@ class Device:
         self._last_injected_w: float = 0.0
         self._last_telemetry_at: float = time.monotonic()
         self._telemetry_stale: bool = False
+        self._ble_failover_active: bool = bool(eq_config.get("ble_failover_active", False))
+        self._ble_address: str = str(eq_config.get("ble_address") or "")
         self._transport.on_telemetry(self._on_telemetry)
         self._transport.on_connection_change(self._on_connection_change)
         self._transport.on_connection_issue(self._on_connection_issue)
@@ -96,6 +107,37 @@ class Device:
                 "Télémétrie Zendure de retour.",
             )
 
+    def maybe_ble_failover(self) -> None:
+        """Appelé depuis la boucle périodique du démon, à la cadence du cron HP
+        (5 min, cf. zendure_daemon.py::BLE_FAILOVER_INTERVAL_S -- demande
+        explicite de l'utilisateur : pas de connexion BLE permanente, pour ne
+        pas monopoliser l'adaptateur partagé avec TheengsGateway, cf.
+        transport/ble_fallback.py). Secours, pas un canal principal : ne fait
+        rien tant que la télémétrie MQTT n'est pas confirmée muette
+        (self._telemetry_stale, cf. check_telemetry_staleness()) et que
+        l'option n'est pas explicitement activée en config (désactivée par
+        défaut)."""
+        if not self._ble_failover_active or not self._ble_address:
+            return
+        if not self._telemetry_stale:
+            return
+        log.info("eq_id=%s télémétrie MQTT muette, tentative de secours BLE (%s)", self.eq_id, self._ble_address)
+        try:
+            properties, pack_data = asyncio.run(fetch_ble_snapshot(self._ble_address, BLE_FAILOVER_TIMEOUT_S))
+        except Exception:
+            log.warning("eq_id=%s échec du secours BLE", self.eq_id, exc_info=True)
+            return
+        if not properties:
+            log.warning("eq_id=%s secours BLE : connexion établie mais aucune propriété reçue", self.eq_id)
+            return
+        log.info("eq_id=%s secours BLE : %d propriété(s) récupérée(s)", self.eq_id, len(properties))
+        # Ne met PAS à jour self._last_telemetry_at : l'alerte "télémétrie MQTT
+        # muette" reste active tant que le WiFi du boîtier n'est pas vraiment
+        # rétabli -- le secours BLE comble le manque d'information, il ne
+        # doit pas masquer le vrai problème sous-jacent (cf. échange
+        # utilisateur du 2026-07-22).
+        self._push_values(translate_properties({"properties": properties, "packData": pack_data}))
+
     # Clés qui déterminent la connexion transport : si l'une change (mode, host,
     # credentials...), il faut reconnecter, pas juste mettre à jour le régulateur.
     _TRANSPORT_KEYS = (
@@ -123,6 +165,8 @@ class Device:
         self._regulator.reload_config(AntiInjectionConfig.from_dict(eq_config.get("anti_injection", {})))
         self._throttle.min_interval_s = float(eq_config.get("telemetry_min_interval_s", 300))
         self._throttle.noise_threshold = float(eq_config.get("telemetry_noise_threshold", 3))
+        self._ble_failover_active = bool(eq_config.get("ble_failover_active", False))
+        self._ble_address = str(eq_config.get("ble_address") or "")
 
         if transport_changed:
             log.info("eq_id=%s configuration transport modifiée, reconnexion", self.eq_id)
@@ -192,7 +236,12 @@ class Device:
         # (packData, cluster, wifiName/mac/ip...) : translate_properties() aplatit
         # désormais la trame ENTIÈRE (moins la plomberie protocole), pas juste
         # "properties", pour ne perdre aucune information remontée par l'appareil.
-        values = translate_properties(dict(frame))
+        self._push_values(translate_properties(dict(frame)))
+
+    def _push_values(self, values: dict) -> None:
+        """Commun à la télémétrie MQTT normale (_on_telemetry) et au secours BLE
+        (maybe_ble_failover) : mêmes règles de filtrage/alias, quelle que soit la
+        source. Ne touche PAS self._last_telemetry_at -- appelant au choix."""
         if "injected_power" in values:
             try:
                 self._last_injected_w = float(values["injected_power"])
