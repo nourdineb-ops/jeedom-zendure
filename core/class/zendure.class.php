@@ -579,6 +579,36 @@ class zendure extends eqLogic
             // pendant qu'un autre pilote (Home Assistant) est aux commandes.
             return;
         }
+        $dryRun = (bool) $this->getConfiguration('cron_hp_dry_run', 1);
+
+        // Réveil automatique : runStrategieNuit() bascule l'appareil en mode charge
+        // pour toute la plage de charge nuit (00h -> heure_fin_charge_nuit) -- mais
+        // rien ne le repassait en décharge une fois cette plage terminée (signalé le
+        // 2026-07-22 : 389W tirés au réseau, batterie à 40% totalement inutilisée
+        // toute la matinée, mode resté coincé à 1/charge après 06h00, alors que le
+        // cron continuait d'envoyer des set_output_limit sans effet puisque
+        // l'appareil n'était pas en décharge). Ce cron tourne déjà toutes les 5 min :
+        // point naturel pour corriger ça sans cron dédié.
+        //
+        // Basé sur une heure de config (pas une détection de tarif HP/HC) : le
+        // plugin doit rester utilisable par quelqu'un sans tarification HP/HC (tarif
+        // "base") -- la notion pertinente ici n'est pas "les heures pleines ont
+        // commencé", c'est "la fenêtre de charge nuit programmée est terminée", qui
+        // a toujours un sens quel que soit le contrat.
+        $heureFinChargeNuit = (string) $this->getConfiguration('heure_fin_charge_nuit', '06:00');
+        if (date('H:i') >= $heureFinChargeNuit && (int) $this->getCmdValue('mode') === 1) {
+            log::add('zendure', 'info', sprintf(
+                '[cronOptimisationHP]%s eq_id=%d fin de charge nuit (%s) atteinte, appareil encore en mode charge -> repasse en décharge',
+                $dryRun ? ' [SIMULATION]' : '', $this->getId(), $heureFinChargeNuit
+            ));
+            if (!$dryRun) {
+                $modeCmd = $this->getCmd(null, 'set_mode');
+                if (is_object($modeCmd)) {
+                    $modeCmd->execCmd(array('select' => 2));
+                }
+            }
+        }
+
         $grid = (float) $this->getSourceOrDefault('src_grid_papp', 'grid_power');
         $injected = (float) $this->getSourceOrDefault('src_injection', 'injected_power');
         $marge = (float) $this->getConfiguration('marge_anti_injection', config::byKey('default_marge_anti_injection', 'zendure', 30));
@@ -586,7 +616,6 @@ class zendure extends eqLogic
         $limitMax = (float) $this->getConfiguration('limite_max_w', 1200);
         $target = (int) round(max($limitMin, min($limitMax, $grid + $injected - $marge)));
 
-        $dryRun = (bool) $this->getConfiguration('cron_hp_dry_run', 1);
         log::add('zendure', 'info', sprintf(
             '[cronOptimisationHP]%s eq_id=%d grid=%.1fW injected=%.1fW marge=%.1fW -> cible sortie=%dW',
             $dryRun ? ' [SIMULATION]' : '',
