@@ -482,8 +482,14 @@ $eqLogics = eqLogic::byType($plugin->getId());
                             <input type="checkbox" class="eqLogicAttr" data-l1key="configuration" data-l2key="strategie_nuit_dry_run" checked />
                         </div>
                     </div>
+                    <div class="form-group">
+                        <label class="col-sm-3 control-label">{{Fin de la charge nuit}}</label>
+                        <div class="col-sm-2">
+                            <input type="time" class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="heure_fin_charge_nuit" placeholder="06:00" />
+                        </div>
+                    </div>
                     <div class="alert alert-info">
-                        {{Cron à 00h00 : bascule l'appareil en charge (mode Entrée, sortie 0W) et fixe un SOC cible (SOC maximum) selon la couleur Tempo de demain et la prévision solaire du jour à venir (source "Prévision solaire", cf. onglet Sources — nécessite un plugin externe type Solcast). Reprise de la logique de l'ancien scénario Jeedom de référence : Tempo Rouge demain -> charge à 100% ; Tempo Bleu + prévision solaire ≥ 4 kWh -> 60% (laisser de la place au solaire) ; sinon 80% par défaut. Piège de fraîcheur du cache géré automatiquement : si la prévision "J+0" de la source n'a pas encore été rafraîchie aujourd'hui (typique avant le rafraîchissement matinal de Solcast, souvent ~6h), la "J+1" du cache d'hier est utilisée à la place — elle correspond alors au bon jour calendaire. Stratégie nuit en simulation : logue la décision (niveau info, préfixe "[cronStrategieNuit] [SIMULATION]") sans jamais toucher à l'appareil tant que cette case est cochée.}}
+                        {{Cron à 00h00 : bascule l'appareil en charge (mode Entrée, sortie 0W) et fixe un SOC cible (SOC maximum) selon la couleur Tempo de demain et la prévision solaire du jour à venir (source "Prévision solaire", cf. onglet Sources — nécessite un plugin externe type Solcast). Reprise de la logique de l'ancien scénario Jeedom de référence : Tempo Rouge demain -> charge à 100% ; Tempo Bleu + prévision solaire ≥ 4 kWh -> 60% (laisser de la place au solaire) ; sinon 80% par défaut. Piège de fraîcheur du cache géré automatiquement : si la prévision "J+0" de la source n'a pas encore été rafraîchie aujourd'hui (typique avant le rafraîchissement matinal de Solcast, souvent ~6h), la "J+1" du cache d'hier est utilisée à la place — elle correspond alors au bon jour calendaire. Stratégie nuit en simulation : logue la décision (niveau info, préfixe "[cronStrategieNuit] [SIMULATION]") sans jamais toucher à l'appareil tant que cette case est cochée. Fin de la charge nuit (par défaut 06:00) : heure à laquelle le cron HP (toutes les 5 min) repasse automatiquement l'appareil en décharge si la charge nuit l'a laissé en mode Entrée — volontairement une heure de config, pas une détection de tarif HP/HC, pour que ça marche quel que soit le contrat (Base, HP/HC, Tempo...).}}
                     </div>
                 </fieldset>
                 <div class="alert alert-info">
