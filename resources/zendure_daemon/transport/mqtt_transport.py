@@ -29,6 +29,20 @@ from .base import TelemetryFrame, Transport
 
 log = logging.getLogger("zendure.transport.mqtt")
 
+# Détection "flapping" (reconnexions en rafale) : une connexion qui tient moins de
+# FLAP_MIN_UPTIME_S est comptée comme un "flap". Au-delà de FLAP_THRESHOLD flaps
+# d'affilée, on considère que quelque chose se bat pour la même session (typiquement
+# un autre client -- ex. Home Assistant -- avec la même identité cloud, cf. incident
+# du 2026-07-22 : reconnexion toutes les ~1-2s pendant plus de 4h) et on arrête de
+# marteler le broker : paho réinitialise lui-même son délai de reconnexion à chaque
+# connexion réussie (même si elle ne tient qu'une seconde), donc sans cette détection
+# côté plugin, `loop_forever()` retente indéfiniment à ~1s d'intervalle.
+FLAP_MIN_UPTIME_S = 8.0
+FLAP_THRESHOLD = 5
+FLAP_BACKOFF_START_S = 30.0
+FLAP_BACKOFF_MAX_S = 300.0
+FLAP_STABLE_AFTER_S = 30.0
+
 
 class MqttTransport(Transport):
     def __init__(self, conn: dict):
@@ -51,9 +65,19 @@ class MqttTransport(Transport):
         )
         self._telemetry_cb: Optional[Callable[[TelemetryFrame], None]] = None
         self._conn_cb: Optional[Callable[[bool], None]] = None
+        self._issue_cb: Optional[Callable[[str, str], None]] = None
         self._connected = False
         self._lock = threading.Lock()
         self._message_id = 0
+
+        # État de la détection de flapping (cf. constantes FLAP_* ci-dessus).
+        self._connected_at: Optional[float] = None
+        self._flap_streak = 0
+        self._flapping = False
+        self._backoff_s = FLAP_BACKOFF_START_S
+        self._stable_timer: Optional[threading.Timer] = None
+        self._backoff_stop = threading.Event()
+        self._manually_stopped = False
 
         if conn.get("username"):
             self._client.username_pw_set(conn.get("username"), conn.get("password"))
@@ -68,11 +92,15 @@ class MqttTransport(Transport):
     # -- Transport interface -------------------------------------------------
 
     def connect(self) -> None:
+        self._manually_stopped = False
         log.info("Connexion MQTT vers %s:%s (tls=%s)", self._conn["host"], self._conn["port"], self._conn.get("tls"))
         self._client.connect_async(self._conn["host"], int(self._conn["port"]), keepalive=30)
         self._client.loop_start()
 
     def disconnect(self) -> None:
+        self._manually_stopped = True
+        self._backoff_stop.set()
+        self._cancel_stable_timer()
         self._client.loop_stop()
         self._client.disconnect()
 
@@ -140,6 +168,9 @@ class MqttTransport(Transport):
     def on_connection_change(self, callback: Callable[[bool], None]) -> None:
         self._conn_cb = callback
 
+    def on_connection_issue(self, callback: Callable[[str, str], None]) -> None:
+        self._issue_cb = callback
+
     # -- Internals -------------------------------------------------------------
 
     def _next_message_id(self) -> int:
@@ -191,6 +222,8 @@ class MqttTransport(Transport):
         with self._lock:
             self._connected = rc == 0
         if rc == 0:
+            self._connected_at = time.monotonic()
+            self._schedule_stable_timer()
             pk = self._conn.get("product_key", "")
             did = self._conn["device_id"]
             topic = self._conn["topic_telemetry"].format(device_id=did, product_key=pk)
@@ -216,8 +249,69 @@ class MqttTransport(Transport):
         with self._lock:
             self._connected = False
         log.warning("Déconnecté MQTT (rc=%s)", rc)
+        self._cancel_stable_timer()
+        uptime = (time.monotonic() - self._connected_at) if self._connected_at is not None else None
+        self._connected_at = None
+        if uptime is not None and uptime < FLAP_MIN_UPTIME_S:
+            self._flap_streak += 1
+        else:
+            self._flap_streak = 0
+        if self._flap_streak >= FLAP_THRESHOLD and not self._flapping and not self._manually_stopped:
+            self._flapping = True
+            threading.Thread(target=self._enter_backoff, daemon=True).start()
         if self._conn_cb:
             self._conn_cb(False)
+
+    # -- Détection de flapping / pause de reconnexion ---------------------------
+
+    def _schedule_stable_timer(self) -> None:
+        self._cancel_stable_timer()
+        self._stable_timer = threading.Timer(FLAP_STABLE_AFTER_S, self._mark_stable)
+        self._stable_timer.daemon = True
+        self._stable_timer.start()
+
+    def _cancel_stable_timer(self) -> None:
+        if self._stable_timer is not None:
+            self._stable_timer.cancel()
+            self._stable_timer = None
+
+    def _mark_stable(self) -> None:
+        self._flap_streak = 0
+        self._backoff_s = FLAP_BACKOFF_START_S
+        if self._flapping:
+            self._flapping = False
+            log.info("eq_id=%s connexion MQTT stabilisée, fin de l'alerte flapping", self._conn.get("device_id"))
+            if self._issue_cb:
+                # issue_id distinct de celui du problème : message::add() dédoublonne
+                # par (plugin, logicalId) sans jamais réécrire le texte d'un message
+                # existant -- un même id que l'alerte de départ ferait juste
+                # incrémenter son compteur d'occurrences sans jamais afficher "rétabli".
+                self._issue_cb(
+                    "mqtt_flapping_resolu",
+                    "Connexion MQTT Zendure rétablie et stable (appareil %s)." % self._conn.get("device_id"),
+                )
+
+    def _enter_backoff(self) -> None:
+        # Appelé depuis un thread dédié (jamais depuis le thread réseau paho lui-même
+        # -- loop_stop() joint ce thread et provoquerait un deadlock si on l'appelait
+        # depuis _on_disconnect directement).
+        backoff_s = self._backoff_s
+        message = (
+            "Reconnexions MQTT en rafale (%d en moins de %.0fs) sur l'appareil %s -- "
+            "probable conflit de session (ex. Home Assistant actif avec les mêmes "
+            "identifiants cloud). Pause de %.0fs avant nouvelle tentative."
+        ) % (self._flap_streak, FLAP_MIN_UPTIME_S * self._flap_streak, self._conn.get("device_id"), backoff_s)
+        log.error(message)
+        if self._issue_cb:
+            self._issue_cb("mqtt_flapping", message)
+        self._backoff_stop.clear()
+        self._client.loop_stop()
+        self._backoff_stop.wait(backoff_s)
+        self._backoff_s = min(backoff_s * 2, FLAP_BACKOFF_MAX_S)
+        if self._manually_stopped:
+            return
+        log.info("Reprise des tentatives de connexion MQTT après pause flapping")
+        self.connect()
 
     def _on_message(self, client, userdata, msg):
         # Le topic souscrit est un wildcard (.../#) : seule la trame de télémétrie

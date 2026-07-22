@@ -1359,6 +1359,11 @@ class zendure extends eqLogic
         $fp = @fsockopen('127.0.0.1', $port, $errno, $errstr, 1);
         if (!$fp) {
             log::add('zendure', 'warning', 'Démon injoignable sur le port ' . $port . ' (' . $errstr . ')');
+            // Alerte utilisateur (pas seulement un log) : sans elle, un démon planté
+            // ou pas encore démarré passe inaperçu tant que personne ne va lire les
+            // logs -- exactement le type de panne silencieuse signalée le 2026-07-22
+            // (perte de connexion découverte a posteriori, pas au moment où ça arrive).
+            message::add('zendure', 'Démon Zendure injoignable sur le port ' . $port . ' (' . $errstr . ') -- vérifier qu\'il tourne.', '', 'zendure_alert_daemon_unreachable_' . $port);
             return false;
         }
         fwrite($fp, json_encode($message) . "\n");

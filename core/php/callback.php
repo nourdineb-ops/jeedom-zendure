@@ -24,6 +24,20 @@ try {
         die();
     }
 
+    if (isset($payload['alert_id'])) {
+        // Alerte utilisateur (centre de notifications Jeedom), pas seulement un log
+        // -- ex. reconnexions MQTT en rafale (cf. transport/mqtt_transport.py). Le
+        // logicalId (préfixé par eq_id) sert de clé de dédoublonnage : une même
+        // alerte qui se répète incrémente son compteur d'occurrences au lieu de
+        // spammer une nouvelle notification à chaque appel.
+        $message = $payload['message'] ?? '';
+        $eqId = $payload['eq_id'] ?? null;
+        log::add('zendure', 'error', $message);
+        message::add('zendure', $message, '', 'zendure_alert_' . $eqId . '_' . $payload['alert_id']);
+        echo json_encode(array('state' => 'ok'));
+        die();
+    }
+
     $eqId = $payload['eq_id'] ?? null;
     $values = $payload['values'] ?? array();
     $eqLogic = eqLogic::byId($eqId);

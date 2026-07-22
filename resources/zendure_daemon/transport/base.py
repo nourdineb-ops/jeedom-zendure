@@ -70,3 +70,12 @@ class Transport(ABC):
     @abstractmethod
     def on_connection_change(self, callback: Callable[[bool], None]) -> None:
         """Enregistre le callback appelé quand l'état de connexion change (pour supervision)."""
+
+    @abstractmethod
+    def on_connection_issue(self, callback: Callable[[str, str], None]) -> None:
+        """Enregistre le callback appelé pour un problème de connexion significatif
+        (ex. reconnexions en rafale) qui mérite une alerte utilisateur, pas juste un
+        log -- (issue_id, message). issue_id sert de clé de dédoublonnage côté Jeedom
+        (message::add), message est le texte affiché. Un second appel avec le même
+        issue_id et un message contenant "rétabli"/"résolu" signale un retour à la
+        normale."""
