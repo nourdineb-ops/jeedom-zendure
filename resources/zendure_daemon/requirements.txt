@@ -1,2 +1,6 @@
 paho-mqtt>=1.6,<2.0
 requests>=2.28
+# BLE local (prototype, cf. ble_probe.py) : exploration Chemin B alternatif au
+# WiFi/MQTT, non branché sur le Transport de production tant que le mécanisme
+# d'écriture sans flash n'est pas confirmé côté BLE (cf. commentaire ble_probe.py).
+bleak>=0.22
