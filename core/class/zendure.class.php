@@ -726,9 +726,22 @@ class zendure extends eqLogic
         if (is_object($modeCmd)) {
             $modeCmd->execCmd(array('select' => 1)); // 1 = input/charge
         }
-        $outLimitCmd = $this->getCmd(null, 'set_output_limit');
-        if (is_object($outLimitCmd)) {
-            $outLimitCmd->execCmd(array('slider' => 0));
+        // BUG réel corrigé le 2026-07-22 (cf. README "Points ouverts" -- ce qui y
+        // était noté "non résolu" n'était pas un problème de payload MQTT) : cette
+        // fonction envoyait set_output_limit(0), c'est-à-dire l'automation
+        // DÉCHARGE (autoModelProgram=2, cf. mqtt_transport.py) réglée sur 0W --
+        // jamais l'automation CHARGE (autoModelProgram=1). Charge et décharge sont
+        // deux programmes d'automation mutuellement exclusifs côté appareil (un
+        // seul actif à la fois, cf. Hyper2000.charge/discharge dans zendure_ha) :
+        // sans jamais envoyer le programme charge, l'appareil restait sur son
+        // dernier programme réel (décharge à 0W) quoi que dise la propriété
+        // acMode -- d'où "acMode=1 coupe tous les flux sans jamais démarrer la
+        // charge", observé en test réel. La cible est en W AC (pas la limite
+        // solaire, distincte, cf. commande info "input_limit").
+        $chargePowerW = (float) $this->getConfiguration('charge_power_nuit_w', 1200);
+        $inLimitCmd = $this->getCmd(null, 'set_input_limit');
+        if (is_object($inLimitCmd)) {
+            $inLimitCmd->execCmd(array('slider' => $chargePowerW));
         }
         $socMaxCmd = $this->getCmd(null, 'set_soc_max');
         if (is_object($socMaxCmd)) {
