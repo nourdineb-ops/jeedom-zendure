@@ -39,6 +39,12 @@ class zendure extends eqLogic
         'set_input_limit' => array('Limite entrée AC (W)', 'slider'),
         'set_soc_min' => array('SOC minimum', 'slider'),
         'set_soc_max' => array('SOC maximum', 'slider'),
+        // Exposé le 2026-07-22 (incident réel : "Mode intelligent" actif côté
+        // app empêchait nos commandes deviceAutomation manuelles d'avoir le
+        // moindre effet, y compris la charge) -- jusqu'ici seulement remis à 0
+        // en interne à l'arrêt propre du démon (cf. Device.stop()), jamais
+        // pilotable manuellement par l'utilisateur en cours de fonctionnement.
+        'set_smart_mode' => array('Mode intelligent (0=off, 1=on)', 'slider'),
         'debug_capture_1h' => array('Capture télémétrie complète (1h)', 'other'),
     );
 
@@ -335,6 +341,7 @@ class zendure extends eqLogic
         $tokens = array(
             '##EQ_ID##' => $this->getId(),
             '##NAME##' => $this->getName(),
+            '##EQ_LINK##' => $this->getLinkToConfiguration(),
             '##MODE##' => $modeLabel,
             '##SOC##' => round((float) $this->getCmdValue('soc')),
             '##SOLAR_W##' => round($solar),

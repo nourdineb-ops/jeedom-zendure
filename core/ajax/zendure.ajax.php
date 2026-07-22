@@ -87,6 +87,26 @@ try {
         ajax::success();
     }
 
+    // Bouton "Désactiver le mode intelligent" (config, onglet Comportement) :
+    // incident réel du 2026-07-22 -- l'appli mobile avait basculé l'appareil en
+    // "Mode intelligent" (smartMode), qui fait alors ignorer nos commandes
+    // deviceAutomation manuelles (charge/décharge) sans aucune erreur ni retour
+    // visible -- juste un plafond de sortie qui ne bouge jamais. Jusqu'ici
+    // set_smart_mode n'était appelable qu'en interne (Device.stop()) ; ce bouton
+    // le rend accessible à l'utilisateur sans devoir chercher dans l'app Zendure.
+    if (init('action') == 'disableSmartMode') {
+        $eqLogic = eqLogic::byId(init('eqLogic_id'));
+        if (!is_object($eqLogic) || $eqLogic->getEqType_name() != 'zendure') {
+            throw new Exception(__('Équipement Zendure introuvable', __FILE__));
+        }
+        $cmd = $eqLogic->getCmd(null, 'set_smart_mode');
+        if (!is_object($cmd)) {
+            throw new Exception(__('Commande set_smart_mode introuvable (sauvegardez l\'équipement une première fois)', __FILE__));
+        }
+        $cmd->execCmd(array('slider' => 0));
+        ajax::success();
+    }
+
     // Onglet "Télémétrie" : liste toutes les commandes de l'équipement (curées ET
     // créées à la volée par callback.php depuis la télémétrie brute Zendure), avec
     // valeur actuelle + date de dernière mise à jour. Même contrainte que

@@ -184,6 +184,13 @@ class Device:
         "set_soc_min": "set_soc_min",
         "set_soc_max": "set_soc_max",
         "set_mode": "set_mode",
+        # Exposé côté Jeedom le 2026-07-22 : jusqu'ici set_smart_mode n'était
+        # appelé qu'en interne (stop(), repli à 0 sur arrêt propre du démon) --
+        # l'utilisateur a besoin de pouvoir le couper manuellement depuis Jeedom
+        # (constaté : "Mode intelligent" actif côté app empêchait nos commandes
+        # deviceAutomation manuelles d'avoir le moindre effet réel, y compris la
+        # charge -- l'appareil suit sa propre logique tant que ce mode est actif).
+        "set_smart_mode": "set_smart_mode",
     }
 
     def on_action(self, logical_id: str, value) -> None:
