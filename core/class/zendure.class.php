@@ -622,14 +622,30 @@ class zendure extends eqLogic
             $motifReveil = 'HP détectées (tarif)';
         }
         if ($heuresPleines && (int) $this->getCmdValue('mode') === 1) {
+            // Repasse aussi le plafond SOC à 100% (pas seulement le mode) : sinon
+            // le plafond de nuit (souvent < 100%, cf. runStrategieNuit()) reste actif
+            // toute la journée -- la batterie "pleine" à ce plafond bas n'a plus de
+            // marge pour absorber le solaire du jour, qui repart alors intégralement
+            // au réseau. Incident réel et documenté le 2026-07-22 (analyse historique
+            // à l'appui, cf. mémoire) : plafond resté à 80% depuis le 13/07 (jamais
+            // remonté après un test), injection systématique chaque jour ensoleillé
+            // dès que la batterie touchait ce plafond -- pas un comportement nouveau
+            // de l'appareil, une conséquence mécanique du plafond bas laissé en place
+            // en heures pleines. En HP, la batterie doit pouvoir se remplir jusqu'à
+            // 100% : c'est la stratégie nuit qui décide de la baisser, seulement pour
+            // la nuit suivante.
             log::add('zendure', 'info', sprintf(
-                '[cronOptimisationHP]%s eq_id=%d %s, appareil encore en mode charge -> repasse en décharge',
+                '[cronOptimisationHP]%s eq_id=%d %s, appareil encore en mode charge -> repasse en décharge + SOC max 100%%',
                 $dryRun ? ' [SIMULATION]' : '', $this->getId(), $motifReveil
             ));
             if (!$dryRun) {
                 $modeCmd = $this->getCmd(null, 'set_mode');
                 if (is_object($modeCmd)) {
                     $modeCmd->execCmd(array('select' => 2));
+                }
+                $socMaxCmd = $this->getCmd(null, 'set_soc_max');
+                if (is_object($socMaxCmd)) {
+                    $socMaxCmd->execCmd(array('slider' => 100));
                 }
             }
         }
