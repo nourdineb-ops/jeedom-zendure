@@ -4,7 +4,120 @@ Template "Condensé" (addendum §14.3) : tuile compacte ~410px, anneau SOC,
 Tokens ##XXX## remplacés côté PHP par zendure::toHtmlCondense()
 (core/class/zendure.class.php). Une seule animation légère (anneau SOC),
 respecte ##ANIMATIONS_CLASS##.
+
+Le CSS est inline (<style> ci-dessous) plutôt que dans un fichier .css à
+part : rien dans Jeedom ne charge automatiquement un CSS associé à un
+template de dashboard custom (convention maison, pas native -- cf. README
+"Points ouverts"), et ce toHtml() peut être injecté dans des contextes très
+différents (dashboard normal, tuile "compact", app mobile...) qui ne
+chargent pas forcément les mêmes assets. L'inline garantit que le style
+voyage toujours avec le HTML, quel que soit l'endroit où Jeedom l'affiche
+-- constaté en réel le 2026-07-22 : sans ça, le cercle SOC s'affiche comme
+un disque plein noir (fill SVG par défaut) et les libellés/valeurs collent
+sans espace (justify-content: space-between jamais appliqué).
 -->
+<style>
+    .zendure-condense {
+        width: 410px;
+        max-width: 100%;
+        background: var(--bg-widget, #1e1e1e);
+        border-radius: 10px;
+        padding: 10px 14px;
+        color: var(--text-widget, #eee);
+        font-size: 13px;
+        box-sizing: border-box;
+    }
+
+    .zendure-condense .zc-header {
+        display: flex;
+        justify-content: space-between;
+        font-weight: 600;
+        margin-bottom: 6px;
+    }
+
+    .zendure-condense .zc-body {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 12px;
+    }
+
+    .zendure-condense .zc-soc-ring {
+        position: relative;
+        width: 72px;
+        height: 72px;
+        flex: 0 0 auto;
+    }
+
+    .zendure-condense .zc-soc-ring svg {
+        width: 100%;
+        height: 100%;
+        transform: rotate(-90deg);
+    }
+
+    .zendure-condense .zc-soc-bg {
+        fill: none;
+        stroke: rgba(255, 255, 255, 0.12);
+        stroke-width: 3;
+    }
+
+    .zendure-condense .zc-soc-fg {
+        fill: none;
+        stroke: #4cd964;
+        stroke-width: 3;
+        stroke-linecap: round;
+    }
+
+    .zendure-condense.zc-animated .zc-soc-fg {
+        transition: stroke-dasharray 0.6s ease-out;
+    }
+
+    .zendure-condense .zc-soc-value {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 700;
+        font-size: 14px;
+    }
+
+    .zendure-condense .zc-flux {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        /* flex-grow assure que la liste occupe toute la largeur de sa ligne
+           une fois repassée sous l'anneau (zc-body en wrap, tuile étroite),
+           sinon justify-content: space-between des <li> n'a aucun espace à
+           répartir et le libellé colle à la valeur. */
+        flex: 1 1 160px;
+    }
+
+    .zendure-condense .zc-flux li {
+        display: flex;
+        justify-content: space-between;
+        padding: 1px 0;
+    }
+
+    .zendure-condense .zc-intensite {
+        height: 4px;
+        background: rgba(255, 255, 255, 0.12);
+        border-radius: 2px;
+        margin-top: 8px;
+        overflow: hidden;
+    }
+
+    .zendure-condense .zc-intensite-bar {
+        height: 100%;
+        transition: width 0.4s ease-out, background 0.4s ease-out;
+    }
+
+    .zendure-condense .zc-footer {
+        margin-top: 6px;
+        text-align: right;
+        opacity: 0.85;
+    }
+</style>
 <div class="zendure-condense ##ANIMATIONS_CLASS##" data-eqid="##EQ_ID##">
     <div class="zc-header">
         <span class="zc-name">##NAME##</span>
