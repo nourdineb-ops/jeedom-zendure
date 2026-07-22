@@ -29,6 +29,18 @@ class JeedomCallbackClient:
         except requests.RequestException:
             log.exception("Échec envoi callback vers Jeedom (eq_id=%s)", eq_id)
 
+    def send_alert(self, eq_id: int, alert_id: str, message: str) -> None:
+        """Alerte utilisateur via le centre de notifications interne de Jeedom
+        (message::add côté PHP), pas juste une ligne de log -- cf. brief utilisateur
+        du 2026-07-22 (rester notifié en cas de perte de connexion/MQTT en boucle,
+        pas seulement le découvrir a posteriori dans les logs)."""
+        payload = {"apikey": self._apikey, "eq_id": eq_id, "alert_id": alert_id, "message": message}
+        try:
+            resp = requests.post(self._url, json=payload, timeout=self._timeout)
+            resp.raise_for_status()
+        except requests.RequestException:
+            log.exception("Échec envoi alerte vers Jeedom (eq_id=%s, alert_id=%s)", eq_id, alert_id)
+
     def send_log(self, level: str, message: str) -> None:
         payload = {"apikey": self._apikey, "log_level": level, "message": message}
         try:

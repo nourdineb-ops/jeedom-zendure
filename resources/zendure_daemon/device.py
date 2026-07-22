@@ -38,6 +38,7 @@ class Device:
         self._last_injected_w: float = 0.0
         self._transport.on_telemetry(self._on_telemetry)
         self._transport.on_connection_change(self._on_connection_change)
+        self._transport.on_connection_issue(self._on_connection_issue)
 
     def start(self) -> None:
         self._transport.connect()
@@ -89,6 +90,7 @@ class Device:
             self._transport = build_transport(eq_config)
             self._transport.on_telemetry(self._on_telemetry)
             self._transport.on_connection_change(self._on_connection_change)
+            self._transport.on_connection_issue(self._on_connection_issue)
             self._transport.connect()
 
     # logicalId (cf. zendure::ACTION_COMMANDS côté PHP) -> méthode Transport.
@@ -161,3 +163,6 @@ class Device:
 
     def _on_connection_change(self, connected: bool) -> None:
         self._callback.send_event(self.eq_id, {"transport_connected": connected})
+
+    def _on_connection_issue(self, issue_id: str, message: str) -> None:
+        self._callback.send_alert(self.eq_id, issue_id, message)
