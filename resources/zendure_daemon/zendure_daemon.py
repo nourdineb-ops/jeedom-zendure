@@ -120,6 +120,7 @@ class ZendureDaemon:
                 log.debug("Ping télémétrie périodique (%d équipement(s))", len(self._devices))
                 for device in self._devices.values():
                     device.request_telemetry()
+                    device.check_telemetry_staleness()
 
 
 def parse_args() -> argparse.Namespace:

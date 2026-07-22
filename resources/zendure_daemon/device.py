@@ -6,6 +6,7 @@ n'est donc pas modélisée ici.
 """
 
 import logging
+import time
 from typing import Optional
 
 from regulation.anti_injection import AntiInjectionConfig, AntiInjectionRegulator
@@ -15,6 +16,16 @@ from transport.base import TelemetryFrame, Transport
 from transport.factory import build_transport
 
 DEBUG_CAPTURE_DURATION_S = 3600.0
+
+# Silence total de télémétrie (aucune trame reçue, throttle ou pas -- cf.
+# _on_telemetry) au-delà de ce délai malgré une connexion MQTT propre côté démon
+# (transport_connected=True, pas de flapping) : signale que l'APPAREIL lui-même ne
+# répond plus (WiFi du boîtier instable, constaté en réel le 2026-07-22 -- 23+ min
+# de silence pendant qu'un redémarrage du démon + un getAll explicite n'ont rien
+# rapporté), pas un problème du démon/transport. Alerte distincte du flapping MQTT
+# (cf. mqtt_transport.py) : la connexion peut très bien être stable pendant que
+# l'appareil, lui, est injoignable.
+TELEMETRY_STALE_S = 300.0
 
 log = logging.getLogger("zendure.device")
 
@@ -36,6 +47,8 @@ class Device:
         # pas une valeur qu'on a nous-même commandée) — cf. anti_injection.py,
         # le régulateur recalcule sa cible à partir de cette mesure à chaque fois.
         self._last_injected_w: float = 0.0
+        self._last_telemetry_at: float = time.monotonic()
+        self._telemetry_stale: bool = False
         self._transport.on_telemetry(self._on_telemetry)
         self._transport.on_connection_change(self._on_connection_change)
         self._transport.on_connection_issue(self._on_connection_issue)
@@ -55,6 +68,33 @@ class Device:
 
     def request_telemetry(self) -> None:
         self._transport.request_telemetry()
+
+    def check_telemetry_staleness(self) -> None:
+        """Appelé depuis la boucle périodique du démon (cf. zendure_daemon.py,
+        même cadence que le ping request_telemetry()) : détecte un appareil qui ne
+        répond plus (WiFi du boîtier instable, cf. échange avec l'utilisateur
+        2026-07-22) alors que NOTRE connexion MQTT au broker est propre -- un cas
+        que le flapping détecté côté transport (mqtt_transport.py) ne couvre pas,
+        puisque la connexion peut très bien rester stable pendant que l'appareil
+        lui-même ne pousse plus rien."""
+        elapsed = time.monotonic() - self._last_telemetry_at
+        if elapsed >= TELEMETRY_STALE_S and not self._telemetry_stale:
+            self._telemetry_stale = True
+            log.warning("eq_id=%s aucune télémétrie depuis %ds", self.eq_id, int(elapsed))
+            self._callback.send_alert(
+                self.eq_id,
+                "telemetry_stale",
+                "Aucune télémétrie Zendure reçue depuis %d minutes (connexion MQTT pourtant stable) -- "
+                "probable WiFi instable côté boîtier." % (elapsed // 60),
+            )
+        elif elapsed < TELEMETRY_STALE_S and self._telemetry_stale:
+            self._telemetry_stale = False
+            log.info("eq_id=%s télémétrie de retour après %ds de silence", self.eq_id, int(elapsed))
+            self._callback.send_alert(
+                self.eq_id,
+                "telemetry_stale_resolu",
+                "Télémétrie Zendure de retour.",
+            )
 
     # Clés qui déterminent la connexion transport : si l'une change (mode, host,
     # credentials...), il faut reconnecter, pas juste mettre à jour le régulateur.
@@ -147,6 +187,7 @@ class Device:
         self._callback.send_event(self.eq_id, {"output_limit": action.power_w})
 
     def _on_telemetry(self, frame: TelemetryFrame) -> None:
+        self._last_telemetry_at = time.monotonic()
         # La trame report Zendure peut porter des données hors du wrapper "properties"
         # (packData, cluster, wifiName/mac/ip...) : translate_properties() aplatit
         # désormais la trame ENTIÈRE (moins la plomberie protocole), pas juste
