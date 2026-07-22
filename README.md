@@ -101,14 +101,20 @@ resources/install.sh           venv + pip install
   - **Validé en direct, effet réel observé sur la télémétrie** : `output_limit` (décharge,
     `function/invoke`+`deviceAutomation`), `mode`/`acMode` et `soc_min`/`minSoc`
     (`properties/write`).
-  - **Non résolu** : `input_limit` (charge). La commande est acceptée mais ne déclenche
-    aucune charge réelle — passer en `acMode=1` coupe simplement tous les flux de
-    puissance (solaire, sortie, batterie) sans jamais démarrer la charge, observé sur
-    150s continues. Le payload est pourtant calqué exactement sur `Hyper2000.charge()`
-    de `zendure_ha`. Hypothèses non testées : le tableau `prices` (actuellement plat)
-    joue peut-être un rôle déclencheur, ou une précondition côté device nous échappe.
-    À élucider avant de figer la commande `set_input_limit` / le mode charge du
-    régulateur anti-injection.
+  - ~~`input_limit` (charge) : commande acceptée mais ne déclenche aucune charge
+    réelle~~ **Confirmé et corrigé le 2026-07-22** : ce n'était pas un problème de
+    payload MQTT (le payload `set_input_limit`/`_publish_automation(program=1, ...)`
+    était déjà correct, aligné sur `Hyper2000.charge()` de `zendure_ha`) mais un bug
+    d'appelant — `runStrategieNuit()` (`zendure.class.php`) basculait `acMode=1`
+    (charge, `properties/write`) puis envoyait `set_output_limit(0)`, c'est-à-dire
+    l'automation **DÉCHARGE** (`autoModelProgram=2`) réglée sur 0W, jamais
+    l'automation **CHARGE** (`autoModelProgram=1`). Charge et décharge sont deux
+    programmes d'automation mutuellement exclusifs côté appareil (un seul actif à la
+    fois) : sans jamais envoyer le programme charge, l'appareil restait sur son
+    dernier programme réel (décharge à 0W) quelle que soit la valeur de `acMode` —
+    d'où le blocage total des flux observé. Corrigé en appelant `set_input_limit`
+    (nouvelle config `charge_power_nuit_w`, défaut 1200W) au lieu de
+    `set_output_limit(0)`.
   - `outputLimit` (valeur de config) a dérivé spontanément pendant les tests sans
     action de notre part (350→285) — ce n'est pas un plafond figé, il y a une logique
     interne au device pas encore comprise ; ne pas s'y fier comme miroir temps réel,
