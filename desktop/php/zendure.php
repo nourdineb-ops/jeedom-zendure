@@ -285,6 +285,8 @@ $eqLogics = eqLogic::byType($plugin->getId());
                         'src_tempo_j1' => '{{Tempo — couleur de demain (J+1)}}',
                         'src_prevision_solaire' => '{{Prévision solaire J+0 (Wh)}}',
                         'src_prevision_solaire_j1' => '{{Prévision solaire J+1 (Wh)}}',
+                        'src_depense_jour' => '{{Dépense jour (€) — ex. Teleinfo STAT_TODAY_INDEX00_COUT — laisser vide pour calculer en interne}}',
+                        'src_depense_veille' => '{{Dépense veille (€) — ex. Teleinfo STAT_YESTERDAY_INDEX00_COUT — laisser vide pour calculer en interne}}',
                         'src_injection' => '{{Injection maison (Zendure) — laisser vide pour utiliser la valeur par défaut}}',
                         'src_solaire' => '{{Production solaire (dashboard) — laisser vide pour utiliser la valeur par défaut}}',
                     ];

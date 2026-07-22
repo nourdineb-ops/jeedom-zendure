@@ -744,10 +744,17 @@ class zendure extends eqLogic
     private function runRolloverMinuit()
     {
         $rollovers = array(
-            'depense_jour' => 'depense_veille',
             'gain_solaire_jour' => 'gain_solaire_veille',
             'gain_batterie_jour' => 'gain_batterie_veille',
         );
+        // depense_jour/veille exclus si une source externe est configurée (ex.
+        // Teleinfo) : elle gère déjà sa propre bascule jour -> veille à son propre
+        // rythme -- inutile, et potentiellement trompeur, de réinitialiser nos
+        // commandes internes que plus personne ne lit dans ce cas (cf.
+        // accumulateEuro()).
+        if (!is_object($this->resolveSourceCmd('src_depense_jour'))) {
+            $rollovers['depense_jour'] = 'depense_veille';
+        }
         foreach ($rollovers as $jourId => $veilleId) {
             $jourValue = (float) $this->getCmdValue($jourId);
             $veilleCmd = $this->getCmd(null, $veilleId);
@@ -1050,8 +1057,13 @@ class zendure extends eqLogic
             'SocId' => self::cmdIdOrZero($this->getCmd(null, 'soc')),
             'ModeId' => self::cmdIdOrZero($this->getCmd(null, 'mode')),
             'GainJourId' => self::cmdIdOrZero($this->getCmd(null, 'gain_jour')),
-            'DepenseVeilleId' => self::cmdIdOrZero($this->getCmd(null, 'depense_veille')),
-            'DepenseJourId' => self::cmdIdOrZero($this->getCmd(null, 'depense_jour')),
+            // src_depense_jour/veille (ex. Teleinfo STAT_TODAY_INDEX00_COUT /
+            // STAT_YESTERDAY_INDEX00_COUT) : le widget lit directement la source
+            // externe si configurée -- même mécanisme que Solaire/Réseau/Injection
+            // ci-dessus, pas de recopie intermédiaire. Retombe sur nos commandes
+            // internes (calcul par intégration, cf. accumulateEuro()) sinon.
+            'DepenseVeilleId' => self::cmdIdOrZero($this->resolveSourceCmdOrDefault('src_depense_veille', 'depense_veille')),
+            'DepenseJourId' => self::cmdIdOrZero($this->resolveSourceCmdOrDefault('src_depense_jour', 'depense_jour')),
             'PeriodeId' => self::cmdIdOrZero($periodeCmd),
             'TempoTodayId' => self::cmdIdOrZero($this->resolveSourceCmd('src_tempo_j')),
             'TempoTomorrowId' => self::cmdIdOrZero($this->resolveSourceCmd('src_tempo_j1')),
@@ -1223,6 +1235,15 @@ class zendure extends eqLogic
      */
     private function accumulateEuro($cumulLogicalId, $valueW)
     {
+        // Dépense : s'auto-désactive si une source externe fait déjà ce calcul en
+        // mieux (ex. Teleinfo STAT_TODAY_INDEX00_COUT, basé sur les vrais index
+        // matériels du compteur -- résilient à toute coupure Jeedom, contrairement
+        // à cette intégration de puissance). Ne concerne pas gain_solaire_jour/
+        // gain_batterie_jour : pas d'équivalent externe possible, l'autoconsommation
+        // ne passe jamais par un compteur (cf. échange avec l'utilisateur).
+        if ($cumulLogicalId == 'depense_jour' && is_object($this->resolveSourceCmd('src_depense_jour'))) {
+            return;
+        }
         $cmd = $this->getCmd(null, $cumulLogicalId);
         if (!is_object($cmd)) {
             return;
