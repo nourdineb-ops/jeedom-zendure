@@ -582,24 +582,34 @@ class zendure extends eqLogic
         $dryRun = (bool) $this->getConfiguration('cron_hp_dry_run', 1);
 
         // Réveil automatique : runStrategieNuit() bascule l'appareil en mode charge
-        // pour toute la plage de charge nuit (00h -> heure_fin_charge_nuit) -- mais
-        // rien ne le repassait en décharge une fois cette plage terminée (signalé le
-        // 2026-07-22 : 389W tirés au réseau, batterie à 40% totalement inutilisée
-        // toute la matinée, mode resté coincé à 1/charge après 06h00, alors que le
-        // cron continuait d'envoyer des set_output_limit sans effet puisque
-        // l'appareil n'était pas en décharge). Ce cron tourne déjà toutes les 5 min :
-        // point naturel pour corriger ça sans cron dédié.
+        // pour toute la plage de charge nuit -- mais rien ne le repassait en
+        // décharge une fois cette plage terminée (signalé le 2026-07-22 : 389W
+        // tirés au réseau, batterie à 40% totalement inutilisée toute la matinée,
+        // mode resté coincé à 1/charge après la fin des HC, alors que le cron
+        // continuait d'envoyer des set_output_limit sans effet puisque l'appareil
+        // n'était pas en décharge). Ce cron tourne déjà toutes les 5 min : point
+        // naturel pour corriger ça sans cron dédié.
         //
-        // Basé sur une heure de config (pas une détection de tarif HP/HC) : le
-        // plugin doit rester utilisable par quelqu'un sans tarification HP/HC (tarif
-        // "base") -- la notion pertinente ici n'est pas "les heures pleines ont
-        // commencé", c'est "la fenêtre de charge nuit programmée est terminée", qui
-        // a toujours un sens quel que soit le contrat.
-        $heureFinChargeNuit = (string) $this->getConfiguration('heure_fin_charge_nuit', '06:00');
-        if (date('H:i') >= $heureFinChargeNuit && (int) $this->getCmdValue('mode') === 1) {
+        // Le vrai déclencheur, quand il existe, c'est le changement de PTEC (la
+        // source tarifaire HP/HC bascule en HP au même instant que le fournisseur,
+        // donc plus fiable et plus précis qu'une heure supposée -- pas de dérive si
+        // l'horaire HC du contrat change). isHeuresPleines() retourne null si
+        // aucune source tarifaire HP/HC n'est configurée (contrat "base", ou juste
+        // pas encore renseignée) : dans ce cas seulement, on retombe sur l'heure de
+        // config heure_fin_charge_nuit -- pour que le plugin reste utilisable sans
+        // tarification HP/HC.
+        $heuresPleines = $this->isHeuresPleines();
+        if ($heuresPleines === null) {
+            $heureFinChargeNuit = (string) $this->getConfiguration('heure_fin_charge_nuit', '06:00');
+            $heuresPleines = date('H:i') >= $heureFinChargeNuit;
+            $motifReveil = 'fin de charge nuit (' . $heureFinChargeNuit . ') atteinte, pas de tarif HP/HC configuré';
+        } else {
+            $motifReveil = 'HP détectées (tarif)';
+        }
+        if ($heuresPleines && (int) $this->getCmdValue('mode') === 1) {
             log::add('zendure', 'info', sprintf(
-                '[cronOptimisationHP]%s eq_id=%d fin de charge nuit (%s) atteinte, appareil encore en mode charge -> repasse en décharge',
-                $dryRun ? ' [SIMULATION]' : '', $this->getId(), $heureFinChargeNuit
+                '[cronOptimisationHP]%s eq_id=%d %s, appareil encore en mode charge -> repasse en décharge',
+                $dryRun ? ' [SIMULATION]' : '', $this->getId(), $motifReveil
             ));
             if (!$dryRun) {
                 $modeCmd = $this->getCmd(null, 'set_mode');
@@ -1327,6 +1337,38 @@ class zendure extends eqLogic
         if (is_object($cmd)) {
             $cmd->event($solaire + $batterie);
         }
+    }
+
+    /**
+     * Détecte si on est actuellement en Heures Pleines à partir de la vraie source
+     * tarifaire configurée par l'utilisateur (même principe que
+     * currentTariffEurPerKwh() ci-dessous) -- réutilisé par runOptimisationHP()
+     * pour réveiller l'appareil du mode charge nocturne au bon moment, celui où le
+     * fournisseur bascule réellement, pas une heure supposée.
+     *
+     * Retourne null si aucune source HP/HC n'est configurée (contrat "base", type
+     * de contrat non HP/HC, ou source pas encore renseignée) : dans ce cas
+     * l'appelant doit se rabattre sur un autre signal (cf. heure_fin_charge_nuit).
+     */
+    private function isHeuresPleines()
+    {
+        $type = $this->getConfiguration('type_contrat', 'tempo');
+        if ($type == 'hphc') {
+            $sourceKey = 'src_periode_tarif';
+        } elseif ($type == 'tempo') {
+            $sourceKey = 'src_tempo_now';
+        } else {
+            return null;
+        }
+        $cmd = $this->resolveSourceCmd($sourceKey);
+        if (!is_object($cmd)) {
+            return null;
+        }
+        $periode = strtoupper((string) $cmd->execCmd());
+        if ($periode === '') {
+            return null;
+        }
+        return substr($periode, 0, 2) === 'HP';
     }
 
     /**
