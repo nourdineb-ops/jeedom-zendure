@@ -332,6 +332,12 @@ $eqLogics = eqLogic::byType($plugin->getId());
                         </div>
                     </div>
                     <div class="form-group">
+                        <div class="col-sm-6">
+                            <a id="bt_disableSmartMode" class="btn btn-warning"><i class="fas fa-brain"></i> {{Désactiver le mode intelligent}}</a>
+                            <span class="help-block" style="margin-top:4px;">{{Si l'appli mobile Zendure a basculé l'appareil en "Mode intelligent", nos commandes manuelles (charge/décharge/limites) sont ignorées sans erreur visible. Ce bouton le désactive directement.}}</span>
+                        </div>
+                    </div>
+                    <div class="form-group">
                         <label class="col-sm-3 control-label">{{Marge anti-injection (W)}}</label>
                         <div class="col-sm-2">
                             <input type="number" class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="marge_anti_injection" placeholder="30" />
@@ -881,6 +887,31 @@ $(function () {
                     return;
                 }
                 $('#div_alert').showAlert({ message: '{{Capture complète activée pour 1h}}', level: 'success' });
+            }
+        });
+    });
+
+    // Bouton "Désactiver le mode intelligent" : même contrainte que bt_debugCapture
+    // (formulaire partagé entre équipements, pas de cmd_id connu à l'avance côté PHP).
+    $('.eqLogic').off('click', '#bt_disableSmartMode').on('click', '#bt_disableSmartMode', function () {
+        var eqLogicId = $('.eqLogic').find('[data-l1key="id"]').value();
+        if (!eqLogicId) {
+            return;
+        }
+        $.ajax({
+            type: 'POST',
+            url: 'plugins/zendure/core/ajax/zendure.ajax.php',
+            data: { action: 'disableSmartMode', eqLogic_id: eqLogicId },
+            dataType: 'json',
+            error: function (request, status, error) {
+                handleAjaxError(request, status, error);
+            },
+            success: function (data) {
+                if (data.state != 'ok') {
+                    $('#div_alert').showAlert({ message: data.result, level: 'danger' });
+                    return;
+                }
+                $('#div_alert').showAlert({ message: '{{Commande envoyée : mode intelligent désactivé}}', level: 'success' });
             }
         });
     });
