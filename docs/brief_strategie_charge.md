@@ -93,6 +93,18 @@ tourne en permanence en "mode automatique" côté app officielle Zendure, et il
 n'est pas exclu que ce mode automatique prenne le pas sur nos commandes
 manuelles de charge (hypothèse non confirmée, pas invalidée non plus).
 
+**Mise à jour 2026-07-24** : même symptôme reproduit côté BLE. Un test d'écriture
+directe (`deviceAutomation`, payload JSON compact pour tenir sous la limite de
+244 octets d'écriture BLE de ce device — sinon rejet silencieux au niveau
+transport) a été accepté sans erreur, mais `outputHomePower` n'a pas bougé
+d'un watt après coup (vérifié par une seconde lecture BLE juste après,
+pendant une vraie coupure WiFi). Donc ce n'est pas spécifique à MQTT/au
+mécanisme charge : les commandes manuelles n'ont pas d'effet confirmé sur cet
+appareil, quel que soit le transport. Ne pas construire de logique de secours
+qui dépend d'une commande d'écriture (MQTT ou BLE) tant que ce point n'est
+pas éclairci — le risque est une fausse sécurité (la commande "réussit" sans
+rien corriger réellement).
+
 **Implication concrète** : ne pas supposer que "commander X% de charge"
 fonctionnera de manière fiable sans re-tester en conditions réelles. Toute
 nouvelle logique de charge active devrait :
