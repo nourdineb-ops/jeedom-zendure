@@ -15,12 +15,20 @@ voyage toujours avec le HTML, quel que soit l'endroit où Jeedom l'affiche
 -- constaté en réel le 2026-07-22 : sans ça, le cercle SOC s'affiche comme
 un disque plein noir (fill SVG par défaut) et les libellés/valeurs collent
 sans espace (justify-content: space-between jamais appliqué).
+
+Fond transparent (pas de background ici) : ce toHtml() personnalisé remplace
+entièrement le rendu, mais Jeedom habille déjà chaque objet du dashboard
+d'un conteneur avec son propre fond -- une couleur en dur ici double ce fond
+au lieu de s'y fondre (signalé le 2026-07-22 : boîte visuellement détachée
+du reste du dashboard, contrairement aux autres tuiles). Titre cliquable
+(##EQ_LINK##, cf. eqLogic::getLinkToConfiguration()) : même comportement que
+le rendu standard Jeedom (core/template/dashboard/eqLogic.html), qu'on
+perd sinon en remplaçant tout le HTML.
 -->
 <style>
     .zendure-condense {
         width: 410px;
         max-width: 100%;
-        background: var(--bg-widget, #1e1e1e);
         border-radius: 10px;
         padding: 10px 14px;
         color: var(--text-widget, #eee);
@@ -33,6 +41,15 @@ sans espace (justify-content: space-between jamais appliqué).
         justify-content: space-between;
         font-weight: 600;
         margin-bottom: 6px;
+    }
+
+    .zendure-condense .zc-name {
+        color: inherit;
+        text-decoration: none;
+    }
+
+    .zendure-condense .zc-name:hover {
+        text-decoration: underline;
     }
 
     .zendure-condense .zc-body {
@@ -120,7 +137,7 @@ sans espace (justify-content: space-between jamais appliqué).
 </style>
 <div class="zendure-condense ##ANIMATIONS_CLASS##" data-eqid="##EQ_ID##">
     <div class="zc-header">
-        <span class="zc-name">##NAME##</span>
+        <a class="zc-name" href="##EQ_LINK##">##NAME##</a>
         <span class="zc-mode">##MODE##</span>
     </div>
 
