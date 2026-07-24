@@ -180,15 +180,6 @@ le DOM existant (cf. jeedom.cmd.refreshValue, core/js/cmd.class.js). D'où :
 .zendure-flux .zf-money-gain { background: rgba(76, 217, 100, 0.12); }
 .zendure-flux .zf-money-gain .zf-money-label, .zendure-flux .zf-money-gain .zf-money-value { color: #3B6D11; }
 
-/* Demande explicite du 2026-07-24 : "juste le losange des flux", ça doit tenir
-   dans le même espace -- masquage CSS plutôt que suppression du HTML/JS : le
-   JS (cf. <script> plus bas) continue de mettre ces éléments à jour sans
-   erreur (ils existent toujours dans le DOM, juste non affichés), donc aucun
-   risque de casser la logique du losange qui, elle, reste pleinement
-   fonctionnelle. Réversible en un instant si ces panneaux redeviennent
-   utiles (retirer ces 3 règles, ou en faire une option de config). */
-.zendure-flux .zf-row2, .zendure-flux .zf-row3, .zendure-flux .zf-pilotage { display: none; }
-
 .zendure-flux .zf-pilotage { margin-top: 12px; }
 .zendure-flux .zf-pilotage-title { font-size: 11px; color: var(--zf-text-muted); margin-bottom: 8px; }
 .zendure-flux .zf-slider-row { display: flex; justify-content: space-between; align-items: center; font-size: 11.5px; margin-bottom: 3px; }
