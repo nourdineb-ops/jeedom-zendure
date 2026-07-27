@@ -18,7 +18,17 @@ if (!isConnect()) {
 
 $plugin = plugin::byId('zendure');
 sendVarToJS([
-    'eqType' => $plugin->getId()
+    'eqType' => $plugin->getId(),
+    // Onglet "Commandes" (cf. <script> addCmdToTable() en bas de page) :
+    // filtre côté JS sur cette liste -- ~230 commandes existent par eqLogic
+    // (curées + télémétrie brute auto-créée par callback.php), mais la table
+    // native (une ligne complète par commande, cf. plugin.template.js) n'est
+    // pas exploitable avec un tel volume (constaté 2026-07-26). Seules les
+    // commandes "curées" (celles que le plugin utilise réellement) restent
+    // affichées ici ; le brut (packData*, debug...) reste accessible via le
+    // bouton "Capture télémétrie complète" (onglet Comportement), qui couvre
+    // déjà ce besoin sans polluer cette table.
+    'curatedCmdLogicalIds' => array_keys(array_merge(zendure::INFO_COMMANDS, zendure::ACTION_COMMANDS, zendure::COMPUTED_COMMANDS)),
 ]);
 $eqLogics = eqLogic::byType($plugin->getId());
 ?>
@@ -94,7 +104,7 @@ $eqLogics = eqLogic::byType($plugin->getId());
             <li role="presentation"><a href="#tab_sources" aria-controls="home" role="tab" data-toggle="tab"><i class="fas fa-satellite-dish"></i> {{Sources}}</a></li>
             <li role="presentation"><a href="#tab_comportement" aria-controls="home" role="tab" data-toggle="tab"><i class="fas fa-balance-scale"></i> {{Comportement}}</a></li>
             <li role="presentation"><a href="#tab_ihm" aria-controls="home" role="tab" data-toggle="tab"><i class="fas fa-palette"></i> {{IHM}}</a></li>
-            <li role="presentation"><a href="#tab_telemetrie" aria-controls="home" role="tab" data-toggle="tab" id="bt_tabTelemetrie"><i class="fas fa-list"></i> {{Télémétrie}}</a></li>
+            <li role="presentation"><a href="#commandtab" aria-controls="home" role="tab" data-toggle="tab"><i class="fas fa-list"></i> {{Commandes}}</a></li>
         </ul>
 
         <form class="form-horizontal tab-content" id="div_eqLogic">
@@ -672,28 +682,14 @@ $eqLogics = eqLogic::byType($plugin->getId());
                 </div>
             </div>
 
-            <div role="tabpanel" class="tab-pane" id="tab_telemetrie">
-                <fieldset>
-                    <legend><i class="fas fa-list"></i> {{Commandes de l'équipement}}</legend>
-                    <div class="alert alert-info">
-                        {{Toutes les commandes de cet équipement : les "curées" (utilisées par le plugin, ex. solar_power) et celles créées automatiquement par le démon à partir de la télémétrie brute Zendure (ex. outputHomePower, packData0_socLevel...). Non historisées par défaut pour ces dernières (activable au cas par cas via "Configuration avancée" sur la commande elle-même).}}
-                    </div>
-                    <div class="table-responsive">
-                        <table class="table table-condensed" id="table_telemetrie">
-                            <thead>
-                                <tr>
-                                    <th>{{logicalId}}</th>
-                                    <th>{{Nom}}</th>
-                                    <th>{{Type}}</th>
-                                    <th>{{Valeur}}</th>
-                                    <th>{{Historisée}}</th>
-                                    <th>{{Dernière mise à jour}}</th>
-                                </tr>
-                            </thead>
-                            <tbody></tbody>
-                        </table>
-                    </div>
-                </fieldset>
+            <div role="tabpanel" class="tab-pane" id="commandtab">
+                <div class="alert alert-info">
+                    {{Toutes les commandes de cet équipement : les "curées" (utilisées par le plugin, ex. solar_power) et celles créées automatiquement par le démon à partir de la télémétrie brute Zendure (ex. outputHomePower, packData0_socLevel...). Table standard Jeedom (identique aux autres plugins, ex. Zigbee) : Afficher/Historiser/type/etc. directement éditables par commande.}}
+                </div>
+                <div class="table-responsive">
+                    <table id="table_cmd" class="table table-bordered table-condensed">
+                    </table>
+                </div>
             </div>
         </form>
     </div>
@@ -916,46 +912,31 @@ $(function () {
         });
     });
 
-    // Onglet "Télémétrie" : rechargé à chaque affichage de l'onglet (valeurs vivantes,
-    // pas de rafraîchissement auto en continu pour ne pas spammer l'AJAX).
-    function escapeHtml(s) {
-        return $('<div>').text(s === null || s === undefined ? '' : s).html();
-    }
-    $('.eqLogic').off('shown.bs.tab', '#bt_tabTelemetrie').on('shown.bs.tab', '#bt_tabTelemetrie', function () {
-        var eqLogicId = $('.eqLogic').find('[data-l1key="id"]').value();
-        if (!eqLogicId) {
-            return;
-        }
-        var $tbody = $('#table_telemetrie tbody').empty();
-        $.ajax({
-            type: 'POST',
-            url: 'plugins/zendure/core/ajax/zendure.ajax.php',
-            data: { action: 'listCommands', eqLogic_id: eqLogicId },
-            dataType: 'json',
-            error: function (request, status, error) {
-                handleAjaxError(request, status, error);
-            },
-            success: function (data) {
-                if (data.state != 'ok') {
-                    $('#div_alert').showAlert({ message: data.result, level: 'danger' });
-                    return;
-                }
-                $.each(data.result, function (i, cmd) {
-                    var badge = cmd.curated ? '<span class="label label-primary">{{curée}}</span>' : '<span class="label label-default">{{brute}}</span>';
-                    var histo = cmd.isHistorized == 1 ? '{{oui}}' : '{{non}}';
-                    var value = cmd.type == 'info' ? escapeHtml(cmd.value) + (cmd.unit ? ' ' + escapeHtml(cmd.unit) : '') : '—';
-                    $tbody.append(
-                        '<tr><td><code>' + escapeHtml(cmd.logicalId) + '</code> ' + badge + '</td>' +
-                        '<td>' + escapeHtml(cmd.name) + '</td>' +
-                        '<td>' + escapeHtml(cmd.type) + '/' + escapeHtml(cmd.subType) + '</td>' +
-                        '<td>' + value + '</td>' +
-                        '<td>' + histo + '</td>' +
-                        '<td>' + escapeHtml(cmd.collectDate) + '</td></tr>'
-                    );
-                });
-            }
-        });
-    });
 });
+</script>
+<script>
+// Onglet "Commandes" : table standard Jeedom (core/js/plugin.template.js),
+// même mécanisme que Zigbee/Monitoring/SSH -- remplace l'ancienne table
+// "Télémétrie" maison en lecture seule (2026-07-26, demande explicite :
+// "il faut partir sur l'option standard Jeedom"). addCmdToTable() est
+// appelé par le framework pour chaque commande de l'eqLogic sélectionné
+// (cf. jeeFrontEnd.pluginTemplate, plugin.template.js ~L126/710/744) --
+// sans cette fonction (même vide), la table #table_cmd ne se peuple jamais.
+// Pas de thead fourni dans le HTML : addCmdToTableDefault() construit
+// lui-même l'en-tête standard (Id/Nom/Type/Logical ID/Options/Paramètres/
+// Etat/Action) au premier appel si absent.
+//
+// Filtre sur curatedCmdLogicalIds (cf. sendVarToJS() en tête de fichier) :
+// ~230 commandes existent par eqLogic (curées + télémétrie brute), la table
+// native n'est pas exploitable avec un tel volume (signalé 2026-07-26,
+// "ce n'est pas exploitable en l'état"). Seules les commandes réellement
+// utilisées par le plugin restent affichées ; le brut reste accessible via
+// "Capture télémétrie complète" (onglet Comportement).
+function addCmdToTable(_cmd) {
+    if (isset(_cmd) && curatedCmdLogicalIds.indexOf(_cmd.logicalId) === -1) {
+        return
+    }
+    jeeFrontEnd.pluginTemplate.addCmdToTableDefault(_cmd)
+}
 </script>
 <?php include_file('core', 'plugin.template', 'js'); ?>

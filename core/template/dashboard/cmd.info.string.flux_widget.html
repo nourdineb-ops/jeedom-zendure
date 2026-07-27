@@ -24,7 +24,18 @@ le DOM existant (cf. jeedom.cmd.refreshValue, core/js/cmd.class.js). D'où :
   des flèches, tracé SVG selon signe, jauge, couleurs Tempo) est portée en JS
   ci-dessous, rejouée à chaque poussée de valeur sans jamais toucher au DOM
   structurel (donc sans jamais interrompre les <animateMotion> en cours).
+
+IMPORTANT -- ordre des balises : le <div class="zendure-flux"> racine DOIT
+précéder le <style> (déplacé ci-dessous exprès, cf. commentaire détaillé
+dans cmd.info.numeric.zf_gauge.html) -- bug de
+core/dom/dom.utils.js::DOMparseHTML() qui, sinon, prend le <style> comme
+racine du widget et rend tout le contenu réel invisible en placement
+`type=cmd` sur une page Design (sans impact sur le dashboard normal, qui
+passe par un autre chemin de rendu, jeedom.eqLogic.toHtml). Actuellement ce
+widget n'est utilisé qu'en `type=eqLogic` (pas concerné), mais autant que ce
+fichier reste correct si on le replace un jour en `type=cmd`.
 -->
+<div class="cmd cmd-widget zendure-flux #AnimationsOnClass# #DebugOnClass#" data-type="info" data-subtype="string" data-template="flux_widget" data-cmd_id="#id#" data-cmd_uid="#uid#" data-version="#version#" data-eqLogic_id="#eqLogic_id#" id="zf-root-#id#">
 <style>
 /* Convention core confirmée sur plugins/rteEcowatt (core/template/dashboard/*.html) :
    les fragments de widget dashboard sont injectés directement dans le DOM, sans passage
@@ -54,7 +65,7 @@ le DOM existant (cf. jeedom.cmd.refreshValue, core/js/cmd.class.js). D'où :
     display: flex;
     justify-content: flex-end;
     align-items: center;
-    margin-bottom: 10px;
+    margin-bottom: 0;
 }
 .zendure-flux .zf-badges { display: flex; gap: 6px; }
 .zendure-flux .zf-badge {
@@ -63,6 +74,11 @@ le DOM existant (cf. jeedom.cmd.refreshValue, core/js/cmd.class.js). D'où :
     border-radius: 20px;
     background: var(--zf-surface-2);
 }
+/* Icône seule, sans fond ni couleur Tempo (demande explicite 2026-07-25,
+   même simplification que le badge compact cmd.info.string.zf_periode_badge.html). */
+.zendure-flux .zf-badge-tarif { background: transparent; padding: 3px 4px; font-size: 15px; }
+.zendure-flux .zf-badge-tarif .fa-sun { color: #FBC02D; }
+.zendure-flux .zf-badge-tarif .fa-moon { color: #90A4AE; }
 
 .zendure-flux .zf-diagram {
     position: relative;
@@ -107,19 +123,20 @@ le DOM existant (cf. jeedom.cmd.refreshValue, core/js/cmd.class.js). D'où :
     position: absolute;
     z-index: 1;
     transform: translate(-50%, -50%);
-    width: 84px;
-    height: 84px;
+    width: 72px;
+    height: 72px;
     border-radius: 50%;
     background: var(--zf-surface-2);
-    border: 2.5px solid var(--zf-border);
+    border: 2px solid var(--zf-border);
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
     text-align: center;
-    line-height: 1.2;
+    line-height: 1.15;
 }
-.zendure-flux .zf-node-lg { width: 96px; height: 96px; }
+.zendure-flux .zf-node-lg { width: 80px; height: 80px; }
+.zendure-flux .zf-node i { font-size: 13px; }
 /* Les 4 noeuds sont équidistants du hub (rayon R=100px, hub centré à 50%/50% de
    .zf-diagram 400x320, cf. commentaire de .zf-diagram) -- pas un simple "20%/
    80%" arbitraire par axe : signalé que le hub devait être visuellement à
@@ -133,14 +150,14 @@ le DOM existant (cf. jeedom.cmd.refreshValue, core/js/cmd.class.js). D'où :
 .zendure-flux .zf-bottom { left: 50%; top: 81.25%; border-color: #ED93B1; }
 .zendure-flux .zf-hub {
     position: absolute; z-index: 2; left: 50%; top: 50%; transform: translate(-50%, -50%);
-    width: 36px; height: 36px; border-radius: 50%;
-    background: var(--zf-surface-2); border: 2px solid var(--zf-border);
+    width: 30px; height: 30px; border-radius: 50%;
+    background: var(--zf-surface-2); border: 1.5px solid var(--zf-border);
     display: flex; align-items: center; justify-content: center;
-    color: var(--zf-text-muted); font-size: 14px;
+    color: var(--zf-text-muted); font-size: 12px;
 }
-.zendure-flux .zf-value { font-size: 14px; font-weight: 600; margin-top: 2px; }
-.zendure-flux .zf-value-sm { font-size: 11px; font-weight: 600; }
-.zendure-flux .zf-label { font-size: 9.5px; color: var(--zf-text-muted); }
+.zendure-flux .zf-value { font-size: 12.5px; font-weight: 600; margin-top: 1px; white-space: nowrap; }
+.zendure-flux .zf-value-sm { font-size: 10px; font-weight: 600; white-space: nowrap; }
+.zendure-flux .zf-label { font-size: 8.5px; color: var(--zf-text-muted); white-space: nowrap; }
 
 .zendure-flux .zf-row2, .zendure-flux .zf-row3 { display: grid; gap: 10px; margin-top: 12px; }
 /* minmax(0, 1fr), pas 1fr tout court : une piste "1fr" a par défaut un min
@@ -180,6 +197,15 @@ le DOM existant (cf. jeedom.cmd.refreshValue, core/js/cmd.class.js). D'où :
 .zendure-flux .zf-money-gain { background: rgba(76, 217, 100, 0.12); }
 .zendure-flux .zf-money-gain .zf-money-label, .zendure-flux .zf-money-gain .zf-money-value { color: #3B6D11; }
 
+/* Demande explicite du 2026-07-24 : garder jauge/Tempo/gains visibles partout
+   (contrairement à un premier essai trop large qui les avait masqués aussi,
+   annulé). Pilotage par curseurs : masqué UNIQUEMENT sur une page Design
+   (cf. .zf-design-context, même mécanisme que .zf-row3 .zf-money plus haut)
+   -- corrigé 2026-07-26, cette règle masquait le pilotage PARTOUT y compris
+   le dashboard normal par erreur (signalé : "a disparu du dashboard alors
+   qu'il ne devait être masqué que sur le design"). Masquage CSS, pas
+   suppression : le JS continue de le mettre à jour sans erreur. */
+.zendure-flux.zf-design-context .zf-pilotage { display: none; }
 .zendure-flux .zf-pilotage { margin-top: 12px; }
 .zendure-flux .zf-pilotage-title { font-size: 11px; color: var(--zf-text-muted); margin-bottom: 8px; }
 .zendure-flux .zf-slider-row { display: flex; justify-content: space-between; align-items: center; font-size: 11.5px; margin-bottom: 3px; }
@@ -204,13 +230,27 @@ le DOM existant (cf. jeedom.cmd.refreshValue, core/js/cmd.class.js). D'où :
 .zendure-flux .zf-badge-offline { display: none; color: #B91C1C; background: #FCA5A5; }
 .zendure-flux.zf-offline .zf-badge-offline { display: inline-flex; align-items: center; gap: 4px; }
 .zendure-flux.zf-offline .zf-diagram { opacity: 0.55; }
+
+/* Contexte "page Design" (2026-07-24) : demande explicite de masquer les
+   cartes Dépense veille/jour et de rendre le fond transparent UNIQUEMENT sur
+   le Design, jamais sur le dashboard normal qui utilise ce même template.
+   Un premier essai via le mécanisme per-objet de plan.js (display.cssApplyOn
+   /css sur le placement) s'est révélé peu fiable ici (jamais appliqué en
+   pratique, cohérent avec cmdHide qui n'a lui non plus aucun effet sur ce
+   widget -- cf. commentaire d'en-tête : widget de COMMANDE, pas les
+   mécanismes eqLogic-level de plan.js). Détection en JS à la place (cf.
+   <script>, classe zf-design-context posée sur la racine si elle est logée
+   dans .div_displayObject, conteneur propre aux pages Design) : fiable car
+   c'est le même widget/script qui gère déjà tout le reste (losange, jauge...). */
+.zendure-flux.zf-design-context .zf-diagram,
+.zendure-flux.zf-design-context .zf-card { background: transparent !important; }
+.zendure-flux.zf-design-context .zf-row3 .zf-money:nth-child(2),
+.zendure-flux.zf-design-context .zf-row3 .zf-money:nth-child(3) { display: none !important; }
 </style>
-<div class="zendure-flux #AnimationsOnClass# #DebugOnClass#" id="zf-root-#id#">
     <div class="zf-header">
         <div class="zf-badges">
             <span class="zf-badge zf-badge-offline" id="zf-offlineBadge-#id#"><i class="fas fa-exclamation-triangle"></i> Hors ligne</span>
-            <span class="zf-badge zf-badge-tarif" id="zf-periodebadge-#id#"><i class="fas fa-sun"></i> <span id="zf-periodeLabel-#id#">—</span></span>
-            <span class="zf-badge zf-badge-mode"><i class="fas fa-pause" id="zf-modeicon-#id#"></i> <span id="zf-modeLabel-#id#">—</span></span>
+            <span class="zf-badge zf-badge-tarif" id="zf-periodebadge-#id#"><i class="fas fa-sun" id="zf-periodeicon-#id#"></i></span>
         </div>
     </div>
 
@@ -229,20 +269,26 @@ le DOM existant (cf. jeedom.cmd.refreshValue, core/js/cmd.class.js). D'où :
              cercles ont un fond translucide -- rgba(...,0.16), cf. --zf-surface-2 -- donc
              un trait qui court jusqu'au centre reste visible PAR TRANSPARENCE ; le seul
              masquage fiable est de ne jamais dessiner de trait sous l'empreinte d'un
-             cercle). Rayons : noeuds standards 42 (84px / 2), noeud Maison 48 (96px / 2,
-             cf. .zf-node-lg), hub 18 (36px / 2). Centres, tous à distance R=100px du hub
-             (signalé : les 4 cercles doivent être équidistants, cf. positions % de
+             cercle). Rayons (2026-07-24, cercles réduits puis réajustés à mi-chemin) :
+             noeuds standards 36 (72px / 2), noeud Maison 40 (80px / 2, cf. .zf-node-lg),
+             hub 15 (30px / 2). Ces coordonnées ne servent plus que de repli avant le
+             premier layout : computeGeom() (cf. <script> plus bas) recalcule les 4
+             tracés depuis la position RÉELLE des cercles dans le DOM dès que le widget
+             est affiché (et au resize), donc ils restent "aimantés" même si le
+             conteneur hôte (page Design, etc.) ne respecte pas exactement le ratio
+             400:320. Centres nominaux, tous à distance R=100px du hub (signalé : les 4
+             cercles doivent être équidistants, cf. positions % de
              .zf-top/.zf-left/.zf-right/.zf-bottom/.zf-hub) : Solaire (200,60), Réseau
              (100,160), Maison (300,160), Batterie (200,260), Hub (200,160). Le "d" de
              chaque tracé réversible (réseau, batterie) est mis à jour en JS selon le
-             signe de la grandeur (import/export, charge/décharge) — cf. setPath(), mêmes
-             points de bord que ci-dessous. -->
+             signe de la grandeur (import/export, charge/décharge) — cf. setPath()/
+             computeGeom(), mêmes points de bord que ci-dessous. -->
         <svg viewBox="0 0 400 320" class="zf-lines" aria-hidden="true">
             <defs>
-                <path id="pSol#id#" d="M200,102 L200,142" />
-                <path id="pGrid#id#" d="M142,160 L182,160" />
-                <path id="pBat#id#" d="M200,218 L200,178" />
-                <path id="pHouse#id#" d="M218,160 L252,160" />
+                <path id="pSol#id#" d="M200,96 L200,145" />
+                <path id="pGrid#id#" d="M136,160 L185,160" />
+                <path id="pBat#id#" d="M200,224 L200,175" />
+                <path id="pHouse#id#" d="M215,160 L260,160" />
             </defs>
             <g class="zf-flow zf-flow-sol" id="gSol#id#">
                 <use href="#pSol#id#" stroke="#EF9F27" stroke-width="1.5" vector-effect="non-scaling-stroke" class="zf-flow-line" />
@@ -382,6 +428,8 @@ le DOM existant (cf. jeedom.cmd.refreshValue, core/js/cmd.class.js). D'où :
         solarId: #SolarId#,
         gridId: #GridId#,
         injectedId: #InjectedId#,
+        packChargeId: #PackChargeId#,
+        packDischargeId: #PackDischargeId#,
         intensiteId: #IntensiteId#,
         socId: #SocId#,
         modeId: #ModeId#,
@@ -410,8 +458,16 @@ le DOM existant (cf. jeedom.cmd.refreshValue, core/js/cmd.class.js). D'où :
 
     var root = document.getElementById('zf-root-' + id);
 
+    // .div_displayObject : conteneur propre aux pages Design (desktop/js/plan.js,
+    // jeeFrontEnd.plan.planContainer), absent du dashboard normal -- cf.
+    // commentaire CSS "Contexte page Design" plus haut pour le pourquoi de cette
+    // détection plutôt qu'un réglage per-objet côté plan.js.
+    if (root && root.closest('.div_displayObject')) {
+        root.classList.add('zf-design-context');
+    }
+
     var state = {
-        solar: 0, grid: 0, injected: 0, soc: 0, intensite: 0, mode: '',
+        solar: 0, grid: 0, injected: 0, packCharge: 0, packDischarge: 0, soc: 0, intensite: 0, mode: '',
         periode: '', tempoToday: '', tempoTomorrow: '',
         gainJour: 0, depenseVeille: 0, depenseJour: 0,
         outputLimit: 0, inputLimit: 0, socMinRaw: 0, socMaxRaw: 0
@@ -432,21 +488,75 @@ le DOM existant (cf. jeedom.cmd.refreshValue, core/js/cmd.class.js). D'où :
         return ['#6B7280', 'rgba(127,127,127,0.16)', raw];
     }
 
-    // Portage JS de zendure::modeInfo() (icône + libellé seulement, la flèche
-    // du losange batterie est recalculée séparément selon le sens réel du flux).
-    function modeInfo(mode) {
-        mode = String(mode == null ? '' : mode);
-        if (mode === '2') return ['fa-arrow-down', 'Décharge'];
-        if (mode === '1') return ['fa-arrow-up', 'Charge'];
-        var lc = mode.toLowerCase();
-        if (lc.indexOf('décharge') >= 0 || lc.indexOf('decharge') >= 0 || lc.indexOf('discharg') >= 0) return ['fa-arrow-down', 'Décharge'];
-        if (lc.indexOf('charge') >= 0) return ['fa-arrow-up', 'Charge'];
-        return ['fa-pause', mode !== '' ? mode : 'Veille'];
-    }
-
     function setPath(pid, d) {
         var p = document.getElementById(pid + id);
         if (p) p.setAttribute('d', d);
+    }
+
+    // Géométrie des traits calculée depuis les positions RÉELLES des cercles
+    // dans le DOM (getBoundingClientRect), pas depuis des coordonnées fixes
+    // dans le viewBox 400x320 : signalé que les traits ne touchaient pas
+    // toujours le bord des cercles ("aimantés") -- les coordonnées fixes ne
+    // sont exactes que si le conteneur .zf-diagram respecte pile le ratio
+    // 400:320 (cf. commentaire plus haut sur aspect-ratio) ; dans un contexte
+    // d'intégration externe (page Design, plan.js) ce ratio n'est pas garanti
+    // (CSS forcée par le conteneur hôte, min-width/min-height à 0, etc.). En
+    // recalculant depuis le rendu réel, chaque trait reste collé au cercle
+    // quels que soient la taille du widget ou son conteneur.
+    var geom = null;
+    function computeGeom() {
+        var diagram = root && root.querySelector('.zf-diagram');
+        var svg = root && root.querySelector('svg.zf-lines');
+        if (!diagram || !svg) return;
+        var box = diagram.getBoundingClientRect();
+        if (!box.width || !box.height) return;
+        var vb = svg.viewBox.baseVal;
+        // Le <svg> garde son preserveAspectRatio par défaut ("xMidYMid meet" --
+        // échelle UNIFORME, jamais "none", cf. commentaire du <svg> plus haut :
+        // "none" déforme les traits en épaisseur et les particules circulaires
+        // en ellipses). Si .zf-diagram ne respecte pas exactement le ratio
+        // 400:320, le SVG est donc centré avec du "letterboxing" sur un axe --
+        // il faut reproduire ICI la même transformation (une seule échelle +
+        // un décalage de centrage) pour convertir une position DOM (cercles
+        // HTML, positionnés en % indépendamment en x/y) vers le repère du
+        // viewBox. Une conversion séparée par axe (largeur -> largeur,
+        // hauteur -> hauteur, essai précédent) suppose à tort que le SVG
+        // remplit tout le conteneur dans les deux dimensions : c'est faux dès
+        // que le ratio réel diffère, et ça décale un axe entier -- symptôme
+        // observé : le trait vertical Solaire/Batterie n'atteignait jamais le
+        // hub, alors que l'horizontal Réseau/Maison semblait correct (l'axe
+        // qui se trouvait être le moins contraint par le ratio, par coïncidence).
+        var scale = Math.min(box.width / vb.width, box.height / vb.height);
+        var offsetX = (box.width - vb.width * scale) / 2;
+        var offsetY = (box.height - vb.height * scale) / 2;
+        function pt(sel) {
+            var e = diagram.querySelector(sel);
+            if (!e) return null;
+            var r = e.getBoundingClientRect();
+            return {
+                cx: (r.left + r.width / 2 - box.left - offsetX) / scale,
+                cy: (r.top + r.height / 2 - box.top - offsetY) / scale,
+                r: Math.min(r.width, r.height) / 2 / scale
+            };
+        }
+        function seg(a, b) {
+            var dx = b.cx - a.cx, dy = b.cy - a.cy, dist = Math.sqrt(dx * dx + dy * dy) || 1;
+            return {
+                x1: (a.cx + dx / dist * a.r).toFixed(1), y1: (a.cy + dy / dist * a.r).toFixed(1),
+                x2: (b.cx - dx / dist * b.r).toFixed(1), y2: (b.cy - dy / dist * b.r).toFixed(1)
+            };
+        }
+        var hub = pt('.zf-hub'), sol = pt('.zf-top'), grid = pt('.zf-left'), house = pt('.zf-right'), bat = pt('.zf-bottom');
+        if (!hub || !sol || !grid || !house || !bat) return;
+        geom = { sol: seg(sol, hub), grid: seg(grid, hub), house: seg(hub, house), bat: seg(bat, hub) };
+        setPath('pSol', 'M' + geom.sol.x1 + ',' + geom.sol.y1 + ' L' + geom.sol.x2 + ',' + geom.sol.y2);
+        setPath('pHouse', 'M' + geom.house.x1 + ',' + geom.house.y1 + ' L' + geom.house.x2 + ',' + geom.house.y2);
+        // pGrid/pBat (sens réversible) sont redessinés par recompute(), pas ici.
+    }
+    function segPath(s, reversed) {
+        return reversed
+            ? 'M' + s.x2 + ',' + s.y2 + ' L' + s.x1 + ',' + s.y1
+            : 'M' + s.x1 + ',' + s.y1 + ' L' + s.x2 + ',' + s.y2;
     }
 
     function setActive(gid, isActive) {
@@ -498,11 +608,31 @@ le DOM existant (cf. jeedom.cmd.refreshValue, core/js/cmd.class.js). D'où :
         setText('gridW', Math.round(Math.abs(grid)) + ' W');
         setText('houseW', Math.round(house) + ' W');
         setText('selfconsoPct', selfconso);
-        setPath('pGrid', grid >= 0 ? 'M142,160 L182,160' : 'M182,160 L142,160');
+        setPath('pGrid', geom ? segPath(geom.grid, grid < 0) : (grid >= 0 ? 'M136,160 L185,160' : 'M185,160 L136,160'));
         setActive('gGrid', Math.abs(grid) >= cfg.flowThresholdW);
         setActive('gHouse', Math.abs(house) >= cfg.flowThresholdW);
         setSpeed('gGrid', grid);
         setSpeed('gHouse', house);
+
+        // Flux batterie (cercle "Batterie" uniquement) : PAS "injected"
+        // (outputHomePower) -- ce champ n'est QUE "puissance vers la maison",
+        // toujours >= 0 côté appareil, jamais négatif même en charge (bug
+        // signalé 2026-07-25 : les billes n'allaient jamais vers la batterie,
+        // ce champ ne peut structurellement pas coder un sens de charge).
+        // Deux champs bruts séparés donnent le vrai sens : outputPackPower
+        // (puissance VERS le pack = charge, cf. packChargeId) et
+        // packInputPower (puissance DEPUIS le pack = décharge, cf.
+        // packDischargeId) -- confirmé positif/décharge et négatif/charge
+        // dans ce sens via [[project_device_automatic_mode]] (memory) :
+        // "outputPackPower (power going INTO the pack, i.e. charging)".
+        // "Maison" (ci-dessus) reste sur "injected" seul, volontairement
+        // inchangé -- confirmé correct par l'utilisateur (outputHomePower
+        // EST déjà "ce que Zendure fournit", combinant solaire direct et
+        // décharge, et retombe à 0 tout seul quand Zendure ne fait que
+        // charger).
+        var battCharge = parseFloat(state.packCharge) || 0;
+        var battDischarge = parseFloat(state.packDischarge) || 0;
+        var battNet = battDischarge - battCharge;
 
         var intensite = parseFloat(state.intensite) || 0;
         var pct = cfg.imaxA > 0 ? Math.min(100, (intensite / cfg.imaxA) * 100) : 0;
@@ -520,39 +650,47 @@ le DOM existant (cf. jeedom.cmd.refreshValue, core/js/cmd.class.js). D'où :
         // coupure (cf. isOffline plus bas), jamais le réseau ci-dessus.
         if (isOffline) {
             setText('solarW', '—');
-            setText('batteryArrow', '—');
+            setText('batteryArrow', '');
             setText('batteryW', '—');
             setText('soc', '—');
-            // Un seul badge "Hors ligne" (cf. .zf-badge-offline dans le header) --
-            // pas de doublon ici (signalé : le badge mode affichait aussi "Hors
-            // ligne" en plus du badge rouge). "—" neutre : le mode réel est
-            // simplement inconnu pendant la coupure, pas une nouvelle info à annoncer.
-            setText('modeLabel', '—');
-            var modeIconOff = document.getElementById('zf-modeicon-' + id);
-            if (modeIconOff) modeIconOff.setAttribute('class', 'fas fa-pause');
             setActive('gSol', false);
             setActive('gBat', false);
         } else {
             setText('solarW', Math.round(solar) + ' W');
-            setText('batteryArrow', injected >= 0 ? '↑' : '↓');
-            setText('batteryW', Math.round(Math.abs(injected)) + ' W');
+            // Flèche masquée si aucun flux réel batterie (demande explicite
+            // 2026-07-25) : sous le seuil de bruit (cfg.flowThresholdW,
+            // même seuil que l'activation de l'animation des particules), un
+            // "↑"/"↓" est trompeur -- rien ne circule vraiment.
+            var battFlowing = Math.abs(battNet) >= cfg.flowThresholdW;
+            setText('batteryArrow', battFlowing ? (battNet >= 0 ? '↑' : '↓') : '');
+            setText('batteryW', Math.round(Math.abs(battNet)) + ' W');
             setText('soc', Math.round(parseFloat(state.soc) || 0));
-            setPath('pBat', injected >= 0 ? 'M200,218 L200,178' : 'M200,178 L200,218');
+            setPath('pBat', geom ? segPath(geom.bat, battNet < 0) : (battNet >= 0 ? 'M200,224 L200,175' : 'M200,175 L200,224'));
             setActive('gSol', Math.abs(solar) >= cfg.flowThresholdW);
-            setActive('gBat', Math.abs(injected) >= cfg.flowThresholdW);
+            setActive('gBat', battFlowing);
             setSpeed('gSol', solar);
-            setSpeed('gBat', injected);
-
-            var mi = modeInfo(state.mode);
-            var modeIcon = document.getElementById('zf-modeicon-' + id);
-            if (modeIcon) modeIcon.setAttribute('class', 'fas ' + mi[0]);
-            setText('modeLabel', mi[1]);
+            setSpeed('gBat', battNet);
         }
 
+        // tt reste nécessaire ci-dessous pour les pastilles Tempo aujourd'hui/
+        // demain de la carte Tempo (celles-là gardent leur couleur, demande
+        // distincte) -- SEUL le badge période n'en dépend plus (cf. juste
+        // après : plus de texte "HPJB"/"HCJB" ni de couleur liée à Tempo du
+        // jour sur CE badge, demande explicite 2026-07-25, "pas d'information
+        // autour de la couleur du jour"). Retirer "var tt = ..." ici cassait
+        // tout le recompute() (ReferenceError sur tt plus bas, à chaque
+        // poussée de valeur -- constaté 2026-07-25, flood de notifications
+        // d'erreur core/ajax/cmd.ajax.php).
         var tt = tempoColorInfo(state.tempoToday);
-        var badge = document.getElementById('zf-periodebadge-' + id);
-        if (badge) { badge.style.color = tt[0]; badge.style.background = tt[1]; }
-        setText('periodeLabel', state.periode || '—');
+        // Badge période : uniquement l'icône (soleil HP / lune HC). Le code
+        // période EDF (PTEC/periode_tarif) commence par "HC" en heures
+        // creuses, "HP" en heures pleines (ex. HCJB/HPJB) -- lune pour HC,
+        // soleil (jaune, cf. CSS) sinon.
+        var periodeIcon = document.getElementById('zf-periodeicon-' + id);
+        if (periodeIcon) {
+            var pLc = String(state.periode || '').toUpperCase();
+            periodeIcon.setAttribute('class', 'fas ' + (pLc.indexOf('HC') === 0 ? 'fa-moon' : 'fa-sun'));
+        }
 
         var pillToday = el('tempoToday');
         if (pillToday) { pillToday.style.color = tt[0]; pillToday.style.background = tt[1]; pillToday.textContent = tt[2]; }
@@ -609,7 +747,7 @@ le DOM existant (cf. jeedom.cmd.refreshValue, core/js/cmd.class.js). D'où :
     // ne doivent ni faire repartir le chrono, ni faire disparaître le badge --
     // sinon une simple mise à jour Réseau masquerait à tort une vraie coupure
     // Zendure en cours (constaté).
-    var ZENDURE_ONLY_KEYS = { solar: true, injected: true, soc: true, mode: true };
+    var ZENDURE_ONLY_KEYS = { solar: true, injected: true, packCharge: true, packDischarge: true, soc: true, mode: true };
 
     function setOfflineState(value) {
         if (isOffline === value) return;
@@ -652,6 +790,7 @@ le DOM existant (cf. jeedom.cmd.refreshValue, core/js/cmd.class.js). D'où :
     // redessin du widget entier, cf. commentaire d'en-tête du fichier.
     var driverMap = {
         solar: cfg.solarId, grid: cfg.gridId, injected: cfg.injectedId,
+        packCharge: cfg.packChargeId, packDischarge: cfg.packDischargeId,
         intensite: cfg.intensiteId, soc: cfg.socId, mode: cfg.modeId,
         periode: cfg.periodeId, tempoToday: cfg.tempoTodayId, tempoTomorrow: cfg.tempoTomorrowId,
         gainJour: cfg.gainJourId, depenseVeille: cfg.depenseVeilleId, depenseJour: cfg.depenseJourId,
@@ -670,6 +809,25 @@ le DOM existant (cf. jeedom.cmd.refreshValue, core/js/cmd.class.js). D'où :
         });
     });
     recompute();
+
+    // computeGeom() a besoin que .zf-diagram et ses noeuds soient déjà mis en
+    // page (getBoundingClientRect) -- rAF pour laisser le premier layout se
+    // faire, puis recompute() une deuxième fois pour redessiner pGrid/pBat
+    // avec la géométrie réelle (le premier recompute() ci-dessus utilisait
+    // encore le repli en dur). Réévalué au resize (rotation tablette, panneau
+    // Design redimensionné) : les cercles restent aimantés à toute taille.
+    var geomResizeTimer = null;
+    function scheduleGeom() {
+        requestAnimationFrame(function () {
+            computeGeom();
+            recompute();
+        });
+    }
+    scheduleGeom();
+    window.addEventListener('resize', function () {
+        clearTimeout(geomResizeTimer);
+        geomResizeTimer = setTimeout(scheduleGeom, 200);
+    });
 
     // Vérification périodique du silence plutôt qu'un unique setTimeout : la tuile
     // dashboard peut rester ouverte des heures, il faut réévaluer en continu (et

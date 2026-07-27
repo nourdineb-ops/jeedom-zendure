@@ -1,0 +1,53 @@
+<!--
+Test 2026-07-24 (page Design) : carte "argent" autonome, même habillage que
+le widget Flux (.zf-money / .zf-money-gain) mais en widget de commande
+indépendant -- cf. commentaire équivalent dans cmd.info.string.zf_tempo_pill.html.
+
+Contrairement à la pastille Tempo, ici PAS de lecture croisée : ces
+commandes (gain_jour/depense_veille/depense_jour) portent déjà elles-mêmes
+la vraie valeur (moteur gain/dépense, cf. zendure::accumulateEuro()) --
+le widget affiche donc sa propre valeur (#id#), Label/Icon/IsGain ne
+servant qu'à l'habillage (cf. createOrUpdateCompactWidgets()).
+
+IMPORTANT -- ordre des balises : le <div> racine DOIT précéder le <style>
+(cf. commentaire détaillé dans cmd.info.numeric.zf_gauge.html -- bug de
+core/dom/dom.utils.js::DOMparseHTML() qui, sinon, prend le <style> comme
+racine du widget et rend tout le contenu réel invisible en placement
+`type=cmd` sur une page Design).
+-->
+<div class="cmd cmd-widget zf-mini-money #IsGainClass#" data-type="info" data-subtype="numeric" data-template="zf_money" data-cmd_id="#id#" data-cmd_uid="#uid#" data-version="#version#" data-eqLogic_id="#eqLogic_id#" id="zf-money-#id#">
+<style>
+.zf-mini-money {
+    background: rgba(127, 127, 127, 0.08);
+    border-radius: 10px;
+    padding: 10px 12px;
+    color: var(--txt-color, #333);
+    font-size: 13px;
+    display: inline-block;
+    min-width: 100px;
+}
+.zf-mini-money.zf-mini-gain { background: rgba(76, 217, 100, 0.12); color: #3B6D11; }
+.zf-mini-money-label { font-size: 10.5px; color: var(--placeholder-color, rgba(127, 127, 127, 0.8)); }
+.zf-mini-money.zf-mini-gain .zf-mini-money-label { color: #3B6D11; }
+.zf-mini-money-value { font-size: 17px; font-weight: 600; margin-top: 3px; }
+</style>
+    <div class="zf-mini-money-label"><i class="#Icon#"></i> #Label#</div>
+    <div class="zf-mini-money-value"><span id="zf-money-val-#id#">0.00</span> €</div>
+</div>
+<script>
+(function () {
+    var id = '#id#';
+    var prefix = #IsGain# ? '+ ' : '';
+    var el = document.getElementById('zf-money-val-' + id);
+
+    function apply(value) {
+        if (!el) return;
+        var n = parseFloat(value);
+        if (isNaN(n)) n = 0;
+        el.textContent = prefix + n.toFixed(2);
+    }
+
+    jeedom.cmd.execute({ id: id, cache: 0, notify: false, success: apply });
+    jeedom.cmd.addUpdateFunction(id, function (_options) { apply(_options.value); });
+})();
+</script>

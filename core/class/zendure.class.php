@@ -650,35 +650,64 @@ class zendure extends eqLogic
             }
         }
 
-        $grid = (float) $this->getSourceOrDefault('src_grid_papp', 'grid_power');
-        $injected = (float) $this->getSourceOrDefault('src_injection', 'injected_power');
-        $marge = (float) $this->getConfiguration('marge_anti_injection', config::byKey('default_marge_anti_injection', 'zendure', 30));
-        $limitMin = (float) $this->getConfiguration('limite_min_w', 0);
-        $limitMax = (float) $this->getConfiguration('limite_max_w', 1200);
-        $target = (int) round(max($limitMin, min($limitMax, $grid + $injected - $marge)));
+        // Anti-injection réservée aux HC AVÉRÉES ($heuresPleines === false),
+        // pas simplement "hors HP" : reproduit fidèlement l'ancien scénario
+        // Jeedom de référence (id 182 "Zendure", désactivé depuis le
+        // portage), qui gardait sa branche "optimisation import réseau"
+        // derrière un `if (!$inHC)` strict -- cette garde avait disparu lors
+        // du portage vers cette méthode (constaté 2026-07-26 : la nuit
+        // dernière, ce bloc a tourné toutes les 5 min sans interruption et
+        // réaffirmé la décharge en continu, écrasant à chaque fois la charge
+        // envoyée une fois par runStrategieNuit() à minuit -- programmes
+        // charge/décharge mutuellement exclusifs côté appareil -- batterie
+        // vidée de 92% à 5% en une nuit).
+        //
+        // isHeuresPleines() === false (HC avérée, tarif qui distingue HP/HC)
+        // uniquement -- PAS === null (aucune distinction tarifaire
+        // configurée, contrat "base") : demande explicite de l'utilisateur,
+        // le plugin doit rester universel (cf. mémoire
+        // feedback_plugin_must_stay_universal). Sur un contrat base, il n'y
+        // a pas de fenêtre nuit moins chère à réserver pour charger depuis le
+        // réseau -- la batterie n'est de toute façon remplie QUE par le
+        // solaire, donc continuer à décharger la nuit (comme en journée)
+        // reste pertinent : anti-injection tourne alors 24h/24, comportement
+        // inchangé pour ces utilisateurs.
+        if ($heuresPleines !== false) {
+            $grid = (float) $this->getSourceOrDefault('src_grid_papp', 'grid_power');
+            $injected = (float) $this->getSourceOrDefault('src_injection', 'injected_power');
+            $marge = (float) $this->getConfiguration('marge_anti_injection', config::byKey('default_marge_anti_injection', 'zendure', 30));
+            $limitMin = (float) $this->getConfiguration('limite_min_w', 0);
+            $limitMax = (float) $this->getConfiguration('limite_max_w', 1200);
+            $target = (int) round(max($limitMin, min($limitMax, $grid + $injected - $marge)));
 
-        log::add('zendure', 'info', sprintf(
-            '[cronOptimisationHP]%s eq_id=%d grid=%.1fW injected=%.1fW marge=%.1fW -> cible sortie=%dW',
-            $dryRun ? ' [SIMULATION]' : '',
-            $this->getId(), $grid, $injected, $marge, $target
-        ));
+            log::add('zendure', 'info', sprintf(
+                '[cronOptimisationHP]%s eq_id=%d grid=%.1fW injected=%.1fW marge=%.1fW -> cible sortie=%dW',
+                $dryRun ? ' [SIMULATION]' : '',
+                $this->getId(), $grid, $injected, $marge, $target
+            ));
 
-        if ($dryRun) {
-            return;
-        }
-        $cmd = $this->getCmd(null, 'set_output_limit');
-        if (is_object($cmd)) {
-            $cmd->execCmd(array('slider' => $target));
-        }
-        // Même correctif que la boucle rapide côté démon (cf.
-        // Device.on_grid_power()) : pousser la valeur commandée directement sur
-        // la commande info output_limit plutôt que d'attendre son écho
-        // télémétrie (non fiable, cf. README "Points ouverts") -- sinon le
-        // curseur "Limite sortie AC" du widget reste figé après une action du
-        // cron HP.
-        $outputInfoCmd = $this->getCmd(null, 'output_limit');
-        if (is_object($outputInfoCmd)) {
-            $outputInfoCmd->event($target);
+            if ($dryRun) {
+                return;
+            }
+            $cmd = $this->getCmd(null, 'set_output_limit');
+            if (is_object($cmd)) {
+                $cmd->execCmd(array('slider' => $target));
+            }
+            // Même correctif que la boucle rapide côté démon (cf.
+            // Device.on_grid_power()) : pousser la valeur commandée directement sur
+            // la commande info output_limit plutôt que d'attendre son écho
+            // télémétrie (non fiable, cf. README "Points ouverts") -- sinon le
+            // curseur "Limite sortie AC" du widget reste figé après une action du
+            // cron HP.
+            $outputInfoCmd = $this->getCmd(null, 'output_limit');
+            if (is_object($outputInfoCmd)) {
+                $outputInfoCmd->event($target);
+            }
+        } else {
+            log::add('zendure', 'info', sprintf(
+                '[cronOptimisationHP] eq_id=%d HC avérée (tarif HP/HC configuré) -> pas d\'anti-injection, nuit laissée à la stratégie de charge',
+                $this->getId()
+            ));
         }
     }
 
@@ -1066,7 +1095,10 @@ class zendure extends eqLogic
         // On masque donc tout sauf flux_widget lui-même, plutôt que d'énumérer
         // une liste figée — sinon toute nouvelle clé Zendure découverte à la
         // volée réapparaîtrait en vrac sur le dashboard (constaté : ~80 commandes
-        // brutes visibles après ce changement, avant ce correctif).
+        // brutes visibles après ce changement, avant ce correctif). Les
+        // commandes des widgets compacts (cf. createOrUpdateCompactWidgets(),
+        // appelé juste après) remettent elles-mêmes isVisible=1 à chaque save
+        // -- inutile de les exempter ici, elles se rétablissent aussitôt.
         foreach ($this->getCmd() as $cmd) {
             if ($cmd->getLogicalId() == 'flux_widget') {
                 continue;
@@ -1078,6 +1110,132 @@ class zendure extends eqLogic
         }
 
         $this->createOrUpdateFluxWidget();
+        $this->createOrUpdateCompactWidgets();
+    }
+
+    /**
+     * Test 2026-07-24 : variantes "découpées" du widget Flux (jauge, pastilles
+     * Tempo, cartes argent) en widgets de commande INDÉPENDANTS, plaçables
+     * séparément sur une page Design -- contrairement au widget Flux complet
+     * (losange + animations), qui rend correctement sur le dashboard normal
+     * mais casse en placement `type=cmd` sur une page Design (cf. plan id=463,
+     * 3 carrés rouges). Objectif : vérifier si des templates plus simples
+     * (moins de script, pas d'animation SVG continue) s'en sortent mieux dans
+     * ce contexte, avant de généraliser cette approche.
+     *
+     * Même principe que createOrUpdateFluxWidget() : widget de commande
+     * (cmd::setTemplate + display.parameters), jamais un override eqLogic --
+     * cf. son commentaire d'en-tête pour la raison (destruction des animations
+     * SVG à chaque eqLogic::update).
+     */
+    private function createOrUpdateCompactWidgets()
+    {
+        // Jauge (intensité + marge) : héberge le nouveau template sur notre
+        // commande interne jauge_intensite_marge -- jusqu'ici un espace
+        // réservé jamais alimenté (aucun code n'écrivait sa valeur), on lui
+        // donne enfin un rôle : lecture live de la source d'intensité
+        // configurée, même mécanisme que cfg.intensiteId du widget Flux.
+        // isVisible reste à 0 (défaut) : test 2026-07-24 concluant sur le rendu
+        // (templates OK), mais tant qu'aucun placement Design ne les utilise,
+        // les rendre visibles duplique gain/dépense en haut du widget standard
+        // (parent::toHtml() affiche CHAQUE commande visible séparément, cf.
+        // template_dashboard='flux' -> zendure::toHtml() -> parent::toHtml())
+        // -- constaté 2026-07-25 : "Dépense jour/veille" figées (commandes
+        // internes jamais réalimentées depuis le 14/07) affichées EN DOUBLE
+        // au-dessus du losange, par-dessus les vraies valeurs Téléinfo de la
+        // ligne 3. Repasser à 1 seulement en même temps qu'un vrai placement
+        // Design est recréé pour ces commandes.
+        $gaugeCmd = $this->getCmd(null, 'jauge_intensite_marge');
+        if (is_object($gaugeCmd)) {
+            $gaugeCmd->setTemplate('dashboard', 'zendure::zf_gauge');
+            $gaugeCmd->setDisplay('parameters', array(
+                'IntensiteId' => self::cmdIdOrZero($this->resolveSourceCmd('src_intensite')),
+                'ImaxA' => (float) $this->getConfiguration('imax_ampere', 30),
+            ));
+            $gaugeCmd->save();
+        }
+
+        // Tempo aujourd'hui/demain : deux commandes hôtes dédiées (pas de
+        // recopie de valeur -- lecture live de la source Tempo configurée,
+        // même mécanisme). Créées à la volée comme flux_widget lui-même.
+        foreach (array(
+            'tempo_today_display' => array('Tempo aujourd\'hui (compact)', 'src_tempo_j'),
+            'tempo_tomorrow_display' => array('Tempo demain (compact)', 'src_tempo_j1'),
+        ) as $logicalId => $conf) {
+            list($name, $configKey) = $conf;
+            $cmd = $this->getCmd(null, $logicalId);
+            if (!is_object($cmd)) {
+                $cmd = new zendureCmd();
+                $cmd->setLogicalId($logicalId);
+                $cmd->setEqLogic_id($this->getId());
+                $cmd->setType('info');
+                $cmd->setSubType('string');
+            }
+            $cmd->setName($name);
+            $cmd->setIsHistorized(0);
+            $cmd->setTemplate('dashboard', 'zendure::zf_tempo_pill');
+            $cmd->setDisplay('parameters', array(
+                'SourceId' => self::cmdIdOrZero($this->resolveSourceCmd($configKey)),
+            ));
+            $cmd->save();
+        }
+
+        // Badge HPJB/HCJB : même commande hôte dédiée, mêmes deux sources
+        // live que le badge intégré au widget Flux (texte période + couleur
+        // Tempo du jour) -- cf. createOrUpdateFluxWidget() pour la même
+        // logique de résolution "periode_tarif interne si déjà alimentée,
+        // sinon src_tempo_now".
+        $periodeBadgeCmd = $this->getCmd(null, 'periode_badge_display');
+        if (!is_object($periodeBadgeCmd)) {
+            $periodeBadgeCmd = new zendureCmd();
+            $periodeBadgeCmd->setLogicalId('periode_badge_display');
+            $periodeBadgeCmd->setEqLogic_id($this->getId());
+            $periodeBadgeCmd->setType('info');
+            $periodeBadgeCmd->setSubType('string');
+        }
+        $periodeInternalCmd = $this->getCmd(null, 'periode_tarif');
+        $periodeCmdForBadge = (is_object($periodeInternalCmd) && (string) $periodeInternalCmd->execCmd() !== '')
+            ? $periodeInternalCmd
+            : $this->resolveSourceCmd('src_tempo_now');
+        $periodeBadgeCmd->setName('Période HPJB (compact)');
+        $periodeBadgeCmd->setIsHistorized(0);
+        // isVisible=0 explicite (comme gauge/tempo ci-dessus) : un nouvel
+        // objet cmd est visible=1 par défaut tant qu'on ne dit pas le
+        // contraire -- sans ça, la toute première création dupliquerait ce
+        // badge sur le dashboard normal avant que quoi que ce soit d'autre
+        // n'ait eu la main pour le masquer (constaté avec gain/dépense/jauge
+        // plus tôt dans cette même investigation).
+        $periodeBadgeCmd->setIsVisible(0);
+        $periodeBadgeCmd->setTemplate('dashboard', 'zendure::zf_periode_badge');
+        $periodeBadgeCmd->setDisplay('parameters', array(
+            'PeriodeId' => self::cmdIdOrZero($periodeCmdForBadge),
+            'TempoTodayId' => self::cmdIdOrZero($this->resolveSourceCmd('src_tempo_j')),
+        ));
+        $periodeBadgeCmd->save();
+
+        // Les 3 cartes "argent" (widget Flux, ligne 3) : commandes déjà
+        // existantes et déjà alimentées (moteur gain/dépense, cf.
+        // accumulateEuro()) -- on ne fait qu'y attacher le même habillage
+        // visuel que le widget Flux, aucune nouvelle commande.
+        foreach (array(
+            'gain_jour' => array('Gain Zendure · jour', 'fas fa-coins', true),
+            'depense_veille' => array('Dépense veille', 'fas fa-calendar-minus', false),
+            'depense_jour' => array('Dépense jour', 'fas fa-calendar-day', false),
+        ) as $logicalId => $conf) {
+            list($label, $icon, $isGain) = $conf;
+            $cmd = $this->getCmd(null, $logicalId);
+            if (!is_object($cmd)) {
+                continue;
+            }
+            $cmd->setTemplate('dashboard', 'zendure::zf_money');
+            $cmd->setDisplay('parameters', array(
+                'Label' => $label,
+                'Icon' => $icon,
+                'IsGain' => $isGain ? 'true' : 'false',
+                'IsGainClass' => $isGain ? 'zf-mini-gain' : '',
+            ));
+            $cmd->save();
+        }
     }
 
     /**
@@ -1136,6 +1294,17 @@ class zendure extends eqLogic
             'SolarId' => self::cmdIdOrZero($solarCmd),
             'GridId' => self::cmdIdOrZero($gridCmd),
             'InjectedId' => self::cmdIdOrZero($injectedCmd),
+            // Flux batterie réel (cercle "Batterie" du losange uniquement,
+            // PAS "Maison" -- cf. commentaire détaillé dans le <script> du
+            // template flux_widget.html) : deux clés brutes Zendure séparées,
+            // jamais aliasées (cf. telemetry_map.py), lues directement par
+            // logicalId -- outputPackPower = puissance VERS le pack (charge),
+            // packInputPower = puissance DEPUIS le pack (décharge). Corrige
+            // le bug signalé 2026-07-25 (sens des billes toujours "décharge",
+            // jamais "charge" -- injected_power/outputHomePower ne peut
+            // structurellement pas coder ce sens, il n'est jamais négatif).
+            'PackChargeId' => self::cmdIdOrZero($this->getCmd(null, 'outputPackPower')),
+            'PackDischargeId' => self::cmdIdOrZero($this->getCmd(null, 'packInputPower')),
             'IntensiteId' => self::cmdIdOrZero($intensiteCmd),
             'SocId' => self::cmdIdOrZero($this->getCmd(null, 'soc')),
             'ModeId' => self::cmdIdOrZero($this->getCmd(null, 'mode')),
@@ -1332,38 +1501,62 @@ class zendure extends eqLogic
             return;
         }
 
-        $lastCollect = $cmd->getCollectDate();
-        if (empty($lastCollect)) {
-            // Premier passage (commande jamais collectée, ou tout juste remise à 0 par
-            // le rollover minuit) : pas de dt exploitable, on amorce collectDate() pour
-            // le prochain événement plutôt que d'intégrer un dt aberrant.
-            $cmd->event((float) $cmd->execCmd());
+        // Verrou nommé MySQL le temps du lire-modifier-écrire ci-dessous : ce
+        // callback (déclenché par callback.php, un webhook HTTP appelé par le
+        // démon) peut recevoir des requêtes qui se chevauchent (rafale de
+        // télémétrie MQTT + éventuel aller-retour BLE) -- constaté 2026-07-26,
+        // gain_batterie_jour retombant brutalement de 0.125€ à 0.0000133€ en
+        // quelques secondes sans qu'aucun code n'écrive explicitement une
+        // valeur plus basse : deux processus PHP concurrents lisant la même
+        // ancienne valeur via execCmd() avant que l'un des deux n'ait fini
+        // d'écrire (perte de mise à jour classique). GET_LOCK/RELEASE_LOCK
+        // sérialise ce bloc par commande (clé = son id, unique), sans
+        // toucher à cmd::event() lui-même (trop de logique core dedans --
+        // historisation, listeners, alertes -- pour la réimplémenter en SQL
+        // brut sans risque). Timeout 5s : mieux vaut sauter un incrément
+        // (perte négligeable, quelques centimes max) que bloquer le webhook
+        // indéfiniment si un verrou reste posé anormalement longtemps.
+        $lockName = 'zendure_accum_' . $cmd->getId();
+        $locked = (bool) DB::Prepare('SELECT GET_LOCK(:name, 5)', array('name' => $lockName), DB::FETCH_TYPE_ROW, PDO::FETCH_COLUMN);
+        if (!$locked) {
             return;
         }
-        $dt = time() - strtotime($lastCollect);
-        if ($dt <= 0) {
-            return;
-        }
+        try {
+            $lastCollect = $cmd->getCollectDate();
+            if (empty($lastCollect)) {
+                // Premier passage (commande jamais collectée, ou tout juste remise à 0 par
+                // le rollover minuit) : pas de dt exploitable, on amorce collectDate() pour
+                // le prochain événement plutôt que d'intégrer un dt aberrant.
+                $cmd->event((float) $cmd->execCmd());
+                return;
+            }
+            $dt = time() - strtotime($lastCollect);
+            if ($dt <= 0) {
+                return;
+            }
 
-        // Seuil hors-ligne : même facteur x2 que le watchdog JS du widget Flux (cf.
-        // cmd.info.string.flux_widget.html, commentaire HeartbeatS) — au-delà, c'est
-        // une vraie coupure (démon arrêté, Jeedom redémarré...), pas juste un flux
-        // stable ; on n'intègre jamais à l'aveugle sur ce trou.
-        $offlineThresholdS = 2 * (float) $this->getConfiguration('telemetry_min_interval_s', 300);
-        if ($dt > $offlineThresholdS) {
-            $cmd->event((float) $cmd->execCmd());
-            return;
-        }
+            // Seuil hors-ligne : même facteur x2 que le watchdog JS du widget Flux (cf.
+            // cmd.info.string.flux_widget.html, commentaire HeartbeatS) — au-delà, c'est
+            // une vraie coupure (démon arrêté, Jeedom redémarré...), pas juste un flux
+            // stable ; on n'intègre jamais à l'aveugle sur ce trou.
+            $offlineThresholdS = 2 * (float) $this->getConfiguration('telemetry_min_interval_s', 300);
+            if ($dt > $offlineThresholdS) {
+                $cmd->event((float) $cmd->execCmd());
+                return;
+            }
 
-        // Ne compte que le sens positif (import réseau / production solaire /
-        // décharge batterie), jamais l'export — même convention que l'ancien
-        // scénario Jeedom de référence.
-        $kwh = max(0, $valueW) * $dt / 3600 / 1000;
-        $euros = $kwh * $this->currentTariffEurPerKwh();
-        $cmd->event((float) $cmd->execCmd() + $euros);
+            // Ne compte que le sens positif (import réseau / production solaire /
+            // décharge batterie), jamais l'export — même convention que l'ancien
+            // scénario Jeedom de référence.
+            $kwh = max(0, $valueW) * $dt / 3600 / 1000;
+            $euros = $kwh * $this->currentTariffEurPerKwh();
+            $cmd->event((float) $cmd->execCmd() + $euros);
 
-        if ($cumulLogicalId == 'gain_solaire_jour' || $cumulLogicalId == 'gain_batterie_jour') {
-            $this->recomputeGainTotal('jour');
+            if ($cumulLogicalId == 'gain_solaire_jour' || $cumulLogicalId == 'gain_batterie_jour') {
+                $this->recomputeGainTotal('jour');
+            }
+        } finally {
+            DB::Prepare('SELECT RELEASE_LOCK(:name)', array('name' => $lockName), DB::FETCH_TYPE_ROW, PDO::FETCH_COLUMN);
         }
     }
 
