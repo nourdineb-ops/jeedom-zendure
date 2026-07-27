@@ -72,23 +72,39 @@ class ZendureDaemon:
         log.info("Démon Zendure arrêté")
 
     def reload_config(self) -> None:
+        # Chaque équipement est isolé par un try/except : une exception sur l'un
+        # (ex. transport mal configuré, host MQTT vide le temps d'une sauvegarde
+        # partielle depuis l'onglet équipement) ne doit jamais empêcher les
+        # équipements suivants de la liste d'être (re)chargés ou arrêtés dans la
+        # même passe -- constaté le 2026-07-27 en testant un 2e équipement de test
+        # mal configuré : l'exception levée dans device.start() remontait hors de
+        # reload_config() entière, sautant le traitement de tout ce qui suivait
+        # dans la boucle. L'équipement en échec se rattrapait de lui-même au
+        # rechargement suivant, mais rien ne garantit qu'il y en ait un avant un
+        # moment où ça compte.
         config = load_config(self._args.config)
         seen_ids = set()
         for eq_config in config.get("equipments", []):
             eq_id = eq_config["eq_id"]
             seen_ids.add(eq_id)
             existing = self._devices.get(eq_id)
-            if existing is None:
-                device = Device(eq_config, self._callback)
-                self._devices[eq_id] = device
-                if self._running:
-                    device.start()
-            else:
-                existing.reload_config(eq_config)
+            try:
+                if existing is None:
+                    device = Device(eq_config, self._callback)
+                    self._devices[eq_id] = device
+                    if self._running:
+                        device.start()
+                else:
+                    existing.reload_config(eq_config)
+            except Exception:
+                log.exception("eq_id=%s échec (re)chargement config, équipement suivant traité quand même", eq_id)
 
         for eq_id in list(self._devices):
             if eq_id not in seen_ids:
-                self._devices.pop(eq_id).stop()
+                try:
+                    self._devices.pop(eq_id).stop()
+                except Exception:
+                    log.exception("eq_id=%s échec à l'arrêt (suppression de la config)", eq_id)
 
     def _handle_grid_power(self, message: dict) -> None:
         device = self._devices.get(message.get("eq_id"))
