@@ -724,11 +724,14 @@ class zendure extends eqLogic
 
     /**
      * Décide le SOC cible de charge nocturne (00h-06h HC) selon Tempo demain +
-     * prévision solaire du jour à venir -- portage de la logique de l'ancien
-     * scénario Jeedom de référence (Tempo Rouge demain -> charge max ; Tempo
-     * Bleu + bonne prévision solaire -> laisser de la place au solaire ;
-     * sinon cas standard), avec deux différences volontaires par rapport à
-     * l'original :
+     * prévision solaire du jour à venir. Deux logiques disponibles, cf.
+     * kwhSocTarget()/legacySocTarget() : le modèle kWh (Phase 1 de
+     * docs/brief_strategie_charge.md) si batterie_capacite_kwh est renseignée et
+     * l'historique assez profond, sinon repli sur le portage direct de l'ancien
+     * scénario Jeedom de référence (seuils fixes 100/60/80%).
+     *
+     * Différences volontaires par rapport à l'original, valables dans les deux
+     * logiques :
      * - utilise set_soc_max (SOC maximum/cible de charge, propriété socSet)
      *   et non set_soc_min : l'ancien scénario pilotait déjà ce qui est
      *   fonctionnellement le PLAFOND de charge, mais avant que la distinction
@@ -753,18 +756,12 @@ class zendure extends eqLogic
         $tempoJ1Cmd = $this->resolveSourceCmd('src_tempo_j1');
         $tempoTomorrow = is_object($tempoJ1Cmd) ? strtoupper(trim((string) $tempoJ1Cmd->execCmd())) : '';
         $forecastKwh = $this->resolveForecastKwh();
+        $capacityKwh = (float) $this->getConfiguration('batterie_capacite_kwh', 0);
 
-        $socMinTarget = 20;
-        $socMaxTarget = 100;
-        if (strpos($tempoTomorrow, 'ROUG') !== false || $tempoTomorrow === 'RED') {
-            $socTarget = $socMaxTarget;
-            $reason = 'Tempo demain = Rouge -> charge max';
-        } elseif ((strpos($tempoTomorrow, 'BLEU') !== false || $tempoTomorrow === 'BLUE') && $forecastKwh !== null && $forecastKwh >= 4.0) {
-            $socTarget = max($socMinTarget, 60);
-            $reason = 'Tempo demain = Bleu + prévision solaire >= 4kWh -> laisser de la place au solaire';
+        if ($capacityKwh > 0) {
+            list($socTarget, $reason) = $this->kwhSocTarget($tempoTomorrow, $forecastKwh, $capacityKwh);
         } else {
-            $socTarget = 80;
-            $reason = 'cas standard';
+            list($socTarget, $reason) = $this->legacySocTarget($tempoTomorrow, $forecastKwh);
         }
 
         $dryRun = (bool) $this->getConfiguration('strategie_nuit_dry_run', 1);
@@ -807,6 +804,211 @@ class zendure extends eqLogic
         if (is_object($socMaxCmd)) {
             $socMaxCmd->execCmd(array('slider' => $socTarget));
         }
+    }
+
+    /**
+     * Ancienne logique à seuils fixes (v1, cf. docs/brief_strategie_charge.md) --
+     * conservée comme repli quand la capacité batterie n'est pas renseignée
+     * (batterie_capacite_kwh vide) ou que le modèle kWh n'a pas encore assez
+     * d'historique exploitable (cf. kwhSocTarget()).
+     */
+    private function legacySocTarget($tempoTomorrow, $forecastKwh)
+    {
+        if (strpos($tempoTomorrow, 'ROUG') !== false || $tempoTomorrow === 'RED') {
+            return array(100, 'Tempo demain = Rouge -> charge max');
+        }
+        if ((strpos($tempoTomorrow, 'BLEU') !== false || $tempoTomorrow === 'BLUE') && $forecastKwh !== null && $forecastKwh >= 4.0) {
+            return array(60, 'Tempo demain = Bleu + prévision solaire >= 4kWh -> laisser de la place au solaire');
+        }
+        return array(80, 'cas standard');
+    }
+
+    /**
+     * Heure de réveil HP (fin de la charge nuit) : réglage explicite
+     * (strategie_nuit_fenetre_matin_h) si présent > heure_fin_charge_nuit
+     * (même onglet, réutilisée comme proxy) > repli 6h (observé en conditions
+     * réelles le 2026-07-27 : réveil HP à 06h05 sur cette installation, cf.
+     * docs/brief_strategie_charge.md).
+     */
+    private function resolveMorningWindowEndH()
+    {
+        $configured = (int) $this->getConfiguration('strategie_nuit_fenetre_matin_h', 0);
+        if ($configured > 0) {
+            return $configured;
+        }
+        $heureFin = trim((string) $this->getConfiguration('heure_fin_charge_nuit', ''));
+        if (preg_match('/^(\d{1,2})/', $heureFin, $m)) {
+            return max(1, (int) $m[1]);
+        }
+        return 6;
+    }
+
+    /**
+     * Heure de retour en HC le soir (fin de la fenêtre HP) : réglage explicite
+     * (heure_debut_hc_soir) si présent, sinon repli 22h (horaire standard de la
+     * grande majorité des offres Tempo/HP-HC françaises).
+     */
+    private function resolveEveningHcStartH()
+    {
+        $heureDebut = trim((string) $this->getConfiguration('heure_debut_hc_soir', ''));
+        if (preg_match('/^(\d{1,2})/', $heureDebut, $m)) {
+            return max(1, min(24, (int) $m[1]));
+        }
+        return 22;
+    }
+
+    /**
+     * Fenêtre à couvrir par le modèle kWh : la fenêtre HP (heure de réveil ->
+     * retour HC du soir) si un tarif HP/HC ou Tempo est configuré -- c'est la
+     * seule fenêtre où stocker de l'énergie HC de la nuit a un intérêt
+     * économique, puisque la conso pendant la fenêtre HC elle-même coûte déjà
+     * le même prix qu'elle vienne du réseau ou de la batterie. Repli sur la
+     * journée entière (0h-24h) si aucun tarif HP/HC n'est configuré (contrat
+     * Base) -- pas de fenêtre "chère" identifiable, mais l'idée de ne pas
+     * charger plus que nécessaire une fois le solaire de demain déduit reste
+     * pertinente même sans différence de tarif (cf. kwhSocTarget()). Garde le
+     * plugin universel, cf. README.
+     */
+    private function resolveHpWindow()
+    {
+        $type = $this->getConfiguration('type_contrat', 'tempo');
+        if ($type !== 'hphc' && $type !== 'tempo') {
+            return array(0, 24);
+        }
+        return array($this->resolveMorningWindowEndH(), $this->resolveEveningHcStartH());
+    }
+
+    /**
+     * Modèle "Phase 1" du brief stratégie de charge nuit : SOC cible calculé en
+     * kWh réels plutôt qu'en seuils fixes arbitraires.
+     *
+     * - Tempo Rouge demain reste un cas à part (charge max) : le tarif Rouge
+     *   HP est si élevé qu'un pari perdu sur la prévision solaire coûterait
+     *   cher -- on préfère se couvrir plutôt qu'optimiser finement ce jour-là.
+     * - Sinon, l'idée centrale (remontée par l'utilisateur le 2026-07-27) :
+     *   un électron solaire ne coûte rien, un électron HC stocké la nuit a un
+     *   coût (même faible). La priorité n'est donc pas de remplir la batterie
+     *   en HC, mais de laisser le solaire de demain couvrir un maximum de la
+     *   conso -- la batterie ne doit combler que ce que le solaire ne
+     *   couvrira pas. D'où : cible = (conso HP typique du foyer - prévision
+     *   solaire du lendemain), jamais négative, ramenée en % de la capacité.
+     *   Remplace l'ancien mécanisme plancher/plafond + compromis 50/50 (gardé
+     *   dans l'historique git si besoin de comparer) : celui-ci imposait le
+     *   plancher de conso dès qu'il dépassait le plafond solaire, rendant la
+     *   réserve solaire inopérante sur les installations où la batterie est
+     *   petite face à la conso -- exactement le problème signalé.
+     * - La conso HP typique est une médiane glissante sur strategie_nuit_hist_jours
+     *   jours d'historique réel (cf. estimateWindowConsumptionKwh()), sur la
+     *   fenêtre HP réelle (resolveHpWindow()) plutôt que sur toute la journée,
+     *   pour ne pas gonfler le besoin avec de la conso déjà au tarif HC.
+     * - Pas de prévision solaire disponible : traitée comme 0kWh (aucun crédit
+     *   solaire), la cible retombe alors sur la conso HP seule -- cohérent
+     *   avec le principe "on charge ce que le solaire ne couvre pas".
+     * - Retombe sur legacySocTarget() si l'historique est encore insuffisant
+     *   (installation trop récente, sources pas encore configurées) : jamais de
+     *   cible calculée sur une médiane à zéro échantillon.
+     */
+    private function kwhSocTarget($tempoTomorrow, $forecastKwh, $capacityKwh)
+    {
+        if (strpos($tempoTomorrow, 'ROUG') !== false || $tempoTomorrow === 'RED') {
+            return array(100, 'Tempo demain = Rouge -> charge max');
+        }
+
+        $days = (int) $this->getConfiguration('strategie_nuit_hist_jours', 7);
+        list($startH, $endH) = $this->resolveHpWindow();
+        $hpConsumptionKwh = $this->estimateWindowConsumptionKwh($startH, $endH, $days);
+        if ($hpConsumptionKwh === null) {
+            list($legacyTarget, $legacyReason) = $this->legacySocTarget($tempoTomorrow, $forecastKwh);
+            return array($legacyTarget, 'historique encore insuffisant pour le modèle kWh (' . $days . 'j visés) -> repli ancienne logique : ' . $legacyReason);
+        }
+
+        $forecastKwhSafe = $forecastKwh !== null ? $forecastKwh : 0.0;
+        $netNeedKwh = max(0, $hpConsumptionKwh - $forecastKwhSafe);
+        $socTarget = (int) ceil(($netNeedKwh / $capacityKwh) * 100);
+        $socTarget = max(20, min(100, $socTarget));
+
+        $reason = sprintf(
+            'modèle kWh : conso HP %02dh-%02dh ~%.1fkWh (médiane %dj) - prévision solaire %s -> besoin net %.1fkWh / capacité %.1fkWh -> cible %d%%',
+            $startH,
+            $endH,
+            $hpConsumptionKwh,
+            $days,
+            $forecastKwh !== null ? number_format($forecastKwh, 1) . 'kWh' : '?kWh (aucune)',
+            $netNeedKwh,
+            $capacityKwh,
+            $socTarget
+        );
+        return array($socTarget, $reason);
+    }
+
+    /**
+     * Estime la consommation typique du foyer (kWh) sur la fenêtre horaire
+     * [$startH, $endH[ (même jour, $startH < $endH), médiane glissante sur les
+     * $days derniers jours d'historique réel. Même formule que le
+     * dashboard/l'anti-injection (house = grid + abs(injected), cf.
+     * toHtmlCondense()/cronOptimisationHP), pour rester cohérent avec ce que
+     * l'utilisateur voit déjà -- et parce que la puissance réellement tirée du
+     * réseau ne suffit pas seule si la batterie a couvert une partie du besoin
+     * ce jour-là (elle masquerait alors une partie de la conso réelle).
+     *
+     * Utilise history::getTemporalAvg() (moyenne pondérée dans le temps, pas une
+     * simple moyenne arithmétique des points -- résiste aux échantillons
+     * irréguliers). Un jour sans donnée exploitable (getTemporalAvg renvoie -1,
+     * ex. jour d'installation, coupure) est simplement ignoré plutôt que compté
+     * comme 0, pour ne pas tirer la moyenne vers le bas artificiellement.
+     *
+     * Médiane des jours plutôt que moyenne arithmétique : constaté en conditions
+     * réelles le 2026-07-27 sur cette installation, une seule journée avec une
+     * grosse conso ponctuelle (ex. charge VE) suffit à tirer la moyenne de
+     * +30-40%, faussant la cible de tous les jours suivants alors que ce n'est
+     * pas représentatif. La médiane isole ce genre de jour atypique sans avoir
+     * besoin de le détecter explicitement (pas de source "charge VE active"
+     * disponible sur cette install, cf. section Phase 2 du brief).
+     *
+     * Retourne null si aucun jour n'a de donnée exploitable : l'appelant doit
+     * alors retomber sur legacySocTarget() plutôt que de calculer une cible sur
+     * une conso à 0 kWh (charge minimale garantie alors que rien ne le prouve).
+     */
+    private function estimateWindowConsumptionKwh($startH, $endH, $days)
+    {
+        $gridCmd = $this->resolveSourceCmdOrDefault('src_grid_papp', 'grid_power');
+        $injectedCmd = $this->resolveSourceCmdOrDefault('src_injection', 'injected_power');
+        if (!is_object($gridCmd)) {
+            return null;
+        }
+
+        $windowHours = max(0.1, $endH - $startH);
+        $samplesKwh = array();
+        for ($d = 1; $d <= $days; $d++) {
+            $dayStart = date('Y-m-d 00:00:00', strtotime('-' . $d . ' day'));
+            $start = date('Y-m-d H:i:s', strtotime($dayStart) + $startH * 3600);
+            $end = date('Y-m-d H:i:s', strtotime($dayStart) + $endH * 3600);
+
+            $gridAvgW = history::getTemporalAvg($gridCmd->getId(), $start, $end);
+            if ($gridAvgW == -1) {
+                continue;
+            }
+            $injectedAvgW = 0;
+            if (is_object($injectedCmd)) {
+                $injectedAvgWRaw = history::getTemporalAvg($injectedCmd->getId(), $start, $end);
+                if ($injectedAvgWRaw != -1) {
+                    $injectedAvgW = $injectedAvgWRaw;
+                }
+            }
+            $houseAvgW = max(0, $gridAvgW + abs($injectedAvgW));
+            $samplesKwh[] = $houseAvgW * $windowHours / 1000;
+        }
+
+        if (count($samplesKwh) === 0) {
+            return null;
+        }
+        sort($samplesKwh);
+        $n = count($samplesKwh);
+        $mid = (int) floor(($n - 1) / 2);
+        if ($n % 2 === 1) {
+            return $samplesKwh[$mid];
+        }
+        return ($samplesKwh[$mid] + $samplesKwh[$mid + 1]) / 2;
     }
 
     /**
