@@ -1,0 +1,50 @@
+<!--
+2026-07-25 : badge HPJB/HCJB autonome -- widget de commande indépendant
+pour la page Design (cf. commentaire équivalent dans
+cmd.info.string.zf_tempo_pill.html, même famille de widgets compacts).
+
+Design v2 (2026-07-25, demande explicite) : simplifié à l'essentiel --
+seulement l'icône (soleil en HP, lune en HC), plus de texte "HPJB"/"HCJB"
+ni de couleur liée à Tempo du jour ("pas d'information autour de la couleur
+du jour"). #TempoTodayId# n'est donc plus utilisé ici (retiré) ; seul
+#PeriodeId# (texte période EDF brut, ex. HCJB/HPJB) sert, uniquement pour
+détecter HC vs HP.
+
+IMPORTANT -- ordre des balises ET attributs de la racine : cf. les deux
+commentaires détaillés dans cmd.info.numeric.zf_gauge.html --
+(1) le <div> racine doit précéder le <style> (sinon invisible en `type=cmd`
+sur une page Design, bug de DOMparseHTML), (2) la racine doit porter
+class="cmd cmd-widget" + les data-* standards (sinon présent mais non
+déplaçable/redimensionnable dans l'éditeur, qui cible spécifiquement
+.div_displayObject > .cmd-widget).
+-->
+<div class="cmd cmd-widget zf-mini-periode-icon" data-type="info" data-subtype="string" data-template="zf_periode_badge" data-cmd_id="#id#" data-cmd_uid="#uid#" data-version="#version#" data-eqLogic_id="#eqLogic_id#" id="zf-periodebadgewrap-#id#">
+<style>
+.zf-mini-periode-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 22px;
+}
+.zf-mini-periode-icon .fa-sun { color: #FBC02D; }
+.zf-mini-periode-icon .fa-moon { color: #90A4AE; }
+</style>
+<i class="fas fa-sun" id="zf-periodebadge-icon-#id#"></i>
+</div>
+<script>
+(function () {
+    var id = '#id#';
+    var periodeId = #PeriodeId#;
+    var iconEl = document.getElementById('zf-periodebadge-icon-' + id);
+
+    function applyPeriode(value) {
+        var v = String(value == null ? '' : value).toUpperCase();
+        if (iconEl) iconEl.setAttribute('class', 'fas ' + (v.indexOf('HC') === 0 ? 'fa-moon' : 'fa-sun'));
+    }
+
+    if (periodeId) {
+        jeedom.cmd.execute({ id: periodeId, cache: 0, notify: false, success: applyPeriode });
+        jeedom.cmd.addUpdateFunction(String(periodeId), function (_options) { applyPeriode(_options.value); });
+    }
+})();
+</script>

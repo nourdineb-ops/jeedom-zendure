@@ -1,0 +1,89 @@
+<!--
+Test 2026-07-24 (page Design) : jauge d'intensité (arc + aiguille SVG,
+valeur + marge) autonome, même habillage/logique que le widget Flux mais
+en widget de commande indépendant -- cf. commentaire équivalent dans
+cmd.info.string.zf_tempo_pill.html. Cas le plus exigeant des 3 templates de
+test : seul celui-ci anime un SVG (aiguille) via JS, comme le widget Flux
+complet qui échouait en placement `type=cmd` -- sert donc aussi à vérifier
+si le problème initial venait de la complexité globale (losange + animations
+de particules) ou d'une limitation générale de ce contexte d'insertion.
+
+Pas de recopie de valeur (même principe que la pastille Tempo) : lecture
+live de la commande source d'intensité configurée (#IntensiteId#), marge
+recalculée ici (imaxA - intensité), jamais stockée.
+
+IMPORTANT -- ordre des balises : le <div> racine DOIT précéder le <style>
+dans ce fichier. core/dom/dom.utils.js::DOMparseHTML() (utilisé par
+desktop/js/plan.js pour insérer un widget `type=cmd` sur une page Design)
+prend le PREMIER élément avec balise (hors commentaires et <script>) comme
+racine du widget et met tout le reste dedans -- si ce premier élément est un
+<style>, notre <div> de contenu se retrouve ajouté COMME ENFANT du <style>,
+qui ne s'affiche jamais (constaté 2026-07-25 : widget invisible sur une page
+Design alors que cmd::toHtml() produit un HTML valide côté serveur). Sur le
+dashboard normal ce bug ne se voit pas (autre chemin de rendu, cf.
+jeedom.eqLogic.toHtml), d'où le fait qu'il soit passé inaperçu longtemps.
+
+IMPORTANT #2 -- attributs de la racine (constaté 2026-07-25, une fois le
+widget enfin visible : impossible de le déplacer/redimensionner en mode
+édition, alors que d'autres commandes (ex. cmd.info.numeric.line.html natif)
+le sont). Comparaison avec le HTML réellement rendu d'une commande native
+("Distance de la lune", cmd.info.numeric.line.html) : sa racine porte
+`class="cmd cmd-widget ..."` PLUS `data-type`/`data-subtype`/`data-template`/
+`data-cmd_id`/`data-cmd_uid`/`data-version`/`data-eqLogic_id`. L'éditeur de
+page Design cible précisément `.div_displayObject > .cmd-widget` (cf.
+desktop/js/plan.js) pour activer drag/resize/sélection -- sans la classe
+`cmd-widget` sur notre propre racine, ce sélecteur ne matchait jamais notre
+widget (présent dans le DOM, positionné, mais invisible à l'éditeur). Tous
+ces tokens (#uid#, #version#, #eqLogic_id#, en plus de #id# déjà connu) sont
+substitués nativement par cmd::toHtml() (core/class/cmd.class.php ~L2066+),
+pas des paramètres à nous.
+-->
+<div class="cmd cmd-widget zf-mini-gauge" data-type="info" data-subtype="numeric" data-template="zf_gauge" data-cmd_id="#id#" data-cmd_uid="#uid#" data-version="#version#" data-eqLogic_id="#eqLogic_id#" id="zf-gauge-#id#">
+<style>
+.zf-mini-gauge { display: flex; align-items: center; gap: 8px; background: rgba(127, 127, 127, 0.08); border-radius: 10px; padding: 10px 12px; color: var(--txt-color, #333); }
+.zf-mini-gauge svg { width: 64px; height: 40px; flex-shrink: 0; }
+.zf-mini-gauge-value { font-size: 19px; font-weight: 600; }
+.zf-mini-gauge-value span { font-size: 12px; color: var(--placeholder-color, rgba(127, 127, 127, 0.8)); }
+.zf-mini-gauge-marge { font-size: 10.5px; color: #3B6D11; margin-top: 2px; }
+.zf-mini-gauge-label { font-size: 10px; color: var(--placeholder-color, rgba(127, 127, 127, 0.8)); }
+</style>
+    <svg viewBox="0 0 100 62" aria-hidden="true">
+        <path d="M14,52 A36,36 0 0 1 71.2,22.9" fill="none" stroke="#639922" stroke-width="7" stroke-linecap="round" />
+        <path d="M71.2,22.9 A36,36 0 0 1 84.2,40.9" fill="none" stroke="#EF9F27" stroke-width="7" />
+        <path d="M84.2,40.9 A36,36 0 0 1 86,52" fill="none" stroke="#E24B4A" stroke-width="7" stroke-linecap="round" />
+        <line id="zf-needle-#id#" x1="50" y1="52" x2="50" y2="22" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" />
+        <circle cx="50" cy="52" r="3.5" fill="currentColor" />
+    </svg>
+    <div>
+        <div class="zf-mini-gauge-value"><span id="zf-gauge-a-#id#">0</span> <span>A</span></div>
+        <div class="zf-mini-gauge-marge"><i class="fas fa-shield-alt"></i> marge <span id="zf-gauge-marge-#id#">0</span> A</div>
+        <div class="zf-mini-gauge-label">Intensité réseau</div>
+    </div>
+</div>
+<script>
+(function () {
+    var id = '#id#';
+    var intensiteId = #IntensiteId#;
+    var imaxA = #ImaxA#;
+    var needle = document.getElementById('zf-needle-' + id);
+    var aEl = document.getElementById('zf-gauge-a-' + id);
+    var margeEl = document.getElementById('zf-gauge-marge-' + id);
+
+    function apply(value) {
+        var intensite = parseFloat(value) || 0;
+        var pct = imaxA > 0 ? Math.min(100, (intensite / imaxA) * 100) : 0;
+        var angleRad = (180 - (pct / 100) * 180) * Math.PI / 180;
+        if (needle) {
+            needle.setAttribute('x2', (50 + 30 * Math.cos(angleRad)).toFixed(1));
+            needle.setAttribute('y2', (52 - 30 * Math.sin(angleRad)).toFixed(1));
+        }
+        if (aEl) aEl.textContent = Math.round(intensite * 10) / 10;
+        if (margeEl) margeEl.textContent = Math.round((imaxA - intensite) * 10) / 10;
+    }
+
+    if (intensiteId) {
+        jeedom.cmd.execute({ id: intensiteId, cache: 0, notify: false, success: apply });
+        jeedom.cmd.addUpdateFunction(String(intensiteId), function (_options) { apply(_options.value); });
+    }
+})();
+</script>

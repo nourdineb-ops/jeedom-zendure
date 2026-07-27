@@ -1,0 +1,95 @@
+<!--
+Test 2026-07-24 (page Design) : pastille Tempo autonome, même habillage que
+le widget Flux (.zf-pill + tempoColorInfo()) mais découpée en widget de
+commande indépendant, léger, sans le losange -- pour vérifier qu'un template
+custom simple (pas de <script> lourd, pas de SVG animé) s'affiche
+correctement en placement `type=cmd` sur une page Design (contrairement au
+widget Flux complet, cf. plan id=463 qui rendait 3 carrés rouges cassés).
+
+Pas de recopie de valeur : ce widget n'affiche jamais SA propre valeur, il
+lit en direct la commande source configurée (#SourceId#, même mécanisme que
+cfg.tempoTodayId dans le widget Flux) -- une seule source de vérité, jamais
+de désynchronisation possible entre les deux affichages.
+
+IMPORTANT -- ordre des balises : le <div> racine DOIT précéder le <style>
+(cf. commentaire détaillé dans cmd.info.numeric.zf_gauge.html -- bug de
+core/dom/dom.utils.js::DOMparseHTML() qui, sinon, prend le <style> comme
+racine du widget et rend tout le contenu réel invisible en placement
+`type=cmd` sur une page Design).
+-->
+<div class="cmd cmd-widget" data-type="info" data-subtype="string" data-template="zf_tempo_pill" data-cmd_id="#id#" data-cmd_uid="#uid#" data-version="#version#" data-eqLogic_id="#eqLogic_id#" id="zf-pillwrap-#id#">
+<style>
+.zf-mini-pill {
+    font-size: 12px;
+    font-weight: 600;
+    padding: 4px 12px;
+    border-radius: 20px;
+    background: rgba(127, 127, 127, 0.16);
+    color: var(--txt-color, #333);
+    display: inline-block;
+}
+/* Etat "pas de donnée" (2026-07-25, ex. Tempo J+1 pas encore connu) :
+   hachures plutôt qu'un simple gris uni -- demande explicite, pour
+   distinguer visuellement "valeur inconnue" de "Bleu" (les deux étaient un
+   gris trop proche l'un de l'autre pour trancher au premier coup d'oeil). */
+.zf-mini-pill-nodata {
+    color: var(--placeholder-color, rgba(127, 127, 127, 0.8)) !important;
+    background: repeating-linear-gradient(
+        135deg,
+        rgba(127, 127, 127, 0.18),
+        rgba(127, 127, 127, 0.18) 4px,
+        rgba(127, 127, 127, 0.06) 4px,
+        rgba(127, 127, 127, 0.06) 8px
+    ) !important;
+}
+</style>
+<span class="zf-mini-pill" id="zf-pill-#id#">—</span>
+</div>
+<script>
+(function () {
+    var id = '#id#';
+    var sourceId = #SourceId#;
+    // Cible le <span> interne, PAS le <div> racine (qui contient aussi le
+    // <style> -- un el.textContent = ... sur le div effacerait la balise
+    // style en même temps que le texte, cf. commentaire d'ordre des balises
+    // plus haut).
+    var el = document.getElementById('zf-pill-' + id);
+
+    // Portage de zendure::tempoColorInfo() / flux_widget.html (cf. commentaire
+    // équivalent dans cmd.info.string.flux_widget.html) -- même palette.
+    // 4e élément = true si "pas de donnée" (jamais alimenté / valeur brute
+    // inattendue) -- cf. .zf-mini-pill-nodata plus haut. Manquait le check
+    // 'undefined'/'unknown' présent dans la version flux_widget.html
+    // d'origine (constaté 2026-07-25 : la commande source, avant sa toute
+    // première valeur réelle -- ex. Tempo J+1 pas encore connu de Solcast/
+    // RTE -- renvoie littéralement la CHAÎNE "undefined", pas JS undefined ;
+    // sans ce check elle finissait affichée telle quelle à l'écran).
+    function colorInfo(raw) {
+        var v = String(raw == null ? '' : raw).toLowerCase().trim();
+        if (v === '' || v === 'undefined' || v === 'unknown' || v === 'null') return ['#6B7280', 'rgba(127,127,127,0.16)', '—', true];
+        if (v.indexOf('roug') >= 0 || v === '3' || v === 'red') return ['#B91C1C', '#FCA5A5', 'Rouge', false];
+        if (v.indexOf('blanc') >= 0 || v === '2' || v === 'white') return ['#854F0B', '#FDE68A', 'Blanc', false];
+        if (v.indexOf('bleu') >= 0 || v === '1' || v === 'blue') return ['#1D4ED8', '#BFDBFE', 'Bleu', false];
+        return ['#6B7280', 'rgba(127,127,127,0.16)', '—', true];
+    }
+
+    function apply(value) {
+        if (!el) return;
+        var info = colorInfo(value);
+        el.classList.toggle('zf-mini-pill-nodata', info[3]);
+        if (info[3]) {
+            el.style.color = '';
+            el.style.background = '';
+        } else {
+            el.style.color = info[0];
+            el.style.background = info[1];
+        }
+        el.textContent = info[2];
+    }
+
+    if (sourceId) {
+        jeedom.cmd.execute({ id: sourceId, cache: 0, notify: false, success: apply });
+        jeedom.cmd.addUpdateFunction(String(sourceId), function (_options) { apply(_options.value); });
+    }
+})();
+</script>
