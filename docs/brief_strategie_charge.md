@@ -134,6 +134,67 @@ sur le même principe que les autres sources du plugin — jamais d'ID en dur),
 avec repli propre si non configurées, soit un report de cette conditionnalité
 à une itération ultérieure.
 
+## État d'avancement (2026-07-27)
+
+**Phase 1 implémentée** (`kwhSocTarget()`/`legacySocTarget()`/
+`estimateWindowConsumptionKwh()`/`resolveHpWindow()` dans
+`zendure.class.php`, config `batterie_capacite_kwh` +
+`heure_debut_hc_soir` sur l'onglet Comportement, fieldset "Stratégie
+nuit"). Trois itérations le même jour avant d'arriver au modèle final
+(détail dans l'historique git si besoin) :
+
+1. Premier jet : plancher (conso matin 0h-9h) vs plafond (réserve solaire),
+   le plancher gagnait toujours en cas de conflit -> réserve solaire
+   inopérante dès que la batterie est petite face à la conso (remonté par
+   l'utilisateur).
+2. Fix intermédiaire : compromis 50/50 plancher/plafond en cas de conflit
+   -> résolvait le problème mais de façon insensible à l'ampleur du
+   déséquilibre (6.2kWh et 15kWh de prévision solaire donnaient la même
+   cible 50%).
+3. **Version retenue**, suite à l'échange avec l'utilisateur (principe :
+   un électron solaire ne coûte rien, un électron HC stocké la nuit a un
+   coût -- donc ne charger que ce que le solaire de demain ne couvrira
+   pas, pas raisonner en plancher/plafond séparés) :
+
+   `cible = (conso HP typique du foyer - prévision solaire lendemain)`,
+   jamais négatif, ramenée en % de la capacité (mini 20%, jamais > 100%).
+
+   - **Conso "HP typique"**, pas "conso du matin 0h-9h" (erreur de
+     modélisation du premier jet) : la conso pendant la fenêtre HC
+     elle-même coûte déjà le même prix qu'elle vienne du réseau ou de la
+     batterie -- seule la conso pendant la fenêtre HP (réveil réel,
+     `resolveMorningWindowEndH()` → retour HC du soir, nouvelle config
+     `heure_debut_hc_soir`, défaut 22h) a un intérêt économique à être
+     couverte par de l'énergie HC stockée plutôt que par un achat HP
+     direct. Fenêtre repliée sur 0h-24h si aucun tarif HP/HC configuré
+     (contrat Base) -- reste universel, cf. `resolveHpWindow()`.
+   - Médiane (pas moyenne) glissante sur `strategie_nuit_hist_jours`
+     jours (défaut 7) : sur cette installation, 2 jours/7 avec une grosse
+     conso ponctuelle (probable VE) auraient tiré une moyenne de +30-40%
+     vers le haut ; la médiane les ignore sans avoir besoin de détecter
+     explicitement une charge VE (pas de source dispo, cf. Phase 2).
+   - Repli sur `legacySocTarget()` (seuils fixes 100/60/80) si capacité
+     vide ou historique encore insuffisant.
+   - Tempo Rouge reste un cas à part (charge 100%) : le tarif Rouge HP est
+     assez élevé pour préférer se couvrir plutôt que parier sur la
+     prévision solaire ce jour-là précisément.
+
+   Testé par réflexion PHP sur l'install réelle (capacité 3.84kWh, fenêtre
+   HP réelle 06h-22h, conso médiane 7j = 8.37kWh sur cette fenêtre) :
+   prévision réaliste (6.2kWh, celle de ce soir) -> besoin net 2.2kWh ->
+   cible **57%** (proportionnel, contrairement au 50% plat de l'itération
+   précédente) ; petite prévision (1kWh) -> cible 100% (quasi tout le
+   besoin doit venir de la nuit) ; pas de prévision -> cible 100% (aucun
+   crédit solaire, cohérent) ; grosse prévision (15kWh, largement au-dessus
+   capacité+conso) -> cible 20% (plancher de sécurité minimal, correctement
+   identifié comme journée où charger la nuit n'a plus d'intérêt).
+   Comportement pas encore testé en conditions réelles sur une vraie nuit
+   -- cf. section précédente sur l'effet non confirmé de la commande de
+   charge, qui reste la vraie inconnue, indépendante de ce calcul de cible.
+
+Pas touché : Phase 2 (chauffage/VE) et Phase 3 (apprenant) restent à faire,
+cf. sections plus bas.
+
 ## Approche suggérée (à discuter/challenger, pas une décision figée)
 
 **Phase 1 — modèle en kWh, sans apprentissage** (le plus gros gain pour le
