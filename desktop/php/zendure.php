@@ -100,7 +100,6 @@ $eqLogics = eqLogic::byType($plugin->getId());
         <ul class="nav nav-tabs" role="tablist">
             <li role="presentation"><a href="#" class="eqLogicAction" aria-controls="home" role="tab" data-toggle="tab" data-action="returnToThumbnailDisplay"><i class="fas fa-arrow-circle-left"></i></a></li>
             <li role="presentation" class="active"><a href="#tab_general" aria-controls="home" role="tab" data-toggle="tab"><i class="fas fa-tachometer-alt"></i> {{Equipement}}</a></li>
-            <li role="presentation"><a href="#tab_transport" aria-controls="home" role="tab" data-toggle="tab"><i class="fas fa-plug"></i> {{Transport}}</a></li>
             <li role="presentation"><a href="#tab_sources" aria-controls="home" role="tab" data-toggle="tab"><i class="fas fa-satellite-dish"></i> {{Sources}}</a></li>
             <li role="presentation"><a href="#tab_comportement" aria-controls="home" role="tab" data-toggle="tab"><i class="fas fa-balance-scale"></i> {{Comportement}}</a></li>
             <li role="presentation"><a href="#tab_ihm" aria-controls="home" role="tab" data-toggle="tab"><i class="fas fa-palette"></i> {{IHM}}</a></li>
@@ -109,9 +108,6 @@ $eqLogics = eqLogic::byType($plugin->getId());
 
         <form class="form-horizontal tab-content" id="div_eqLogic">
             <div role="tabpanel" class="tab-pane active" id="tab_general">
-                <div class="alert alert-info">
-                    {{Un eqLogic Zendure = un Hyper 2000. Multi-équipement : créer un 2e eqLogic sans recoder (addendum §13).}}
-                </div>
                 <fieldset>
                     <legend><i class="fas fa-tachometer-alt"></i> {{Equipement}}</legend>
                     <div class="form-group">
@@ -154,19 +150,7 @@ $eqLogics = eqLogic::byType($plugin->getId());
                         </div>
                     </div>
                 </fieldset>
-                <div class="alert alert-info" style="margin-top:20px;">
-                    <strong>{{À quoi sert cet onglet}}</strong>
-                    <ul style="margin-bottom:0;">
-                        <li>{{Nom : libre, sert juste à identifier l'équipement dans Jeedom.}}</li>
-                        <li>{{Objet parent : la pièce où se trouve physiquement la batterie (ex. Extérieur, Garage). Purement organisationnel.}}</li>
-                        <li>{{Activé : démarre réellement le pilotage (connexion MQTT + boucle anti-injection). Désactivé = l'équipement existe mais ne fait rien.}}</li>
-                        <li>{{Visible : affiche le dashboard "Condensé" sur la page d'accueil / la vue de l'objet.}}</li>
-                        <li>{{Catégorie : cosmétique (icône/filtre Jeedom), Énergie coché par défaut.}}</li>
-                    </ul>
-                </div>
-            </div>
 
-            <div role="tabpanel" class="tab-pane" id="tab_transport">
                 <div class="row">
                     <div class="col-md-6">
                         <legend><i class="fas fa-plug"></i> {{Connexion}}</legend>
@@ -266,15 +250,6 @@ $eqLogics = eqLogic::byType($plugin->getId());
                             </fieldset>
                         </div>
                     </div>
-                </div>
-                <div class="alert alert-info">
-                    <strong>{{À quoi sert cet onglet}}</strong>
-                    <ul style="margin-bottom:0;">
-                        <li>{{Identifiant appareil (device_id) et Product key : identifiants internes Zendure de VOTRE Hyper 2000 (pas le numéro de série visible sur l'étiquette). Ils ne sont pas exposés par l'app officielle — la façon la plus fiable de les récupérer est de sniffer les infos d'une intégration existante qui pilote déjà l'appareil (ex. Home Assistant : fichier .storage/zendure_ha.storage, champs productKey/deviceKey).}}</li>
-                        <li>{{Chemin A (Cloud) : le démon se connecte au broker MQTT cloud de Zendure — simple, mais latence ~90s côté cloud communautaire. C'est le seul chemin validé en conditions réelles à ce jour sur ce projet.}}</li>
-                        <li>{{Chemin B (Local) : cible v1 retenue pour le zéro-injection strict (latence minimale), mais nécessite un relais DNS + une reconfiguration Bluetooth de l'appareil vers un broker Mosquitto local (voir l'avertissement ci-dessus). Pas encore mis en place.}}</li>
-                        <li>{{En Cloud : le nom d'utilisateur/mot de passe MQTT ne sont PAS le compte de l'app Zendure — ce sont des identifiants de session MQTT (obtenus par ex. en récupérant ceux utilisés par une intégration Home Assistant existante).}}</li>
-                    </ul>
                 </div>
             </div>
 
