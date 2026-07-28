@@ -81,7 +81,25 @@ nouveau modèle.
   (depuis décembre 2025, table `historyArch`) — largement de quoi calculer
   des moyennes de consommation réelles plutôt que deviner un chiffre.
 
-## Ce qui est un vrai point d'incertitude — À VALIDER AVANT DE CONSTRUIRE DESSUS
+## RÉSOLU le 2026-07-28 (MQTT) — historique de l'incertitude ci-dessous
+
+**La commande de charge MQTT a désormais un effet confirmé, sans ambiguïté.**
+Première nuit en live avec le modèle kWh (cf. section "État d'avancement") :
+cible calculée à 00h00 = 53% (`[cronStrategieNuit] ... -> cible 53%`). SOC
+réel passé de 25% (23h55 le 27/07) à 53% pile (01h12 le 28/07), palier stable
+ensuite. Télémétrie `socSet` = 530 (×10 -> 53.0%, exactement la cible) et
+`packInputPower` retombé à 0W une fois la cible atteinte -- **l'appareil a
+chargé jusqu'au plafond envoyé puis s'est arrêté tout seul**, comportement
+firmware cohérent avec un vrai plafond de charge respecté. Plus la moindre
+ambiguïté sur ce point précis (commande MQTT `set_input_limit` +
+`set_soc_max`, mode charge `set_mode`) : ça marche.
+
+Nuance importante : ceci valide le chemin **MQTT**. Le test d'écriture BLE
+(`deviceAutomation`, ci-dessous, 2026-07-24) reste, lui, non confirmé -- ne
+pas déduire de cette réussite MQTT que les écritures BLE fonctionnent aussi.
+Les deux mécanismes sont distincts côté firmware.
+
+## Ce qui est un vrai point d'incertitude — À VALIDER AVANT DE CONSTRUIRE DESSUS (historique, MQTT résolu ci-dessus)
 
 **La commande de charge (`set_input_limit`, automation `autoModelProgram=1`)
 n'a montré aucun effet réel lors de deux tests en direct aujourd'hui**, y
