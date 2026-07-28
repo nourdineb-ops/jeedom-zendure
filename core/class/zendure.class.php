@@ -238,6 +238,21 @@ class zendure extends eqLogic
             'enabled' => (bool) $this->getConfiguration('anti_injection_active', 1),
             'marge_w' => $this->getConfiguration('marge_anti_injection', config::byKey('default_marge_anti_injection', 'zendure', 30)),
             'cooldown_s' => $this->getConfiguration('cooldown_anti_injection', config::byKey('default_cooldown_anti_injection', 'zendure', 2)),
+            // Cadence dédiée au sens "import" (grid >= marge, ni urgence ni
+            // risque d'injection immédiat) -- volontairement plus lente que
+            // cooldown_s : réagir trop vite dans ce sens a un historique
+            // d'oscillation (cf. commentaire de tête de fichier anti_injection.py),
+            // le temps que l'appareil se stabilise sur la commande précédente
+            // avant d'en recalculer une autre par-dessus. 15s par défaut,
+            // calé sur le temps de stabilisation observé en réel le 2026-07-28
+            // (grid retombé ~10-15s après une nouvelle limite envoyée par le cron).
+            'cooldown_import_s' => $this->getConfiguration('cooldown_import_anti_injection', config::byKey('default_cooldown_import_anti_injection', 'zendure', 15)),
+            // Zone morte en % : dans ce sens "import" uniquement (jamais côté
+            // urgence/injection, qui doit rester maximalement réactif), ignore
+            // une correction si la nouvelle cible reste à +/- X% de la dernière
+            // valeur commandée -- évite de renvoyer une commande pour une
+            // variation négligeable.
+            'import_tolerance_pct' => $this->getConfiguration('tolerance_import_anti_injection', config::byKey('default_tolerance_import_anti_injection', 'zendure', 10)),
             'limit_min_w' => $this->getConfiguration('limite_min_w', 0),
             'limit_max_w' => $this->getConfiguration('limite_max_w', 1200),
             'urgent_injection_w' => $this->getConfiguration('urgent_injection_w', -20),
@@ -541,11 +556,16 @@ class zendure extends eqLogic
 
     /**
      * Cron HP (addendum, comparaison ligne à ligne avec le scénario Jeedom
-     * historique le 2026-07-11) : la branche périodique (5 min) que ce
-     * scénario exécute en plus de sa branche FAST réactive — même formule
-     * que la boucle rapide du démon, mais sur un rythme lent, pour rattraper
-     * une sous-optimisation (import > marge) que la boucle rapide ignore
-     * volontairement (elle ne réagit qu'à l'injection, jamais à la hausse).
+     * historique le 2026-07-11) : la branche périodique que ce scénario
+     * exécute en plus de sa branche FAST réactive — même formule que la
+     * boucle rapide du démon, filet de sécurité (réveil HP, plafond SOC,
+     * rattrapage si le démon est down) plutôt que mécanisme principal
+     * d'optimisation à la hausse depuis que la boucle rapide gère aussi ce
+     * sens (cf. regulation/anti_injection.py, corrigé 2026-07-28 -- avant
+     * cette date, la boucle rapide ignorait volontairement l'import excessif
+     * et ce cron était le seul recours, d'où un intervalle de 5 min à
+     * l'origine). Passé à 1 min le même jour (incident réel : une coupure
+     * d'urgence bloquée à 0W pendant 5 min complètes en attendant ce cron).
      *
      * Volontairement en mode simulation par défaut (config cron_hp_dry_run,
      * coché) : logue ce qu'il ferait sans jamais toucher à l'appareil, le
@@ -553,7 +573,7 @@ class zendure extends eqLogic
      */
     private static function ensureCronRegistered()
     {
-        self::ensureCron('cronOptimisationHP', '*/5 * * * *', 'Cron cronOptimisationHP enregistré (*/5 * * * *, mode simulation par défaut)');
+        self::ensureCron('cronOptimisationHP', '*/1 * * * *', 'Cron cronOptimisationHP enregistré (*/1 * * * *, mode simulation par défaut)');
         self::ensureCron('cronRolloverMinuit', '0 0 * * *', 'Cron cronRolloverMinuit enregistré (0 0 * * *, bascule jour -> veille)');
         self::ensureCron('cronRecupererTarifs', '0 3 1 * *', 'Cron cronRecupererTarifs enregistré (0 3 1 * *, récupération mensuelle des tarifs)');
         self::ensureCron('cronStrategieNuit', '0 0 * * *', 'Cron cronStrategieNuit enregistré (0 0 * * *, mode simulation par défaut)');
