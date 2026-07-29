@@ -30,25 +30,24 @@ pince (Zigbee/Zwave) --> listener PHP --> socket local --> démon Python
   - **Cloud (A)** : broker `mqtt-eu.zen-iot.com:1883` + Clé Cloud d'Autorisation.
     Simple, mais latence télémétrie ~90s côté cloud communautaire — **incompatible
     avec un zéro-injection strict**.
-  - **Local (B)** — recommandé v1 : Mosquitto local + relais DNS + reconfiguration
-    Bluetooth de l'appareil. Voir procédure ci-dessous.
+  - **Local (B)** — cible initiale v1, **abandonnée pour l'instant** (2026-07-29) :
+    trois tentatives concrètes de bascule vers un broker local (BLE, deux radios
+    différentes, signal fort et faible) toutes sans effet confirmé sur l'appareil.
+    Voir `docs/brief_chemin_b_local.md` pour le détail complet avant de
+    retenter quoi que ce soit ici. Le plugin tourne en Cloud (A) + secours BLE
+    lecture seule.
 
-## Procédure Chemin B (mode local)
+## Chemin B (mode local) — historique, non fonctionnel actuellement
 
-1. Installer un broker Mosquitto local (port 1883, ou 8883 en TLS), **authentification
-   désactivée** (l'appareil a un mot de passe codé en dur côté firmware, non
-   configurable).
-2. Rediriger la résolution DNS de `mq.zen-iot.com` (ou nom d'hôte configuré sur
-   l'appareil) vers l'IP du Mosquitto local — via le DNS du réseau local ou
-   `/etc/hosts` sur un relais dédié.
-3. Reconfigurer l'URL MQTT interne du Hyper 2000 via un outil Bluetooth
-   (Solarflow Bluetooth Manager ou Zendure Cloud Disconnector) pour qu'il se
-   connecte à cette adresse.
-4. Renseigner l'IP/port du Mosquitto local dans la config de l'eqLogic Jeedom
-   (`mode_connexion = local`).
-
-Ce chemin est plus invasif et plus fragile qu'un usage cloud standard (dépend d'un
-firmware non documenté officiellement) : à faire en connaissance de cause.
+L'infrastructure est prête côté Jeedom (broker Mosquitto local déjà
+disponible, code du démon déjà complet pour `mode_connexion = local`), mais
+**aucun mécanisme fiable n'a été trouvé pour faire basculer l'appareil
+lui-même vers ce broker** : ni la reconfiguration BLE (`token`/`station`,
+reprise du code source de `Zendure-HA`) ni le pilotage BLE direct
+(`deviceAutomation`) n'ont d'effet confirmé, sur trois tentatives distinctes
+et deux configurations radio différentes. Détail complet, hypothèses
+éliminées et pistes restantes (jamais testées, effort différent) :
+`docs/brief_chemin_b_local.md`.
 
 ## Configuration (« configuration over code »)
 
