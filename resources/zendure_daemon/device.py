@@ -56,6 +56,21 @@ class Device:
         # pas une valeur qu'on a nous-même commandée) — cf. anti_injection.py,
         # le régulateur recalcule sa cible à partir de cette mesure à chaque fois.
         self._last_injected_w: float = 0.0
+        # Horodatage de cette dernière valeur -- mis à jour par _push_values(),
+        # donc par la télémétrie MQTT normale ET le secours BLE (contrairement à
+        # self._last_telemetry_at, spécifique à la fraîcheur MQTT, cf.
+        # check_telemetry_staleness()). Sert à ne jamais faire tourner
+        # l'anti-injection sur une valeur périmée -- incident réel du 2026-07-28 :
+        # pendant une coupure WiFi de l'appareil, `grid` (PAPP externe, jamais
+        # affecté par le WiFi Zendure) restait frais pendant qu'`injected_power`
+        # restait figé, faussant la cible calculée par la formule sans que rien
+        # ne le signale.
+        self._last_injected_at: float = 0.0
+        # Au-delà de ce délai sans nouvelle valeur d'injected_power, on ne lui
+        # fait plus confiance et on bascule sur 0 (on_grid_power) -- même
+        # convention que le seuil hors-ligne côté PHP (accumulateEuro(), x2 le
+        # cycle de reporting attendu).
+        self._injected_stale_after_s: float = 2 * float(eq_config.get("telemetry_min_interval_s", 300))
         self._last_telemetry_at: float = time.monotonic()
         self._telemetry_stale: bool = False
         self._ble_failover_active: bool = bool(eq_config.get("ble_failover_active", False))
@@ -218,13 +233,22 @@ class Device:
         Décharge uniquement (cf. anti_injection.py) : jamais de bascule en charge
         depuis cette boucle rapide, aligné sur le scénario Jeedom de référence.
         Le calcul se base sur la dernière puissance injectée RÉELLEMENT mesurée
-        (télémétrie), pas sur une limite qu'on aurait nous-même commandée."""
-        action = self._regulator.update(value_w, self._last_injected_w)
+        (télémétrie), pas sur une limite qu'on aurait nous-même commandée --
+        sauf si cette mesure est périmée (self._injected_stale_after_s), auquel
+        cas on bascule sur 0 plutôt que de faire confiance à une valeur qui peut
+        dater d'avant une coupure WiFi de l'appareil (grid, lui, reste frais :
+        source externe indépendante du WiFi Zendure)."""
+        injected_w = self._last_injected_w
+        if self._last_injected_at == 0.0 or (time.monotonic() - self._last_injected_at) > self._injected_stale_after_s:
+            if injected_w != 0.0:
+                log.debug("eq_id=%s injected_power périmé, basculé sur 0 pour ce calcul", self.eq_id)
+            injected_w = 0.0
+        action = self._regulator.update(value_w, injected_w)
         if action is None:
             return
         log.debug(
             "eq_id=%s grid=%.1fW injected=%.1fW -> discharge %sW",
-            self.eq_id, value_w, self._last_injected_w, action.power_w,
+            self.eq_id, value_w, injected_w, action.power_w,
         )
         self._transport.set_output_limit(action.power_w)
         # Pousse la valeur commandée à Jeedom immédiatement, sans attendre un écho
@@ -252,6 +276,7 @@ class Device:
         if "injected_power" in values:
             try:
                 self._last_injected_w = float(values["injected_power"])
+                self._last_injected_at = time.monotonic()
             except (TypeError, ValueError):
                 pass
         values = self._throttle.filter(values)
