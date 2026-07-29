@@ -338,7 +338,7 @@ class zendure extends eqLogic
         $injected = (float) $this->getSourceOrDefault('src_injection', 'injected_power');
         $house = $grid + abs($injected);
 
-        $imax = (float) $this->getConfiguration('imax_ampere', 30);
+        $imax = $this->resolveImaxAmpere();
         $intensite = (float) $this->getConfiguredSourceValue('src_intensite');
         $pct = $imax > 0 ? min(100, round(($intensite / $imax) * 100)) : 0;
         $seuilAmbre = (float) $this->getConfiguration('seuil_intensite_ambre', 70);
@@ -430,6 +430,27 @@ class zendure extends eqLogic
             return 0;
         }
         return $cmd->execCmd();
+    }
+
+    /**
+     * Imax (A) de la jauge d'intensité : priorité à la source "Imax abonnement"
+     * (src_imax_abonnement, onglet Sources) si configurée -- c'est ce que son
+     * libellé promet ("sert à la jauge d'intensité") mais qu'aucun code ne
+     * faisait jusqu'ici (bug trouvé le 2026-07-29 : la jauge n'utilisait que
+     * imax_ampere, un champ texte manuel séparé sur l'onglet Comportement,
+     * jamais cette source malgré sa description). Repli sur imax_ampere, puis
+     * sur 30A codé en dur si rien n'est configuré nulle part.
+     */
+    private function resolveImaxAmpere()
+    {
+        $srcCmd = $this->resolveSourceCmd('src_imax_abonnement');
+        if (is_object($srcCmd)) {
+            $value = (float) $srcCmd->execCmd();
+            if ($value > 0) {
+                return $value;
+            }
+        }
+        return (float) $this->getConfiguration('imax_ampere', 30);
     }
 
     /**
@@ -694,19 +715,56 @@ class zendure extends eqLogic
         // inchangé pour ces utilisateurs.
         if ($heuresPleines !== false) {
             $grid = (float) $this->getSourceOrDefault('src_grid_papp', 'grid_power');
-            $injected = (float) $this->getSourceOrDefault('src_injection', 'injected_power');
+            // Bascule sur 0 si la télémétrie "injected" est périmée (incident réel du
+            // 2026-07-28 : pendant une coupure WiFi de l'appareil, grid -- source
+            // externe, jamais affecté par ce WiFi -- restait frais pendant qu'injected
+            // restait figé, faussant la cible calculée sans que rien ne le signale).
+            // Même seuil que le côté démon (Device._injected_stale_after_s) et que
+            // l'offline threshold déjà utilisé dans accumulateEuro().
+            $injectedCmd = $this->resolveSourceCmdOrDefault('src_injection', 'injected_power');
+            $injected = 0.0;
+            if (is_object($injectedCmd)) {
+                $injectedCollectDate = $injectedCmd->getCollectDate();
+                $injectedOfflineThresholdS = 2 * (float) $this->getConfiguration('telemetry_min_interval_s', 300);
+                $injectedStale = empty($injectedCollectDate) || (time() - strtotime($injectedCollectDate)) > $injectedOfflineThresholdS;
+                $injected = $injectedStale ? 0.0 : (float) $injectedCmd->execCmd();
+            }
             $marge = (float) $this->getConfiguration('marge_anti_injection', config::byKey('default_marge_anti_injection', 'zendure', 30));
             $limitMin = (float) $this->getConfiguration('limite_min_w', 0);
             $limitMax = (float) $this->getConfiguration('limite_max_w', 1200);
             $target = (int) round(max($limitMin, min($limitMax, $grid + $injected - $marge)));
 
+            // Même zone morte que la boucle rapide côté démon (import_tolerance_pct,
+            // cf. regulation/anti_injection.py) -- passé de */5 à */1, ce cron
+            // renverrait sinon une commande quasi identique toutes les minutes,
+            // redondant avec ce que la boucle rapide vient probablement déjà de
+            // faire dans les 15 dernières secondes. Comparé à la télémétrie
+            // output_limit actuelle (pas une valeur mémorisée : ce cron PHP n'a
+            // pas d'état persistant entre deux exécutions, contrairement au
+            // régulateur Python).
+            //
+            // BUG corrigé le 2026-07-28 (constaté en direct : cron loggant "dans
+            // la tolérance -> pas d'action" en boucle pendant une vraie injection
+            // soutenue, -150 à -230W) : la zone morte ne doit JAMAIS s'appliquer
+            // côté injection (grid < marge) -- uniquement côté import (grid >=
+            // marge), exactement comme dans regulation/anti_injection.py. Le
+            // premier jet l'appliquait sans condition de signe.
+            $withinTolerance = false;
+            if ($grid >= $marge) {
+                $currentOutput = (float) $this->getCmdValue('output_limit');
+                $tolerancePct = (float) $this->getConfiguration('tolerance_import_anti_injection', config::byKey('default_tolerance_import_anti_injection', 'zendure', 10));
+                $tolerance = ($tolerancePct / 100) * abs($currentOutput);
+                $withinTolerance = abs($target - $currentOutput) <= $tolerance;
+            }
+
             log::add('zendure', 'info', sprintf(
-                '[cronOptimisationHP]%s eq_id=%d grid=%.1fW injected=%.1fW marge=%.1fW -> cible sortie=%dW',
+                '[cronOptimisationHP]%s eq_id=%d grid=%.1fW injected=%.1fW marge=%.1fW -> cible sortie=%dW%s',
                 $dryRun ? ' [SIMULATION]' : '',
-                $this->getId(), $grid, $injected, $marge, $target
+                $this->getId(), $grid, $injected, $marge, $target,
+                $withinTolerance ? ' (import, dans la tolérance -> pas d\'action)' : ''
             ));
 
-            if ($dryRun) {
+            if ($dryRun || $withinTolerance) {
                 return;
             }
             $cmd = $this->getCmd(null, 'set_output_limit');
@@ -1372,7 +1430,7 @@ class zendure extends eqLogic
             $gaugeCmd->setTemplate('dashboard', 'zendure::zf_gauge');
             $gaugeCmd->setDisplay('parameters', array(
                 'IntensiteId' => self::cmdIdOrZero($this->resolveSourceCmd('src_intensite')),
-                'ImaxA' => (float) $this->getConfiguration('imax_ampere', 30),
+                'ImaxA' => $this->resolveImaxAmpere(),
             ));
             $gaugeCmd->save();
         }
@@ -1562,7 +1620,7 @@ class zendure extends eqLogic
             'SetSocMinId' => self::cmdIdOrZero($setSocMinCmd),
             'SetSocMaxId' => self::cmdIdOrZero($setSocMaxCmd),
             'SetModeActionId' => self::cmdIdOrZero($setModeCmd),
-            'ImaxA' => (float) $this->getConfiguration('imax_ampere', 30),
+            'ImaxA' => $this->resolveImaxAmpere(),
             'OutputLimitMaxW' => (float) $this->getConfiguration('limite_max_w', 1200),
             'InputLimitMaxW' => (float) $this->getConfiguration('limite_entree_max_w', 1200),
             'FlowThresholdW' => 5,
