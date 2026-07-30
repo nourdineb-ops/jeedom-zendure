@@ -262,6 +262,11 @@ class zendure extends eqLogic
         $conf = array(
             'eq_id' => $this->getId(),
             'device_id' => $this->getConfiguration('device_id'),
+            // Profil d'appareil (cf. resources/zendure_daemon/device_profiles/) : isole ce
+            // qui varie réellement d'un modèle Zendure à l'autre dans le pilotage
+            // (deviceAutomation) -- un seul profil existe à ce jour (hyper2000), repli
+            // automatique côté démon si vide/inconnu.
+            'device_model' => $this->getConfiguration('device_model', 'hyper2000'),
             'product_key' => $this->getConfiguration('product_key'),
             'mode_connexion' => $mode,
             'anti_injection' => $antiInjection,

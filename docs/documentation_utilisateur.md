@@ -35,9 +35,14 @@ sert de base à compléter au fil de la revue.
 - **Chemin A (Cloud)** : le démon se connecte au broker MQTT cloud de
   Zendure — simple, mais latence ~90s côté cloud communautaire. C'est le
   seul chemin validé en conditions réelles à ce jour sur ce projet.
-- **Chemin B (Local)** : cible v1 retenue pour le zéro-injection strict
-  (latence minimale), nécessite un relais DNS + une reconfiguration
-  Bluetooth de l'appareil vers un broker Mosquitto local.
+- **Chemin B (Local)** : cible v1 initiale, **abandonnée** (2026-07-29) après
+  plusieurs tentatives concrètes sans succès — voir
+  `docs/brief_chemin_b_local.md` pour le détail. Rester sur Cloud (A).
+- **Modèle d'appareil** : un seul supporté à ce jour, le Hyper 2000. Le
+  mécanisme de pilotage (charge/décharge) diffère réellement d'un modèle
+  Zendure à l'autre (vérifié dans le code source de l'intégration officielle
+  Home Assistant) — utiliser ce plugin avec un autre modèle (Hub, ACE1500...)
+  ne pilotera probablement rien, même si la télémétrie s'affiche.
 - **En Cloud** : le nom d'utilisateur/mot de passe MQTT ne sont PAS le
   compte de l'app Zendure — ce sont des identifiants de session MQTT
   (obtenus par ex. en récupérant ceux utilisés par une intégration Home
