@@ -159,8 +159,8 @@ $eqLogics = eqLogic::byType($plugin->getId());
                                 <label class="col-sm-4 control-label">{{Mode de connexion}}</label>
                                 <div class="col-sm-8">
                                     <select id="sel_mode_connexion" class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="mode_connexion">
-                                        <option value="local">{{Local (Chemin B — recommandé v1, zéro-injection)}}</option>
-                                        <option value="cloud">{{Cloud (Chemin A — simple mais latent ~90s)}}</option>
+                                        <option value="cloud">{{Cloud (Chemin A — le seul validé en conditions réelles à ce jour)}}</option>
+                                        <option value="local">{{Local (Chemin B — abandonné, cf. docs/brief_chemin_b_local.md)}}</option>
                                     </select>
                                 </div>
                             </div>
@@ -174,6 +174,14 @@ $eqLogics = eqLogic::byType($plugin->getId());
                                 <label class="col-sm-4 control-label">{{Product key}}</label>
                                 <div class="col-sm-8">
                                     <input class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="product_key" />
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label class="col-sm-4 control-label">{{Modèle d'appareil}}</label>
+                                <div class="col-sm-8">
+                                    <select class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="device_model">
+                                        <option value="hyper2000">{{Hyper 2000 (seul modèle supporté à ce jour)}}</option>
+                                    </select>
                                 </div>
                             </div>
                         </fieldset>

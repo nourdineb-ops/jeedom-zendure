@@ -45,6 +45,7 @@ def build_transport(eq_config: dict) -> MqttTransport:
             # toucher au code. Par défaut, un identifiant généré, propre à ce démon.
             "client_id": eq_config.get("cloud_client_id") or f"jeedom-zendure-{eq_config['device_id']}",
             "device_id": eq_config["device_id"],
+            "device_model": eq_config.get("device_model", ""),
             "product_key": eq_config.get("product_key", ""),
             "topic_telemetry": eq_config.get("topic_telemetry", DEFAULT_TOPIC_TELEMETRY),
             "topic_function": eq_config.get("topic_function", DEFAULT_TOPIC_FUNCTION),

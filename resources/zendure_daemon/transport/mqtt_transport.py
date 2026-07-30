@@ -14,6 +14,15 @@ devices/hyper2000.py, testée en production sur ce même Hyper 2000) :
   PAS par `properties/write` mais par `function/invoke`, payload `deviceAutomation`
   (cf. Hyper2000.discharge/charge dans zendure_ha). C'est le seul mécanisme qui
   déclenche réellement l'automation embarquée sans écriture flash.
+
+La FORME exacte de ce payload `deviceAutomation` (autoModelValue en objet imbriqué
+vs simple nombre, capacité de charge AC ou non...) diffère réellement d'un modèle
+Zendure à l'autre (vérifié dans plusieurs classes de device de `zendure_ha`,
+2026-07-30) -- déléguée au profil d'appareil (cf. ../device_profiles/), pas codée
+en dur ici. Seule l'enveloppe (arguments/function/messageId/deviceKey/timestamp)
+et le reste de ce fichier (acMode, minSoc/socSet, smartMode via properties/write)
+sont supposés communs à toute la famille "legacy" -- à vérifier si un jour un
+second profil est ajouté.
 """
 
 import json
@@ -24,6 +33,8 @@ import time
 from typing import Callable, Optional
 
 import paho.mqtt.client as mqtt
+
+from device_profiles import build_profile
 
 from .base import TelemetryFrame, Transport
 
@@ -53,6 +64,10 @@ class MqttTransport(Transport):
         topic_function (topic de commande deviceAutomation, template idem).
         """
         self._conn = conn
+        # Profil d'appareil (cf. device_profiles/) : isole ce qui varie réellement
+        # d'un modèle Zendure à l'autre dans le mécanisme deviceAutomation --
+        # un seul profil existe à ce jour (hyper2000, repli si non configuré).
+        self._profile = build_profile(conn.get("device_model", ""))
         # protocol=MQTTv31 + clean_session=False : confirmé indispensable en test réel
         # contre mqtteu.zen-iot.com — avec MQTTv3.1.1 (défaut paho) le SUBACK renvoie
         # QoS=128 (souscription refusée par le broker) même avec un clientId/login valides.
@@ -110,26 +125,16 @@ class MqttTransport(Transport):
             return self._connected
 
     def set_output_limit(self, watts: int) -> None:
-        # autoModelProgram=2 : décharge (sortie vers la maison), cf. Hyper2000.discharge (zendure_ha).
-        self._publish_automation(
-            program=2,
-            value={"chargingType": 0, "chargingPower": 0, "freq": 0, "outPower": int(watts)},
-        )
+        self._publish_automation(self._profile.discharge_automation(int(watts)))
 
     def set_input_limit(self, watts: int) -> None:
-        # autoModelProgram=1 : charge (depuis le réseau), cf. Hyper2000.charge (zendure_ha).
-        # chargingPower est positif côté device même si watts représente une limite de charge.
-        self._publish_automation(
-            program=1,
-            value={
-                "chargingType": 1,
-                "price": 2,
-                "chargingPower": int(watts),
-                "prices": [1] * 24,
-                "outPower": 0,
-                "freq": 0,
-            },
-        )
+        if not self._profile.supports_ac_charge():
+            log.warning(
+                "eq_id=%s profil %s : pas de charge AC, set_input_limit(%sW) ignoré",
+                self._conn.get("device_id"), self._profile.name, watts,
+            )
+            return
+        self._publish_automation(self._profile.charge_automation(int(watts)))
 
     def set_mode(self, mode: int) -> None:
         # acMode (1=input/2=output) passe par properties/write, PAS function/invoke
@@ -177,23 +182,18 @@ class MqttTransport(Transport):
         self._message_id += 1
         return self._message_id
 
-    def _publish_automation(self, program: int, value: dict) -> None:
+    def _publish_automation(self, argument: dict) -> None:
         topic = self._conn["topic_function"].format(
             device_id=self._conn["device_id"], product_key=self._conn.get("product_key", "")
         )
         # deviceAutomation/autoModel=8 : seul mécanisme qui déclenche l'automation embarquée
         # sans écriture flash (setDeviceAutomationInOutLimit, cf. brief §5 point critique #1) —
-        # confirmé contre Hyper2000.charge/discharge dans l'intégration zendure_ha.
+        # confirmé contre Hyper2000.charge/discharge dans l'intégration zendure_ha. La forme
+        # de `argument` (autoModelValue, etc.) vient du profil d'appareil (device_profiles/),
+        # seule l'enveloppe (arguments/function/messageId/deviceKey/timestamp) est commune.
         payload = json.dumps(
             {
-                "arguments": [
-                    {
-                        "autoModelProgram": program,
-                        "autoModelValue": value,
-                        "msgType": 1,
-                        "autoModel": 8,
-                    }
-                ],
+                "arguments": [argument],
                 "function": "deviceAutomation",
                 "messageId": self._next_message_id(),
                 "deviceKey": self._conn["device_id"],
