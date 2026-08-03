@@ -159,9 +159,9 @@ $eqLogics = eqLogic::byType($plugin->getId());
                                 <label class="col-sm-4 control-label">{{Mode de connexion}}</label>
                                 <div class="col-sm-8">
                                     <select id="sel_mode_connexion" class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="mode_connexion">
-                                        <option value="cloud">{{Cloud (Chemin A — le seul validé en conditions réelles à ce jour)}}</option>
-                                        <option value="local">{{Local (Chemin B — abandonné, cf. docs/brief_chemin_b_local.md)}}</option>
+                                        <option value="cloud">{{Cloud}}</option>
                                     </select>
+                                    <span class="help-block" style="margin-bottom:0;">{{Chemin B (local) retiré de ce menu -- abandonné après plusieurs tentatives sans succès, cf. docs/brief_chemin_b_local.md. Le code transport reste en place si une nouvelle piste le rend viable un jour.}}</span>
                                 </div>
                             </div>
                             <div class="form-group">
@@ -221,39 +221,6 @@ $eqLogics = eqLogic::byType($plugin->getId());
                                         <input class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="cloud_client_id" placeholder="{{auto-généré si vide}}" />
                                         <span class="help-block" style="margin-bottom:0;">{{Laisser vide sauf besoin de diagnostic : certains brokers limitent la réception de télémétrie à un clientId précis lié au compte.}}</span>
                                     </div>
-                                </div>
-                            </fieldset>
-                        </div>
-
-                        <div id="bloc_local">
-                            <legend><i class="fas fa-network-wired"></i> {{Broker local (Chemin B)}}</legend>
-                            <fieldset>
-                                <div class="form-group">
-                                    <label class="col-sm-4 control-label">{{IP Mosquitto local}}</label>
-                                    <div class="col-sm-8">
-                                        <input class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="local_host" placeholder="192.168.1.50" />
-                                    </div>
-                                </div>
-                                <div class="form-group">
-                                    <label class="col-sm-4 control-label">{{Port}}</label>
-                                    <div class="col-sm-8">
-                                        <input type="number" class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="local_port" placeholder="1883" />
-                                    </div>
-                                </div>
-                                <div class="form-group">
-                                    <label class="col-sm-4 control-label">{{Identifiant (optionnel)}}</label>
-                                    <div class="col-sm-8">
-                                        <input class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="local_username" />
-                                    </div>
-                                </div>
-                                <div class="form-group">
-                                    <label class="col-sm-4 control-label">{{Mot de passe}}</label>
-                                    <div class="col-sm-8">
-                                        <input type="password" class="eqLogicAttr inputPassword form-control" data-l1key="configuration" data-l2key="local_password" />
-                                    </div>
-                                </div>
-                                <div class="alert alert-warning">
-                                    {{Prérequis Chemin B : relais DNS mq.zen-iot.com -> Mosquitto local + reconfiguration Bluetooth de l'appareil (Solarflow Bluetooth Manager / Zendure Cloud Disconnector). Voir README.}}
                                 </div>
                             </fieldset>
                         </div>
