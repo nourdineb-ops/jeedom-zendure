@@ -160,8 +160,9 @@ $eqLogics = eqLogic::byType($plugin->getId());
                                 <div class="col-sm-8">
                                     <select id="sel_mode_connexion" class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="mode_connexion">
                                         <option value="cloud">{{Cloud}}</option>
+                                        <option value="simulation">{{Simulation (aucun appareil requis)}}</option>
                                     </select>
-                                    <span class="help-block" style="margin-bottom:0;">{{Chemin B (local) retiré de ce menu -- abandonné après plusieurs tentatives sans succès, cf. docs/brief_chemin_b_local.md. Le code transport reste en place si une nouvelle piste le rend viable un jour.}}</span>
+                                    <span class="help-block" style="margin-bottom:0;">{{Chemin B (local) retiré de ce menu -- abandonné après plusieurs tentatives sans succès, cf. docs/brief_chemin_b_local.md. Le code transport reste en place si une nouvelle piste le rend viable un jour. Simulation : scénario synthétique de conso/production solaire généré par le démon, pour voir tourner la régulation anti-injection et le dashboard sans appareil réel ni broker MQTT -- capacité batterie reprise du champ "Capacité batterie" ci-dessous (onglet Stratégie nuit), 5kWh par défaut si vide.}}</span>
                                 </div>
                             </div>
                             <div class="form-group">
@@ -813,7 +814,6 @@ $(function () {
     $('#sel_mode_connexion').on('change', function () {
         var mode = $(this).val();
         $('#bloc_cloud').toggle(mode == 'cloud');
-        $('#bloc_local').toggle(mode == 'local');
     }).trigger('change');
 
     $('#sel_type_contrat').on('change', function () {

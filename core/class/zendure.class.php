@@ -295,6 +295,17 @@ class zendure extends eqLogic
             $conf['cloud_username'] = $this->getConfiguration('cloud_username');
             $conf['cloud_auth_key'] = $this->getConfiguration('cloud_auth_key');
             $conf['cloud_client_id'] = $this->getConfiguration('cloud_client_id');
+        } elseif ($mode == 'simulation') {
+            // Aucun réseau : scénario synthétique conso/PV côté démon (cf.
+            // transport/simulated_transport.py), pour voir tourner la boucle
+            // anti-injection/le dashboard/le calcul de gain sans appareil réel.
+            // Capacité batterie réutilisée depuis la config stratégie nuit
+            // existante (batterie_capacite_kwh) plutôt que dupliquée.
+            $conf['simulation'] = array(
+                'capacity_kwh' => (float) $this->getConfiguration('batterie_capacite_kwh', 5),
+                'cycle_period_s' => (int) $this->getConfiguration('simulation_cycle_period_s', 900),
+                'initial_soc' => (float) $this->getConfiguration('simulation_initial_soc', 50),
+            );
         } else {
             $conf['local_host'] = $this->getConfiguration('local_host');
             $conf['local_port'] = $this->getConfiguration('local_port', 1883);
