@@ -4,7 +4,9 @@ Aiguillage par config, pas par déploiement (brief §4/§11) : c'est le seul end
 où "cloud" et "local" divergent, sur les paramètres de connexion uniquement.
 """
 
+from .base import Transport
 from .mqtt_transport import MqttTransport
+from .simulated_transport import SimulatedTransport
 
 # Topics confirmés contre le code source de l'intégration Home Assistant zendure_ha
 # (custom_components/zendure_ha/device.py), en production sur ce même Hyper 2000.
@@ -16,8 +18,15 @@ DEFAULT_TOPIC_WRITE = "iot/{product_key}/{device_id}/properties/write"
 DEFAULT_TOPIC_READ = "iot/{product_key}/{device_id}/properties/read"
 
 
-def build_transport(eq_config: dict) -> MqttTransport:
+def build_transport(eq_config: dict) -> Transport:
     mode = eq_config["mode_connexion"]
+    if mode == "simulation":
+        # Pas de connexion réseau, pas de topics -- cf. simulated_transport.py.
+        # limit_max_w repris de la config anti-injection existante plutôt que
+        # dupliqué dans un bloc "simulation" séparé côté PHP.
+        sim_conf = dict(eq_config.get("simulation", {}))
+        sim_conf.setdefault("limit_max_w", eq_config.get("anti_injection", {}).get("limit_max_w"))
+        return SimulatedTransport(sim_conf)
     if mode == "cloud":
         conn = {
             "host": eq_config.get("cloud_host", "mqtteu.zen-iot.com"),

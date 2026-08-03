@@ -78,6 +78,17 @@ class Device:
         self._transport.on_telemetry(self._on_telemetry)
         self._transport.on_connection_change(self._on_connection_change)
         self._transport.on_connection_issue(self._on_connection_issue)
+        self._wire_simulated_grid_power()
+
+    # SimulatedTransport seul expose set_grid_power_sink (pas dans l'ABC Transport,
+    # cf. transport/simulated_transport.py) : en mode simulation il n'y a pas de
+    # pince réelle ni de listener Jeedom, le scénario synthétique du transport
+    # appelle donc on_grid_power() directement. getattr(..., None) plutôt qu'un
+    # isinstance pour ne rien connaître de SimulatedTransport ici.
+    def _wire_simulated_grid_power(self) -> None:
+        set_sink = getattr(self._transport, "set_grid_power_sink", None)
+        if set_sink is not None:
+            set_sink(self.on_grid_power)
 
     def start(self) -> None:
         self._transport.connect()
@@ -190,6 +201,7 @@ class Device:
             self._transport.on_telemetry(self._on_telemetry)
             self._transport.on_connection_change(self._on_connection_change)
             self._transport.on_connection_issue(self._on_connection_issue)
+            self._wire_simulated_grid_power()
             self._transport.connect()
 
     # logicalId (cf. zendure::ACTION_COMMANDS côté PHP) -> méthode Transport.

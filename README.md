@@ -36,6 +36,11 @@ pince (Zigbee/Zwave) --> listener PHP --> socket local --> démon Python
     Voir `docs/brief_chemin_b_local.md` pour le détail complet avant de
     retenter quoi que ce soit ici. Le plugin tourne en Cloud (A) + secours BLE
     lecture seule.
+  - **Simulation** — troisième mode (`transport/simulated_transport.py`), aucun
+    appareil ni broker requis. Un scénario synthétique conso/PV (généré côté démon,
+    "journée" compressée sur 15 min par défaut) pilote la même boucle
+    anti-injection/dashboard/calcul de gain qu'en réel. Pensé pour démontrer ou
+    tester le comportement de la régulation sans matériel.
 
 ## Chemin B (mode local) — historique, non fonctionnel actuellement
 
