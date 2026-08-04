@@ -31,7 +31,14 @@ perd sinon en remplaçant tout le HTML.
         max-width: 100%;
         border-radius: 10px;
         padding: 10px 14px;
-        color: var(--text-widget, #eee);
+        /* var(--txt-color, #333) : même variable/fallback que flux_widget.html et
+           zf_gauge/zf_money (validés en réel le 2026-07-25) -- l'ancien
+           var(--text-widget, #eee) référençait une variable CSS qui n'existe nulle
+           part dans Jeedom (grep core/css/*.css : aucune occurrence), le fallback
+           #eee (quasi blanc, pensé pour un fond sombre) s'appliquait donc toujours
+           et rendait le texte illisible sur le thème clair par défaut (constaté par
+           l'utilisateur le 2026-08-04, capture d'écran à l'appui). */
+        color: var(--txt-color, #333);
         font-size: 13px;
         box-sizing: border-box;
     }
@@ -74,7 +81,9 @@ perd sinon en remplaçant tout le HTML.
 
     .zendure-condense .zc-soc-bg {
         fill: none;
-        stroke: rgba(255, 255, 255, 0.12);
+        /* Gris neutre semi-transparent (pas blanc) : lisible sur fond clair
+           comme sombre, même correctif que le texte ci-dessus. */
+        stroke: rgba(127, 127, 127, 0.25);
         stroke-width: 3;
     }
 
@@ -118,7 +127,7 @@ perd sinon en remplaçant tout le HTML.
 
     .zendure-condense .zc-intensite {
         height: 4px;
-        background: rgba(255, 255, 255, 0.12);
+        background: rgba(127, 127, 127, 0.25);
         border-radius: 2px;
         margin-top: 8px;
         overflow: hidden;
