@@ -362,7 +362,15 @@ class zendure extends eqLogic
         // bien en interne, juste invisible dans le widget.
         $grid = (float) $this->getSourceOrDefault('src_grid_papp', 'grid_power');
         $injected = (float) $this->getSourceOrDefault('src_injection', 'injected_power');
-        $house = $grid + abs($injected);
+        // Signée, pas abs() : même formule que le widget Flux (déjà revue le
+        // 2026-07-25, cf. flux_widget.html) -- injected_power/outputHomePower ne
+        // peut structurellement pas être négatif côté appareil réel (retombe à 0
+        // en charge), donc abs() n'y changeait rien en pratique, mais gardait une
+        // fausse impression que ce champ pourrait être négatif. Root cause du
+        // "Maison" incohérent signalé le 2026-08-04 en simulation : pas ce abs(),
+        // mais un SimulatedTransport qui n'incarnait pas encore la vraie sémantique
+        // d'outputHomePower (solaire direct + décharge) -- corrigé côté simulation.
+        $house = $grid + $injected;
 
         $imax = $this->resolveImaxAmpere();
         $intensite = (float) $this->getConfiguredSourceValue('src_intensite');
@@ -1098,8 +1106,8 @@ class zendure extends eqLogic
      * Estime la consommation typique du foyer (kWh) sur la fenêtre horaire
      * [$startH, $endH[ (même jour, $startH < $endH), médiane glissante sur les
      * $days derniers jours d'historique réel. Même formule que le
-     * dashboard/l'anti-injection (house = grid + abs(injected), cf.
-     * toHtmlCondense()/cronOptimisationHP), pour rester cohérent avec ce que
+     * dashboard (house = grid + injected, cf. toHtmlCondense()),
+     * pour rester cohérent avec ce que
      * l'utilisateur voit déjà -- et parce que la puissance réellement tirée du
      * réseau ne suffit pas seule si la batterie a couvert une partie du besoin
      * ce jour-là (elle masquerait alors une partie de la conso réelle).
