@@ -19,7 +19,7 @@ de production, volontairement autonome et hors de zendure_daemon.py :
   anti-injection (qui écrirait potentiellement en flash toutes les 1-2s).
 
 Usage : resources/venv/bin/python3 resources/zendure_daemon/ble_probe.py
-        [--address 94:C9:60:C7:5F:EA] [--duration 120]
+        --address AA:BB:CC:DD:EE:FF [--duration 120]
 """
 
 import argparse
@@ -34,7 +34,6 @@ SERVICE_UUID = "0000a002-0000-1000-8000-00805f9b34fb"
 CHAR_WRITE = "0000c304-0000-1000-8000-00805f9b34fb"
 CHAR_NOTIFY = "0000c305-0000-1000-8000-00805f9b34fb"
 
-DEFAULT_ADDRESS = "94:C9:60:C7:5F:EA"  # eq_id 3689, confirmé via ManufacturerData == EE1LHMH1M370261
 
 
 def now_str() -> str:
@@ -181,7 +180,7 @@ class BleProbe:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--address", default=DEFAULT_ADDRESS)
+    parser.add_argument("--address", required=True, help="Adresse MAC BLE du boîtier (scan préalable ou app Zendure)")
     parser.add_argument("--duration", type=float, default=120.0, help="Durée du test en secondes")
     args = parser.parse_args()
 

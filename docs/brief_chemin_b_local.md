@@ -16,7 +16,7 @@ les mêmes approches sans lire ce document d'abord.
 - **Code du démon déjà complet pour `mode_connexion=local`**
   (`transport/factory.py`) : mêmes templates de topics que le cloud, même
   mécanisme de client_id. `local_host`/`local_port` déjà renseignés sur
-  l'eqLogic réel (`192.168.1.12:1883`) — il ne manque que le device qui se
+  l'eqLogic réel (`192.168.1.100:1883`) — il ne manque que le device qui se
   connecte réellement dessus.
 - **Le mécanisme BLE de bascule existe et est documenté** : intégration
   officielle `Zendure/Zendure-HA` (`custom_components/zendure_ha/device.py::bleMqtt()`),

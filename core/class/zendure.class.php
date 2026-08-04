@@ -600,6 +600,13 @@ class zendure extends eqLogic
             // démon (local_host requis, absent) si jamais atteint.
             $this->setConfiguration('mode_connexion', 'cloud');
         }
+        if ($this->getConfiguration('type_contrat', '') == '') {
+            // 'base' : seul contrat qui ne suppose rien (pas de tarif HP/HC ni
+            // Tempo souscrit) -- l'ancien défaut 'tempo' reflétait le contrat de
+            // l'auteur, pas un choix universel (plugin destiné à un public plus
+            // large que cette seule installation).
+            $this->setConfiguration('type_contrat', 'base');
+        }
     }
 
     public function postSave()
@@ -1032,7 +1039,7 @@ class zendure extends eqLogic
      */
     private function resolveHpWindow()
     {
-        $type = $this->getConfiguration('type_contrat', 'tempo');
+        $type = $this->getConfiguration('type_contrat', 'base');
         if ($type !== 'hphc' && $type !== 'tempo') {
             return array(0, 24);
         }
@@ -1281,7 +1288,7 @@ class zendure extends eqLogic
             throw new Exception('réponse open-dpe.fr inattendue (pas de clé "options") : ' . json_encode($json));
         }
 
-        $type = $this->getConfiguration('type_contrat', 'tempo');
+        $type = $this->getConfiguration('type_contrat', 'base');
         $updated = false;
 
         if ($type == 'base') {
@@ -1952,7 +1959,7 @@ class zendure extends eqLogic
      */
     private function isHeuresPleines()
     {
-        $type = $this->getConfiguration('type_contrat', 'tempo');
+        $type = $this->getConfiguration('type_contrat', 'base');
         if ($type == 'hphc') {
             $sourceKey = 'src_periode_tarif';
         } elseif ($type == 'tempo') {
@@ -1979,7 +1986,7 @@ class zendure extends eqLogic
      */
     private function currentTariffEurPerKwh()
     {
-        $type = $this->getConfiguration('type_contrat', 'tempo');
+        $type = $this->getConfiguration('type_contrat', 'base');
 
         if ($type == 'base') {
             return (float) $this->getConfiguration('tarif_base', 0);

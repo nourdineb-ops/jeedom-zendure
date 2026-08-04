@@ -31,17 +31,17 @@ dry-run par défaut et la vérification post-écriture (écoute du broker local)
 Usage :
     # 1. Dry-run (aucune connexion BLE, affiche juste ce qui serait envoyé) :
     python3 ble_switch_local_mqtt.py --address AA:BB:CC:DD:EE:FF \\
-        --host 192.168.1.12 --ssid MonWifi --password-file /chemin/vers/mdp.txt
+        --host 192.168.1.100 --ssid MonWifi --password-file /chemin/vers/mdp.txt
 
     # 2. Exécution réelle (écrit vraiment sur l'appareil) :
     python3 ble_switch_local_mqtt.py --address AA:BB:CC:DD:EE:FF \\
-        --host 192.168.1.12 --ssid MonWifi --password-file /chemin/vers/mdp.txt \\
+        --host 192.168.1.100 --ssid MonWifi --password-file /chemin/vers/mdp.txt \\
         --execute
 
     # 3. Vérifie ensuite (avec ou sans --execute juste avant) que le broker
     #    local voit vraiment passer de la télémétrie de l'appareil :
     python3 ble_switch_local_mqtt.py --verify-only --verify-seconds 60 \\
-        --product-key gDa3tb --device-id 3HbS2U4m
+        --product-key XXXXXX --device-id XXXXXXXX
 """
 
 import argparse
@@ -137,7 +137,7 @@ async def verify_local_broker(product_key: str, device_id: str, seconds: float) 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--address", help="Adresse MAC BLE de l'appareil (cf. config ble_address)")
-    parser.add_argument("--host", help="IP/hôte du broker MQTT local cible (ex. 192.168.1.12)")
+    parser.add_argument("--host", help="IP/hôte du broker MQTT local cible (ex. 192.168.1.100)")
     parser.add_argument("--ssid", help="SSID WiFi actuel de l'appareil (redemandé par le firmware)")
     parser.add_argument("--password-file", help="Fichier contenant le mot de passe WiFi (une ligne)")
     parser.add_argument("--execute", action="store_true", help="Écrit réellement sur l'appareil (sinon dry-run)")

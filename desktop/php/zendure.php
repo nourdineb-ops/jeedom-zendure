@@ -387,7 +387,7 @@ $eqLogics = eqLogic::byType($plugin->getId());
                         </div>
                         <label class="col-sm-3 control-label">{{Adresse MAC Bluetooth}}</label>
                         <div class="col-sm-3">
-                            <input type="text" class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="ble_address" placeholder="94:C9:60:C7:5F:EA" />
+                            <input type="text" class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="ble_address" placeholder="AA:BB:CC:DD:EE:FF" />
                         </div>
                     </div>
                     <div class="alert alert-info">
@@ -400,9 +400,9 @@ $eqLogics = eqLogic::byType($plugin->getId());
                         <label class="col-sm-3 control-label">{{Type de contrat}}</label>
                         <div class="col-sm-3">
                             <select id="sel_type_contrat" class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="type_contrat">
-                                <option value="base">{{Base}}</option>
+                                <option value="base" selected>{{Base}}</option>
                                 <option value="hphc">{{Heures Pleines / Heures Creuses}}</option>
-                                <option value="tempo" selected>{{Tempo}}</option>
+                                <option value="tempo">{{Tempo}}</option>
                             </select>
                         </div>
                         <label class="col-sm-3 control-label">{{Mise à jour auto (mensuelle)}}</label>
