@@ -41,7 +41,7 @@ Usage :
     # 3. Vérifie ensuite (avec ou sans --execute juste avant) que le broker
     #    local voit vraiment passer de la télémétrie de l'appareil :
     python3 ble_switch_local_mqtt.py --verify-only --verify-seconds 60 \\
-        --product-key gDa3tb --device-id 3HbS2U4m
+        --product-key XXXXXX --device-id XXXXXXXX
 """
 
 import argparse
