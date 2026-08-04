@@ -181,8 +181,14 @@ $eqLogics = eqLogic::byType($plugin->getId());
                                 <label class="col-sm-4 control-label">{{Modèle d'appareil}}</label>
                                 <div class="col-sm-8">
                                     <select class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="device_model">
-                                        <option value="hyper2000">{{Hyper 2000 (seul modèle supporté à ce jour)}}</option>
+                                        <option value="hyper2000">{{Hyper 2000 (testé en conditions réelles)}}</option>
+                                        <option value="hub1200">{{Hub 1200 (non testé -- dérivé du code source Home Assistant)}}</option>
+                                        <option value="hub2000">{{Hub 2000 (non testé -- dérivé du code source Home Assistant)}}</option>
+                                        <option value="aio2400">{{AIO 2400 (non testé -- dérivé du code source Home Assistant)}}</option>
+                                        <option value="superbasev4600">{{SuperBase V4600 (non testé -- dérivé du code source Home Assistant)}}</option>
+                                        <option value="superbasev6400">{{SuperBase V6400 (non testé -- dérivé du code source Home Assistant)}}</option>
                                     </select>
+                                    <span class="help-block" style="margin-bottom:0;">{{Seul le Hyper 2000 a été validé contre un appareil réel sur ce projet -- les autres profils sont dérivés de la lecture du code source de l'intégration Home Assistant Zendure-HA, jamais vérifiés en conditions réelles (cf. resources/zendure_daemon/device_profiles/). ACE1500 et la famille SolarFlow (800/1600/2400/4000) ne sont pas supportés du tout : mécanisme de pilotage trop différent (nécessite soit un Hub Zendure physique, soit un protocole distinct).}}</span>
                                 </div>
                             </div>
                         </fieldset>
