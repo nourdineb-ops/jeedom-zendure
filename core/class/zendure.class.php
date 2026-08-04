@@ -258,7 +258,10 @@ class zendure extends eqLogic
             'urgent_injection_w' => $this->getConfiguration('urgent_injection_w', -20),
         );
 
-        $mode = $this->getConfiguration('mode_connexion', 'local');
+        // Fallback 'cloud' (pas 'local', retiré de l'IHM, cf. ensureDefaultConfiguration()) :
+        // ne devrait jamais servir en pratique puisque preSave() persiste déjà la valeur dès
+        // la création, gardé pour les eqLogics existants créés avant ce correctif.
+        $mode = $this->getConfiguration('mode_connexion', 'cloud');
         $conf = array(
             'eq_id' => $this->getId(),
             'device_id' => $this->getConfiguration('device_id'),
@@ -533,6 +536,41 @@ class zendure extends eqLogic
 
     public function preSave()
     {
+        $this->ensureDefaultConfiguration();
+    }
+
+    /**
+     * Persiste explicitement en base les valeurs par défaut des réglages IHM/
+     * connexion, plutôt que de compter uniquement sur le 2e argument de
+     * getConfiguration() ailleurs dans le code. Sans ça, un eqLogic tout juste
+     * créé (configuration vide, avant que l'utilisateur n'ouvre/enregistre un
+     * onglet) a ces clés absentes en base : le rendu dashboard "Condensé" reste
+     * correct grâce au fallback code, mais le <select> IHM apparaît vide/non
+     * pré-sélectionné côté formulaire (rien à afficher tant que la clé n'existe
+     * pas), et certains rendus dépendant de la présence réelle de la config
+     * peuvent rester incomplets jusqu'au premier enregistrement manuel de cet
+     * onglet (constaté par l'utilisateur le 2026-08-04). Appelé depuis preSave()
+     * (avant l'INSERT/UPDATE, cf. DB::save()) pour que ces valeurs fassent partie
+     * du tout premier enregistrement, sans save() supplémentaire ni risque de
+     * récursion. N'écrase jamais un choix explicite de l'utilisateur (vérifie
+     * qu'la clé est bien absente, pas juste "fausse"/0).
+     */
+    private function ensureDefaultConfiguration()
+    {
+        if ($this->getConfiguration('template_dashboard', '') == '') {
+            $this->setConfiguration('template_dashboard', 'condense');
+        }
+        if ($this->getConfiguration('animations_actives', '') == '') {
+            $this->setConfiguration('animations_actives', 1);
+        }
+        if ($this->getConfiguration('mode_connexion', '') == '') {
+            // 'cloud' : seul mode encore proposé dans le menu de connexion avec
+            // 'simulation' (Chemin B/local retiré de l'IHM, cf. commit 552b440) --
+            // l'ancien défaut 'local' d'ailleurs codé dans toDaemonConfig() n'est
+            // plus jamais sélectionnable et ferait planter build_transport() côté
+            // démon (local_host requis, absent) si jamais atteint.
+            $this->setConfiguration('mode_connexion', 'cloud');
+        }
     }
 
     public function postSave()
