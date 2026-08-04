@@ -66,11 +66,27 @@ perd sinon en remplaçant tout le HTML.
         gap: 12px;
     }
 
+    .zendure-condense .zc-soc-wrap {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 2px;
+        flex: 0 0 auto;
+    }
+
     .zendure-condense .zc-soc-ring {
         position: relative;
         width: 72px;
         height: 72px;
         flex: 0 0 auto;
+    }
+
+    .zendure-condense .zc-soc-label,
+    .zendure-condense .zc-intensite-label {
+        font-size: 9.5px;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+        opacity: 0.65;
     }
 
     .zendure-condense .zc-soc-ring svg {
@@ -143,20 +159,50 @@ perd sinon en remplaçant tout le HTML.
         text-align: right;
         opacity: 0.85;
     }
+
+    .zendure-condense .zc-offline-badge {
+        display: none;
+        font-size: 10px;
+        font-weight: 600;
+        color: #ff3b30;
+        border: 1px solid currentColor;
+        border-radius: 4px;
+        padding: 0 4px;
+    }
+
+    /* .zc-offline (posée par ##OFFLINE_CLASS##, cf. toHtmlCondense()) : seul
+       signal actuellement dispo (transport_connected) -- fait apparaître le
+       badge et estompe le reste de la tuile, plutôt que d'afficher des
+       valeurs qui datent potentiellement d'une dernière connexion ancienne
+       sans le signaler. */
+    .zendure-condense.zc-offline .zc-offline-badge {
+        display: inline-block;
+    }
+
+    .zendure-condense.zc-offline .zc-body,
+    .zendure-condense.zc-offline .zc-intensite-label,
+    .zendure-condense.zc-offline .zc-intensite,
+    .zendure-condense.zc-offline .zc-footer {
+        opacity: 0.45;
+    }
 </style>
-<div class="zendure-condense ##ANIMATIONS_CLASS##" data-eqid="##EQ_ID##">
+<div class="zendure-condense ##ANIMATIONS_CLASS## ##OFFLINE_CLASS##" data-eqid="##EQ_ID##">
     <div class="zc-header">
         <a class="zc-name" href="##EQ_LINK##">##NAME##</a>
+        <span class="zc-offline-badge">Hors ligne</span>
         <span class="zc-mode">##MODE##</span>
     </div>
 
     <div class="zc-body">
-        <div class="zc-soc-ring" style="--zc-soc:##SOC##">
-            <svg viewBox="0 0 36 36">
-                <path class="zc-soc-bg" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
-                <path class="zc-soc-fg" stroke-dasharray="##SOC##, 100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
-            </svg>
-            <div class="zc-soc-value">##SOC##%</div>
+        <div class="zc-soc-wrap">
+            <div class="zc-soc-ring" style="--zc-soc:##SOC##">
+                <svg viewBox="0 0 36 36">
+                    <path class="zc-soc-bg" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                    <path class="zc-soc-fg" stroke-dasharray="##SOC##, 100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                </svg>
+                <div class="zc-soc-value">##SOC##%</div>
+            </div>
+            <span class="zc-soc-label">SOC batterie</span>
         </div>
 
         <ul class="zc-flux">
@@ -167,6 +213,7 @@ perd sinon en remplaçant tout le HTML.
         </ul>
     </div>
 
+    <div class="zc-intensite-label">Intensité : ##INTENSITE_A## A / ##IMAX_A## A max (##INTENSITE_PCT##%)</div>
     <div class="zc-intensite">
         <div class="zc-intensite-bar" style="width:##INTENSITE_PCT##%;background:##INTENSITE_COLOR##"></div>
     </div>
