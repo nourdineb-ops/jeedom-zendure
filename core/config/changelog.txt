@@ -1,5 +1,28 @@
 = 0.1.0-dev =
-* Structure initiale du plugin (scaffold).
-* Démon Python : abstraction transport Cloud (A) / Local (B), boucle rapide anti-injection.
-* eqLogic Zendure : commandes info/action, listener pince ampèremétrique.
-* Dashboard "Condensé" (v1). Dashboards "Flux" et "Historique" à venir.
+* Connexion Cloud au broker MQTT Zendure, protocole confirmé en conditions réelles
+  (topics, deviceAutomation, properties/write) contre un Hyper 2000.
+* Boucle rapide anti-injection temps réel (double sens injection/import, chacun
+  avec sa propre cadence et ses garde-fous) pilotant la limite de sortie via le
+  mécanisme d'automation embarqué de l'appareil (jamais d'écriture flash).
+* Stratégie de charge nocturne : modèle en kWh réels (consommation typique du
+  foyer sur la fenêtre HP, prévision solaire du lendemain), avec repli
+  automatique sur une logique à seuils fixes si l'historique est insuffisant.
+* Calcul du gain (€) au jour le jour, tarifs Base / Heures Pleines-Creuses /
+  Tempo, mise à jour mensuelle automatique optionnelle des prix.
+* Deux dashboards : "Condensé" (tuile compacte, anneau SOC) et "Flux" (diagramme
+  animé Solaire/Réseau/Maison/Batterie avec curseurs de pilotage directs).
+  "Historique" pas encore implémenté.
+* Mode de connexion "Simulation" : scénario synthétique de consommation/
+  production solaire pilotant la même boucle anti-injection et les mêmes
+  dashboards, sans appareil ni broker MQTT requis.
+* Secours de télémétrie par Bluetooth (BLE, lecture seule) quand la connexion
+  MQTT/cloud devient muette.
+* Détection et gestion des reconnexions MQTT en rafale (flap detection +
+  backoff), alertes utilisateur Jeedom en cas de coupure prolongée.
+* Onglet Sources : toutes les entrées externes (pince, tarif, prévision solaire)
+  se configurent via le sélecteur de commande natif Jeedom, aucun identifiant en
+  dur.
+* Multi-équipement : plusieurs Hyper 2000 gérables sur une même installation,
+  chacun isolé (connexion, régulation, config).
+* Widget de commande natif "Commandes" (table standard Jeedom) pour l'ensemble
+  des ~230 commandes curées et brutes générées par équipement.

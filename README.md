@@ -1,11 +1,59 @@
 # Plugin Jeedom — Zendure
 
-Pilotage direct d'une batterie **Zendure Hyper 2000** depuis Jeedom, sans passer par
-Home Assistant. Objectif produit : zéro-injection (ne jamais injecter dans
-l'arrivée maison), avec une boucle de régulation rapide au plus près du matériel.
+Pilotage direct d'une batterie **Zendure Hyper 2000** depuis [Jeedom](https://www.jeedom.com/),
+sans passer par Home Assistant. Objectif principal : **zéro-injection** (ne jamais
+injecter dans le réseau public), avec une boucle de régulation temps réel au plus
+près du matériel.
 
-> Statut : squelette initial (v0.1.0-dev), non testé sur une installation Jeedom
-> réelle. Voir [Points ouverts](#points-ouverts-à-confirmer-avant-de-figer).
+## Fonctionnalités
+
+- **Anti-injection en temps réel** : régule en continu la limite de sortie de la
+  batterie pour absorber juste ce qu'il faut, jamais plus, à partir de la mesure
+  d'une pince/compteur externe.
+- **Stratégie de charge nocturne** : cible de charge calculée à partir de la
+  consommation habituelle du foyer et de la prévision solaire du lendemain (modèle
+  en kWh réels), avec repli automatique sur une logique à seuils fixes si
+  l'historique est insuffisant.
+- **Calcul de gain (€)** au jour le jour, compatible tarifs Base / HP-HC / Tempo.
+- **Deux dashboards** : une tuile compacte ("Condensé") et un diagramme de flux
+  animé ("Flux") avec curseurs de pilotage directs.
+- **Mode simulation** intégré : découvrez ou testez le comportement de la
+  régulation sans aucun appareil ni broker MQTT — un scénario synthétique de
+  consommation/production solaire pilote exactement la même boucle qu'en réel.
+- Aucune valeur de comportement en dur : tout se configure depuis l'IHM Jeedom
+  (voir [Configuration](#configuration--configuration-over-code)).
+
+## Compatibilité
+
+- **Modèle d'appareil** : seul le **Hyper 2000** est supporté à ce jour (le
+  mécanisme de pilotage diffère réellement d'un modèle Zendure à l'autre).
+- **Tarifs Heures Pleines/Creuses et Tempo** : spécificités du marché français
+  (EDF/Linky) — nécessitent une source externe (ex. plugin Téléinfo, RTE Tempo).
+  Le contrat **Base** fonctionne partout sans rien de plus.
+- **Prévision solaire** (stratégie nuit) : nécessite un plugin externe type
+  Solcast. Sans lui, la stratégie nuit retombe sur une logique dégradée à seuils
+  fixes.
+
+Détail complet de chaque réglage : [`docs/documentation_utilisateur.md`](docs/documentation_utilisateur.md).
+
+## Installation
+
+1. Installer le plugin dans Jeedom (market, ou dépôt Git depuis Réglages →
+   Plugins → Gérer les plugins → Ajouter depuis une archive/un dépôt).
+2. Depuis la page du plugin, cliquer sur "Installer les dépendances" — crée un
+   environnement Python isolé (`resources/venv/`) et installe les paquets du
+   démon (`resources/zendure_daemon/requirements.txt`), sans rien toucher au
+   Python système.
+3. Créer un équipement Zendure, renseigner `device_id`/`product_key` (voir
+   [Compatibilité](docs/documentation_utilisateur.md#compatibilité--prérequis)
+   pour savoir où les trouver), et choisir le mode de connexion Cloud.
+4. Configurer au minimum une source "PAPP réseau" (onglet Sources) — c'est
+   l'entrée de la boucle anti-injection, sans elle le pilotage automatique ne
+   peut pas fonctionner.
+
+Pas d'appareil sous la main, ou juste envie de voir comment ça se comporte ?
+Choisissez le mode de connexion **Simulation** à l'étape 3 : aucun matériel ni
+identifiant requis.
 
 ## Architecture en un coup d'œil
 
@@ -14,138 +62,73 @@ pince (Zigbee/Zwave) --> listener PHP --> socket local --> démon Python
                                                               |
                                                     décision anti-injection
                                                               |
-                                                   MQTT (Cloud A ou Local B)
+                                                       MQTT (cloud Zendure)
                                                               |
                                                        Zendure Hyper 2000
 ```
 
-- **Boucle rapide** (démon Python, `resources/zendure_daemon/`) : régulation continue
-  de la limite de sortie via `setDeviceAutomationInOutLimit` (jamais d'écriture flash).
-  C'est la garantie zéro-injection.
-- **Boucle lente** (scénario Jeedom ou config quotidienne) : stratégie économique
-  (SOC cible nocturne selon Tempo J+1, prévision solaire). Hors périmètre de ce plugin
-  pour l'instant.
-- **Transport** : deux modes configurables par eqLogic (`mode_connexion`), même code
-  MQTT (`transport/mqtt_transport.py`), seuls les paramètres de connexion changent :
-  - **Cloud (A)** : broker `mqtt-eu.zen-iot.com:1883` + Clé Cloud d'Autorisation.
-    Simple, mais latence télémétrie ~90s côté cloud communautaire — **incompatible
-    avec un zéro-injection strict**.
-  - **Local (B)** — cible initiale v1, **abandonnée pour l'instant** (2026-07-29) :
-    trois tentatives concrètes de bascule vers un broker local (BLE, deux radios
-    différentes, signal fort et faible) toutes sans effet confirmé sur l'appareil.
-    Voir `docs/brief_chemin_b_local.md` pour le détail complet avant de
-    retenter quoi que ce soit ici. Le plugin tourne en Cloud (A) + secours BLE
-    lecture seule.
-  - **Simulation** — troisième mode (`transport/simulated_transport.py`), aucun
-    appareil ni broker requis. Un scénario synthétique conso/PV (généré côté démon,
-    "journée" compressée sur 15 min par défaut) pilote la même boucle
-    anti-injection/dashboard/calcul de gain qu'en réel. Pensé pour démontrer ou
-    tester le comportement de la régulation sans matériel.
-
-## Chemin B (mode local) — historique, non fonctionnel actuellement
-
-L'infrastructure est prête côté Jeedom (broker Mosquitto local déjà
-disponible, code du démon déjà complet pour `mode_connexion = local`), mais
-**aucun mécanisme fiable n'a été trouvé pour faire basculer l'appareil
-lui-même vers ce broker** : ni la reconfiguration BLE (`token`/`station`,
-reprise du code source de `Zendure-HA`) ni le pilotage BLE direct
-(`deviceAutomation`) n'ont d'effet confirmé, sur trois tentatives distinctes
-et deux configurations radio différentes. Détail complet, hypothèses
-éliminées et pistes restantes (jamais testées, effort différent) :
-`docs/brief_chemin_b_local.md`.
+- **Boucle rapide** (démon Python, `resources/zendure_daemon/`) : régulation
+  continue de la limite de sortie via le mécanisme d'automation embarqué de
+  l'appareil (jamais d'écriture flash) — c'est la garantie zéro-injection.
+- **Boucle lente** (cron Jeedom quotidien) : stratégie économique (SOC cible
+  nocturne selon le tarif du lendemain, prévision solaire).
+- **Transport** : trois modes configurables par équipement (`mode_connexion`),
+  cf. `resources/zendure_daemon/transport/` :
+  - **Cloud** : broker MQTT cloud Zendure + identifiants de session. Mode de
+    référence, seul validé contre du matériel réel à ce jour.
+  - **Simulation** : aucun réseau, un scénario synthétique conso/PV pilote la
+    même boucle anti-injection/dashboard/calcul de gain.
+  - **Local** (mode local via un broker Mosquitto sur site) : code présent mais
+    **non fonctionnel actuellement** — voir
+    [`docs/brief_chemin_b_local.md`](docs/brief_chemin_b_local.md) pour l'historique
+    complet des tentatives avant d'y retoucher.
 
 ## Configuration (« configuration over code »)
 
 Aucune valeur de comportement, endpoint ou seuil n'est en dur dans le code — tout
 descend de la config Jeedom, sur trois étages :
 
-1. **Transport** (par eqLogic) : mode cloud/local, credentials, IP/port.
-2. **Sources** (par eqLogic) : chaque donnée d'entrée (pince, PAPP, Tempo, prévision
-   solaire...) est un sélecteur de commande Jeedom, jamais un ID en dur.
-3. **Comportement** (par eqLogic) : marge anti-injection, cooldown, hystérésis,
-   limites W, tarifs, seuils de jauge.
+1. **Transport** (par équipement) : mode cloud/simulation, credentials.
+2. **Sources** (par équipement) : chaque donnée d'entrée (pince, PAPP, tarif,
+   prévision solaire...) est un sélecteur de commande Jeedom, jamais un ID en dur.
+3. **Comportement** (par équipement) : marge anti-injection, cooldown, limites W,
+   tarifs, seuils de jauge.
 
 Le démon relit sa config à chaud sur signal (pas de redémarrage nécessaire pour
-changer un seuil).
+changer un seuil). Détail onglet par onglet : [`docs/documentation_utilisateur.md`](docs/documentation_utilisateur.md).
 
-## Parité de commandes (migration Home Assistant)
-
-| Rôle | Ancien ID (HA) | Nouvelle commande plugin |
-|---|---|---|
-| Mode input/output | `#26879#` | action `set_mode` |
-| Limite sortie W | `#26781#` | action `set_output_limit` |
-| SOC cible | `#26784#` | action `set_soc_min` |
-| Prévision kWh | `#26882#` | info `forecast_today_kwh` |
-| Injecté W | `#26768#` | info `injected_power` |
-| PAPP | `#26868#` | source `src_grid_papp` (Étage 2) |
-| Tempo now / J+1 / J | `#17848#` / `#15453#` / `#15452#` | sources `src_tempo_now` / `src_tempo_j1` / `src_tempo_j` |
-
-## Structure du plugin
+## Structure du dépôt
 
 ```
 plugin_info/info.json          métadonnées plugin
-core/class/zendure.class.php   eqLogic + cmd, listener pince, dashboard "Condensé"
+core/class/zendure.class.php   eqLogic + cmd, listener pince, dashboards
 core/ajax/zendure.ajax.php     sélecteur de commande (cmdList)
 core/php/callback.php          canal retour démon -> Jeedom (télémétrie)
-core/template/dashboard/       templates dashboard (condense livré ; flux/historique à venir)
+core/template/dashboard/       templates dashboard (Condensé, Flux)
 desktop/php/config.php         config plugin globale (défauts)
-desktop/php/zendure.php        config eqLogic (3 étages)
+desktop/php/zendure.php        config par équipement (3 étages)
 resources/zendure_daemon/      démon Python (transport, régulation, socket, callback)
-resources/install.sh           venv + pip install
+resources/install.sh           venv + pip install (appelé par Jeedom)
+docs/documentation_utilisateur.md   documentation utilisateur complète
+docs/brief_*.md                 notes de conception techniques (historique)
 ```
 
-## Points ouverts (à confirmer avant de figer)
+## Limitations connues
 
-- ~~Structure réelle des topics/payload MQTT du Hyper 2000~~ **Confirmée en conditions
-  réelles** (Chemin A, cloud `mqtteu.zen-iot.com`, HA temporairement coupé pour éviter
-  tout conflit de session sur le compte) :
-  - Télémétrie : topic **sans** préfixe `iot/` (`/{productKey}/{deviceId}/properties/report`),
-    alors que les commandes/lectures utilisent le préfixe `iot/`. Souscription double-préfixe
-    implémentée dans `mqtt_transport.py`.
-  - **Validé en direct, effet réel observé sur la télémétrie** : `output_limit` (décharge,
-    `function/invoke`+`deviceAutomation`), `mode`/`acMode` et `soc_min`/`minSoc`
-    (`properties/write`).
-  - ~~`input_limit` (charge) : commande acceptée mais ne déclenche aucune charge
-    réelle~~ **Confirmé et corrigé le 2026-07-22** : ce n'était pas un problème de
-    payload MQTT (le payload `set_input_limit`/`_publish_automation(program=1, ...)`
-    était déjà correct, aligné sur `Hyper2000.charge()` de `zendure_ha`) mais un bug
-    d'appelant — `runStrategieNuit()` (`zendure.class.php`) basculait `acMode=1`
-    (charge, `properties/write`) puis envoyait `set_output_limit(0)`, c'est-à-dire
-    l'automation **DÉCHARGE** (`autoModelProgram=2`) réglée sur 0W, jamais
-    l'automation **CHARGE** (`autoModelProgram=1`). Charge et décharge sont deux
-    programmes d'automation mutuellement exclusifs côté appareil (un seul actif à la
-    fois) : sans jamais envoyer le programme charge, l'appareil restait sur son
-    dernier programme réel (décharge à 0W) quelle que soit la valeur de `acMode` —
-    d'où le blocage total des flux observé. Corrigé en appelant `set_input_limit`
-    (nouvelle config `charge_power_nuit_w`, défaut 1200W) au lieu de
-    `set_output_limit(0)`.
-  - `outputLimit` (valeur de config) a dérivé spontanément pendant les tests sans
-    action de notre part (350→285) — ce n'est pas un plafond figé, il y a une logique
-    interne au device pas encore comprise ; ne pas s'y fier comme miroir temps réel,
-    préférer `outputHomePower` pour observer l'effet réel d'une commande.
-  - Credentials cloud réels obtenus via `.storage/zendure_ha.storage` sur l'install HA
-    (compte partagé `zenHa`, lié à un `clientId` précis) — pas une clé par appareil
-    comme supposé initialement. Rejouer ce Chemin A **en parallèle** de HA (même
-    compte) provoque un conflit de session ; à trancher avant la mise en prod finale
-    (couper HA définitivement, ou obtenir des credentials indépendants).
-- ~~Signature exacte de la classe `listener` du core Jeedom~~ **Confirmée et
-  corrigée** contre `core/class/listener.class.php` (VM) et l'usage réel dans
-  `plugins/alarm` du core — voir `zendure.class.php::registerGridPowerListener`.
-- Convention exacte des templates de dashboard custom (`core/template/dashboard/`) —
-  implémenté ici via `eqLogic::toHtml()` surchargé (extension point standard et sûr),
-  à confirmer si une convention native de fichiers existe et serait préférable.
-- Intervalle de reporting réel de la pince Zigbee/Zwave (borne le zéro-injection).
-- Mono/triphasé : mono par défaut, à confirmer sur l'installation réelle.
-- Formule de gain Zendure : reprise de l'ancien scénario en v1, pas de réinvention.
+- Dashboard "Historique" pas encore implémenté (retombe sur l'affichage
+  générique Jeedom, sans plantage).
+- Mode de connexion local (broker MQTT sur site) non fonctionnel — voir
+  [`docs/brief_chemin_b_local.md`](docs/brief_chemin_b_local.md).
+- Un seul modèle d'appareil supporté (Hyper 2000).
+- Multi-équipement géré pour des installations indépendantes ; deux Zendure
+  partageant la même mesure réseau ne se répartissent pas la correction
+  anti-injection entre eux.
 
-## Références à lire
+## Références
 
 - `iobroker.zendure-solarflow` (Nograx) — npmjs.com/package/iobroker.zendure-solarflow
 - `reinhard-brandstaedter/solarflow-control` (GitHub)
 - `Zendure/developer-device-data-report` (GitHub)
+- `Zendure/Zendure-HA` — intégration Home Assistant officielle (référence pour le
+  protocole MQTT/BLE)
 - `doc.jeedom.com/fr_FR/dev/` — doc développeur plugin Jeedom
-
-## Déploiement
-
-Développement sur ce dépôt Git local (Mac), déploiement vers la VM Jeedom (production)
-via un script rsync (à ajouter, ex. `scripts/deploy.sh`).
