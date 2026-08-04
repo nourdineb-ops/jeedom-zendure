@@ -25,8 +25,13 @@ près du matériel.
 
 ## Compatibilité
 
-- **Modèle d'appareil** : seul le **Hyper 2000** est supporté à ce jour (le
-  mécanisme de pilotage diffère réellement d'un modèle Zendure à l'autre).
+- **Modèle d'appareil** : **Hyper 2000** validé en conditions réelles. Hub 1200,
+  Hub 2000, AIO 2400, SuperBase V4600/V6400 ont un profil de pilotage
+  (`resources/zendure_daemon/device_profiles/`) dérivé du code source de
+  l'intégration Home Assistant `Zendure/Zendure-HA`, mais **jamais testés contre
+  un appareil réel** — à considérer comme un point de départ, pas une garantie.
+  ACE1500 et la famille SolarFlow (800/1600/2400/4000) ne sont pas supportés
+  (mécanisme de pilotage trop différent).
 - **Tarifs Heures Pleines/Creuses et Tempo** : spécificités du marché français
   (EDF/Linky) — nécessitent une source externe (ex. plugin Téléinfo, RTE Tempo).
   Le contrat **Base** fonctionne partout sans rien de plus.
@@ -119,16 +124,30 @@ docs/brief_*.md                 notes de conception techniques (historique)
   générique Jeedom, sans plantage).
 - Mode de connexion local (broker MQTT sur site) non fonctionnel — voir
   [`docs/brief_chemin_b_local.md`](docs/brief_chemin_b_local.md).
-- Un seul modèle d'appareil supporté (Hyper 2000).
+- Seul le Hyper 2000 est validé contre un appareil réel — les autres profils
+  (Hub 1200/2000, AIO 2400, SuperBase V4600/V6400) n'ont jamais été testés.
+  ACE1500 et la famille SolarFlow ne sont pas supportés du tout.
 - Multi-équipement géré pour des installations indépendantes ; deux Zendure
   partageant la même mesure réseau ne se répartissent pas la correction
   anti-injection entre eux.
 
-## Références
+## Remerciements / Sources
 
-- `iobroker.zendure-solarflow` (Nograx) — npmjs.com/package/iobroker.zendure-solarflow
-- `reinhard-brandstaedter/solarflow-control` (GitHub)
-- `Zendure/developer-device-data-report` (GitHub)
-- `Zendure/Zendure-HA` — intégration Home Assistant officielle (référence pour le
-  protocole MQTT/BLE)
+Le protocole MQTT/BLE Zendure (topics, payload `deviceAutomation`, différences
+entre modèles) n'étant pas documenté publiquement par Zendure, ce plugin s'appuie
+sur la lecture du code source de projets communautaires qui l'ont déjà
+reverse-engineered :
+
+- **[`Zendure/Zendure-HA`](https://github.com/Zendure/Zendure-HA)** (licence MIT,
+  © peteS-UK et contributeurs) — source principale : structure des topics MQTT,
+  forme exacte du payload `deviceAutomation` par modèle (`custom_components/
+  zendure_ha/devices/`), facteur d'échelle x10 sur `minSoc`/`socSet`, réglages de
+  connexion MQTT cloud. Les profils d'appareil de ce plugin
+  (`resources/zendure_daemon/device_profiles/`) sont directement dérivés de cette
+  intégration.
+- [`iobroker.zendure-solarflow`](https://npmjs.com/package/iobroker.zendure-solarflow) (Nograx)
+- [`reinhard-brandstaedter/solarflow-control`](https://github.com/reinhard-brandstaedter/solarflow-control)
+- [`Zendure/developer-device-data-report`](https://github.com/Zendure/developer-device-data-report)
 - `doc.jeedom.com/fr_FR/dev/` — doc développeur plugin Jeedom
+
+Ce plugin a été développé avec l'assistance d'une intelligence artificielle.

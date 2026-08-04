@@ -6,10 +6,13 @@ réseau public (anti-injection).
 
 ## Compatibilité / prérequis
 
-- **Modèle d'appareil** : seul le **Hyper 2000** est supporté à ce jour. Le
-  mécanisme de pilotage (charge/décharge) diffère réellement d'un modèle Zendure à
-  l'autre (Hub, ACE1500...) — utiliser ce plugin avec un autre modèle ne pilotera
-  probablement rien, même si la télémétrie s'affiche.
+- **Modèle d'appareil** : **Hyper 2000** validé en conditions réelles. Hub 1200,
+  Hub 2000, AIO 2400, SuperBase V4600/V6400 ont un profil de pilotage dérivé du
+  code source de l'intégration Home Assistant `Zendure/Zendure-HA`, mais jamais
+  testés contre un appareil réel — voir l'onglet Équipement pour le détail.
+  ACE1500 et la famille SolarFlow (800/1600/2400/4000) ne sont pas supportés :
+  leur mécanisme de pilotage diffère trop (nécessite un Hub Zendure physique ou
+  un protocole entièrement différent).
 - **Identifiants appareil** (`device_id`/`product_key`) : identifiants internes
   Zendure de votre Hyper 2000, pas le numéro de série visible sur l'étiquette. Ils
   ne sont pas exposés par l'app officielle — la façon la plus fiable de les
@@ -53,7 +56,9 @@ réseau public (anti-injection).
     anti-injection et le même dashboard qu'en conditions réelles — utile pour
     découvrir le plugin ou tester un réglage sans matériel.
 - **Identifiant appareil (device_id) / Product key** : voir "Compatibilité" ci-dessus.
-- **Modèle d'appareil** : un seul supporté à ce jour, le Hyper 2000.
+- **Modèle d'appareil** : Hyper 2000 (validé), Hub 1200/2000, AIO 2400, SuperBase
+  V4600/V6400 (profils dérivés du code source Home Assistant, jamais testés
+  contre un appareil réel — voir "Compatibilité" en tête de doc).
 - **Identifiants Cloud** (visibles seulement en mode Cloud) : le nom
   d'utilisateur/mot de passe MQTT ne sont **pas** le compte de l'app Zendure — ce
   sont des identifiants de session MQTT (obtenus par ex. en récupérant ceux
