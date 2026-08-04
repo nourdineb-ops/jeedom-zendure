@@ -348,12 +348,19 @@ class zendure extends eqLogic
         // démon pas encore connecté au vrai appareil) renvoie '' via execCmd(), et
         // PHP 8 refuse l'arithmétique sur une chaîne non numérique ('' + '' fatal).
         $solar = (float) $this->getCmdValue('solar_power');
-        // "Réseau" = la vraie mesure externe (pince/PAPP Linky), pas la télémétrie
-        // interne Zendure (grid_power/gridInputPower, qui ne reflète que ce que le
-        // boîtier Zendure lui-même tire du réseau, souvent 0 en décharge) — corrigé
-        // suite à un écart constaté avec la vraie pince EDF (~330-350W affichés,
-        // 0W avant correction).
-        $grid = (float) $this->getConfiguredSourceValue('src_grid_papp');
+        // "Réseau" = la vraie mesure externe (pince/PAPP Linky) en priorité, pas la
+        // télémétrie interne Zendure (grid_power/gridInputPower, qui ne reflète que
+        // ce que le boîtier Zendure lui-même tire du réseau, souvent 0 en décharge)
+        // — corrigé suite à un écart constaté avec la vraie pince EDF (~330-350W
+        // affichés, 0W avant correction). Repli sur le curated grid_power (comme
+        // injected_power ci-dessous) si src_grid_papp n'est pas configurée : sans
+        // ça, "Réseau"/"Maison" restaient figés à 0W en permanence sur tout eqLogic
+        // sans pince réelle configurée -- notamment le mode simulation, qui n'a par
+        // nature aucune pince externe à configurer et où grid_power EST la valeur de
+        // référence (pas un écho approximatif du boîtier). Signalé le 2026-08-04 :
+        // la simulation semblait ne "rien faire" alors que le régulateur réagissait
+        // bien en interne, juste invisible dans le widget.
+        $grid = (float) $this->getSourceOrDefault('src_grid_papp', 'grid_power');
         $injected = (float) $this->getSourceOrDefault('src_injection', 'injected_power');
         $house = $grid + abs($injected);
 
