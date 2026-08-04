@@ -45,12 +45,16 @@ class SimulatedTransport(Transport):
         self._smart_mode = False
         self._soc_min = 0
         self._soc_max = 100
-        # Puissance réellement "délivrée" par le faux appareil, avec un peu d'inertie
-        # vers la limite commandée (cf. _tick) -- jamais un saut instantané, comme un
-        # vrai appareil qui met quelques secondes à stabiliser sa sortie.
+        # Puissance réellement "délivrée" par le faux appareil À LA MAISON (outputHomePower
+        # réel : solaire routé direct + décharge combinés, retombe à 0 en charge -- PAS un
+        # simple écho de output_limit, cf. _tick), avec un peu d'inertie vers sa cible --
+        # jamais un saut instantané, comme un vrai appareil qui met quelques secondes à
+        # stabiliser sa sortie.
         self._injected_power_w = 0.0
         self._last_solar_w = 0.0
         self._last_grid_w = 0.0
+        self._last_to_battery_w = 0.0
+        self._last_from_battery_w = 0.0
 
         self._connected = False
         self._start_time = time.monotonic()
@@ -139,25 +143,63 @@ class SimulatedTransport(Transport):
         solar_w = max(0.0, math.sin(phase * math.pi)) * 1800.0 + random.uniform(-30, 30)
         load_w = 350.0 + random.uniform(-100, 150)
 
-        target_injected = self._output_limit_w if self._mode == 2 else -self._input_limit_w
-        self._injected_power_w += (target_injected - self._injected_power_w) * 0.5
+        # Modèle "station balcon" (panneaux câblés uniquement sur le Zendure, pas sur
+        # l'installation solaire générale de la maison -- cas du Hyper 2000) : TOUT
+        # le solaire transite par Zendure, jamais directement par le compteur. Donc
+        # grid = conso - ce que Zendure délivre à la maison, un point c'est tout --
+        # pas de terme solaire séparé côté compteur (cf. house = grid + injected dans
+        # toHtmlCondense(), qui se simplifie alors exactement en house = conso par
+        # construction, quel que soit le mode).
+        #
+        # to_house_target suit output_limit_w SANS jamais le plafonner au besoin réel
+        # (max(0, load-solar)) -- plafonner ainsi rendrait grid_w structurellement
+        # toujours >= 0 : le régulateur ne verrait alors plus jamais de risque
+        # d'injection à corriger, l'anti-injection deviendrait invisible en
+        # simulation (piège trouvé le 2026-08-04 lors d'une première tentative de
+        # correction). C'est au contraire cet écart transitoire entre ce que
+        # Zendure délivre (output_limit, décidé au tick précédent) et le besoin réel
+        # du moment qui crée le risque d'injection que la boucle rapide doit
+        # détecter et corriger -- exactement le comportement qu'on veut observer.
+        if self._mode == 2:  # décharge
+            to_house_target = self._output_limit_w
+        else:  # charge (acMode == 1)
+            # Retombe à 0 en charge (comportement confirmé du vrai appareil, cf.
+            # flux_widget.html : "outputHomePower EST déjà ce que Zendure fournit...
+            # retombe à 0 tout seul quand Zendure ne fait que charger").
+            to_house_target = 0.0
+
+        self._injected_power_w += (to_house_target - self._injected_power_w) * 0.5
+        to_house_w = max(0.0, self._injected_power_w)
+
+        if self._mode == 2:
+            # Ce que la décharge doit couvrir une fois le solaire déduit -- jamais
+            # négatif : un surplus solaire au-delà de to_house_w est simplement
+            # perdu/non capté dans ce modèle simplifié (pas d'export direct
+            # possible hors de ce que Zendure choisit de délivrer, cf. ci-dessus).
+            from_battery_w = max(0.0, to_house_w - solar_w)
+            to_battery_w = 0.0
+        else:
+            from_battery_w = 0.0
+            to_battery_w = self._input_limit_w
 
         self._last_solar_w = solar_w
-        self._last_grid_w = load_w - solar_w - self._injected_power_w
+        self._last_to_battery_w = to_battery_w
+        self._last_from_battery_w = from_battery_w
+        self._last_grid_w = load_w - to_house_w
 
-        self._update_soc()
+        self._update_soc(to_battery_w, from_battery_w)
         self._emit_telemetry()
 
         if self._grid_power_sink:
             self._grid_power_sink(self._last_grid_w)
 
-    def _update_soc(self) -> None:
-        # injected_power_w > 0 = décharge (SOC baisse), < 0 = charge (SOC monte) --
-        # même convention que le reste du plugin (cf. anti_injection.py en tête).
+    def _update_soc(self, to_battery_w: float, from_battery_w: float) -> None:
+        # Flux réel non lissé (pas self._injected_power_w, qui n'est que la valeur
+        # AFFICHÉE avec inertie) : le SOC doit intégrer l'énergie réellement échangée.
         # Bornes SOC min/max de la config volontairement pas appliquées ici (juste
         # exposées en télémétrie) : simplification assumée, pas nécessaire pour
         # observer le comportement de la boucle rapide.
-        delta_kwh = -self._injected_power_w * TICK_PERIOD_S / 3600.0 / 1000.0
+        delta_kwh = (to_battery_w - from_battery_w) * TICK_PERIOD_S / 3600.0 / 1000.0
         if self._capacity_kwh > 0:
             self._soc += (delta_kwh / self._capacity_kwh) * 100.0
         self._soc = max(0.0, min(100.0, self._soc))
@@ -172,6 +214,12 @@ class SimulatedTransport(Transport):
                     "solarInputPower": round(self._last_solar_w, 1),
                     "outputHomePower": round(max(0.0, self._injected_power_w), 1),
                     "gridInputPower": round(self._last_grid_w, 1),
+                    # Bruts, jamais aliasés (cf. telemetry_map.py) : donnent le vrai
+                    # sens de charge/décharge côté widget Flux (outputPackPower =
+                    # vers le pack, packInputPower = depuis le pack), qu'aucune
+                    # simulation n'émettait jusqu'ici.
+                    "outputPackPower": round(self._last_to_battery_w, 1),
+                    "packInputPower": round(self._last_from_battery_w, 1),
                     "inputLimit": int(self._input_limit_w),
                     "acMode": self._mode,
                     "minSoc": self._soc_min * 10,
