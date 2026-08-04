@@ -372,6 +372,17 @@ class zendure extends eqLogic
         $animationsOn = $this->getConfiguration('animations_actives', 1);
         list(, $modeLabel, ) = $this->modeInfo($this->getCmdValue('mode'));
 
+        // transport_connected (cf. Device._on_connection_change côté démon) : seul
+        // signal de connectivité actuellement remonté comme commande interrogeable
+        // (la détection de télémétrie muette/WiFi instable, elle, ne part que sous
+        // forme d'alerte ponctuelle message::add(), pas d'un état permanent -- pas
+        // couvert ici). '' == 1 vaut false en PHP : un eqLogic jamais encore
+        // connecté (tout juste créé) affiche donc "Hors ligne" par défaut, ce qui
+        // est le comportement prudent attendu plutôt que de prétendre "en ligne"
+        // sans jamais l'avoir confirmé (signalé par l'utilisateur le 2026-08-04 :
+        // l'état hors ligne n'était pas du tout pris en compte jusqu'ici).
+        $connected = $this->getCmdValue('transport_connected') == 1;
+
         $tokens = array(
             '##EQ_ID##' => $this->getId(),
             '##NAME##' => $this->getName(),
@@ -383,9 +394,12 @@ class zendure extends eqLogic
             '##HOUSE_W##' => round($house),
             '##INJECTED_W##' => round($injected),
             '##INTENSITE_PCT##' => $pct,
+            '##INTENSITE_A##' => round($intensite, 1),
+            '##IMAX_A##' => round($imax, 1),
             '##INTENSITE_COLOR##' => $color,
             '##GAIN_JOUR##' => number_format((float) $this->getCmdValue('gain_jour'), 2),
             '##ANIMATIONS_CLASS##' => $animationsOn ? 'zc-animated' : '',
+            '##OFFLINE_CLASS##' => $connected ? '' : 'zc-offline',
         );
         return str_replace(array_keys($tokens), array_values($tokens), $html);
     }
