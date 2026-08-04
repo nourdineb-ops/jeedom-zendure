@@ -21,7 +21,7 @@ près du matériel.
   régulation sans aucun appareil ni broker MQTT — un scénario synthétique de
   consommation/production solaire pilote exactement la même boucle qu'en réel.
 - Aucune valeur de comportement en dur : tout se configure depuis l'IHM Jeedom
-  (voir [Configuration](#configuration--configuration-over-code)).
+  (voir [Configuration](#configuration--configuration-over-code-)).
 
 ## Compatibilité
 
