@@ -21,7 +21,7 @@ class zendure extends eqLogic
         'output_limit' => array('Limite puissance de sortie', 'numeric', 'W'),
         'input_limit' => array('Limite max entrée solaire', 'numeric', 'W'),
         'mode' => array('Mode de fonctionnement', 'string', ''),
-        'forecast_today_kwh' => array('forecast_today', 'numeric', 'kWh'),
+        'forecast_today_kwh' => array('Prévision solaire du jour', 'numeric', 'kWh'),
         'transport_connected' => array('Transport connecté', 'binary', ''),
     );
 
@@ -31,7 +31,13 @@ class zendure extends eqLogic
      */
     const ACTION_COMMANDS = array(
         'set_mode' => array('Mode Charge/Décharge', 'other'),
-        'set_manual_power' => array('Puissance manuelle', 'slider'),
+        // set_manual_power ("Puissance manuelle") retirée le 2026-08-06 (revue de
+        // cohérence de l'onglet Commandes) : présente dans le brief de cadrage
+        // initial (§14.1) mais jamais câblée -- ni côté démon (absente de
+        // _ACTION_DISPATCH dans device.py), ni côté IHM (aucun curseur du widget
+        // Flux ne la référence). Un curseur exposé qui ne fait rien silencieusement
+        // est pire qu'un curseur absent. set_mode + set_output_limit/
+        // set_input_limit couvrent déjà tout le pilotage manuel réel.
         'set_output_limit' => array('Limite sortie AC (W)', 'slider'),
         'set_input_limit' => array('Limite entrée AC (W)', 'slider'),
         'set_soc_min' => array('SOC minimum', 'slider'),
@@ -71,8 +77,14 @@ class zendure extends eqLogic
         'total_output_kwh_veille' => array('Délivré par la batterie (veille)', 'numeric', 'kWh'),
         'total_from_edf_kwh' => array('Prélevé au réseau (jour)', 'numeric', 'kWh'),
         'total_from_edf_kwh_veille' => array('Prélevé au réseau (veille)', 'numeric', 'kWh'),
-        'jauge_intensite_marge' => array('Marge intensité (Imax - IINST)', 'numeric', 'A'),
-        'periode_tarif' => array('Période HP/HC', 'string', ''),
+        // Jamais alimentée par valeur (cf. createOrUpdateCompactWidgets()) : sert
+        // uniquement de support au widget jauge (zf_gauge), dont l'affichage live
+        // vient des paramètres IntensiteId/ImaxA, pas de la valeur de cette
+        // commande elle-même. Libellé volontairement sans promesse de valeur
+        // numérique consultable (corrigé lors de la revue de cohérence de
+        // l'onglet Commandes, 2026-08-06 -- l'ancien libellé "Marge intensité
+        // (Imax - IINST)" laissait croire à une vraie lecture).
+        'jauge_intensite_marge' => array('Jauge intensité (support widget)', 'numeric', 'A'),
     );
 
     /*     * *********************Attributs****************************** */
@@ -751,6 +763,7 @@ class zendure extends eqLogic
         log::add('zendure', 'debug', 'postSave eq_id=' . $this->getId() . ' (' . $this->getName() . ')');
         $this->ensureFluxTileSize();
         $this->createOrUpdateCommands();
+        $this->removeObsoleteCommands();
         $this->registerTelemetryListener('src_grid_papp', 'grid_power', 'onGridPowerEvent');
         $this->registerTelemetryListener('src_solaire', 'solar_power', 'onSolarPowerEvent');
         $this->registerTelemetryListener('src_injection', 'injected_power', 'onInjectedPowerEvent');
@@ -1054,6 +1067,20 @@ class zendure extends eqLogic
      */
     private function runStrategieNuit()
     {
+        // forecast_today_kwh (info générale, cf. INFO_COMMANDS) : alimentée ici
+        // même si la stratégie nuit elle-même est désactivée ci-dessous -- ce
+        // n'est qu'un affichage de la prévision du jour, indépendant de la
+        // décision de charge. Trouvé jamais alimenté lors de la revue de
+        // cohérence de l'onglet Commandes (2026-08-06) : le cron minuit était
+        // déjà le bon endroit, resolveForecastKwh() est déjà calculé ici.
+        $forecastCmd = $this->getCmd(null, 'forecast_today_kwh');
+        if (is_object($forecastCmd)) {
+            // resolveForecastKwh() peut renvoyer null (aucune source configurée) --
+            // 0 est une valeur d'affichage raisonnable dans ce cas, cf. le même
+            // cast utilisé ailleurs pour les commandes numériques potentiellement vides.
+            $forecastCmd->event((float) $this->resolveForecastKwh());
+        }
+
         if (!$this->getConfiguration('strategie_nuit_active', 0)) {
             return;
         }
@@ -1624,6 +1651,32 @@ class zendure extends eqLogic
     }
 
     /**
+     * Nettoie les commandes autrefois "curées" (INFO/ACTION/COMPUTED_COMMANDS)
+     * et depuis retirées du code -- sinon elles restent en base indéfiniment,
+     * jamais recréées ni mises à jour par createOrUpdateCommands() (qui ne fait
+     * que créer/mettre à jour, jamais supprimer), mais toujours là si un
+     * utilisateur les avait rendues visibles/utilisées ailleurs. Liste
+     * explicite d'anciens logicalId nommément retirés (PAS une purge générique
+     * de tout ce qui n'est pas dans les 3 const arrays -- ça supprimerait aussi
+     * les ~230 commandes de télémétrie brute auto-créées par callback.php, qui
+     * n'y figurent jamais par conception).
+     */
+    private function removeObsoleteCommands()
+    {
+        // set_manual_power : jamais câblée (ni démon, ni IHM), retirée le
+        // 2026-08-06. periode_tarif : jamais alimentée, remplacée par une
+        // lecture directe de la source externe, retirée le même jour.
+        $obsoleteLogicalIds = array('set_manual_power', 'periode_tarif');
+        foreach ($obsoleteLogicalIds as $logicalId) {
+            $cmd = $this->getCmd(null, $logicalId);
+            if (is_object($cmd)) {
+                $cmd->remove();
+                log::add('zendure', 'info', 'removeObsoleteCommands eq_id=' . $this->getId() . ' : ' . $logicalId . ' supprimée');
+            }
+        }
+    }
+
+    /**
      * Test 2026-07-24 : variantes "découpées" du widget Flux (jauge, pastilles
      * Tempo, cartes argent) en widgets de commande INDÉPENDANTS, plaçables
      * séparément sur une page Design -- contrairement au widget Flux complet
@@ -1690,11 +1743,9 @@ class zendure extends eqLogic
             $cmd->save();
         }
 
-        // Badge HPJB/HCJB : même commande hôte dédiée, mêmes deux sources
-        // live que le badge intégré au widget Flux (texte période + couleur
-        // Tempo du jour) -- cf. createOrUpdateFluxWidget() pour la même
-        // logique de résolution "periode_tarif interne si déjà alimentée,
-        // sinon src_tempo_now".
+        // Badge HPJB/HCJB : même commande hôte dédiée, même source live que le
+        // badge intégré au widget Flux (texte période + couleur Tempo du jour)
+        // -- cf. createOrUpdateFluxWidget() pour la même logique.
         $periodeBadgeCmd = $this->getCmd(null, 'periode_badge_display');
         if (!is_object($periodeBadgeCmd)) {
             $periodeBadgeCmd = new zendureCmd();
@@ -1703,10 +1754,7 @@ class zendure extends eqLogic
             $periodeBadgeCmd->setType('info');
             $periodeBadgeCmd->setSubType('string');
         }
-        $periodeInternalCmd = $this->getCmd(null, 'periode_tarif');
-        $periodeCmdForBadge = (is_object($periodeInternalCmd) && (string) $periodeInternalCmd->execCmd() !== '')
-            ? $periodeInternalCmd
-            : $this->resolveSourceCmd('src_tempo_now');
+        $periodeCmdForBadge = $this->resolveSourceCmd('src_tempo_now');
         $periodeBadgeCmd->setName('Période HPJB (compact)');
         $periodeBadgeCmd->setIsHistorized(0);
         // isVisible=0 explicite (comme gauge/tempo ci-dessus) : un nouvel
@@ -1786,13 +1834,7 @@ class zendure extends eqLogic
         $injectedCmd = $this->resolveSourceCmdOrDefault('src_injection', 'injected_power');
         $intensiteCmd = $this->resolveSourceCmd('src_intensite');
 
-        // "Période" reprend la même priorité que toHtmlFlux() historique :
-        // la commande interne periode_tarif si elle a déjà une valeur, sinon
-        // la source Tempo externe configurée (src_tempo_now).
-        $periodeInternalCmd = $this->getCmd(null, 'periode_tarif');
-        $periodeCmd = (is_object($periodeInternalCmd) && (string) $periodeInternalCmd->execCmd() !== '')
-            ? $periodeInternalCmd
-            : $this->resolveSourceCmd('src_tempo_now');
+        $periodeCmd = $this->resolveSourceCmd('src_tempo_now');
 
         $setOutputLimitCmd = $this->getCmd(null, 'set_output_limit');
         $setInputLimitCmd = $this->getCmd(null, 'set_input_limit');
