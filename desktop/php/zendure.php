@@ -513,16 +513,9 @@ $eqLogics = eqLogic::byType($plugin->getId());
                 <fieldset>
                     <legend style="font-size:14px;"><i class="fas fa-tachometer-alt"></i> {{Jauge d'intensité}}</legend>
                     <div class="form-group">
-                        <label class="col-sm-3 control-label">{{Imax (A)}}</label>
+                        <label class="col-sm-3 control-label">{{Imax (A)}}<br><small class="text-muted" style="font-weight:normal;">{{Facultatif — utilisé seulement si la source "Imax abonnement" (onglet Sources) n'est pas renseignée}}</small></label>
                         <div class="col-sm-2">
                             <input type="number" class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="imax_ampere" />
-                        </div>
-                        <label class="col-sm-3 control-label">{{Réseau}}</label>
-                        <div class="col-sm-2">
-                            <select class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="phases">
-                                <option value="mono">{{Monophasé}}</option>
-                                <option value="tri">{{Triphasé}}</option>
-                            </select>
                         </div>
                     </div>
                     <div class="form-group">
@@ -535,16 +528,6 @@ $eqLogics = eqLogic::byType($plugin->getId());
                         </div>
                     </div>
                 </fieldset>
-                <div class="alert alert-info">
-                    <strong>{{À quoi sert cet onglet}}</strong>
-                    <ul style="margin-bottom:0;">
-                        <li>{{Condensé : tuile compacte (anneau SOC, 4 flux, jauge intensité, gain €).}}</li>
-                        <li>{{Flux : losange animé Solaire/Réseau/Maison/Batterie, jauge d'intensité, Tempo J/J+1, indicateurs financiers et curseurs de pilotage (limite de sortie AC, SOC minimum).}}</li>
-                        <li>{{Historique : pas encore implémenté — en le sélectionnant, l'équipement retombe sur l'affichage générique Jeedom (liste de commandes), sans plantage mais sans le rendu visuel prévu à terme.}}</li>
-                        <li>{{Animations : désactivez si vous préférez un rendu statique (utile sur mobile/tablette).}}</li>
-                        <li>{{Panneau debug : ajoute un bandeau repliable en bas du widget Flux avec les dernières lignes des logs démon + plugin, actualisées automatiquement (~3s). Pensez à le désactiver une fois le diagnostic terminé (appels réseau périodiques tant qu'il est ouvert).}}</li>
-                    </ul>
-                </div>
 
                 <legend>{{Aperçus (statiques, données d'exemple)}}</legend>
                 <div class="row">

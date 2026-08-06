@@ -266,9 +266,11 @@ sont configurées, sinon la logique retombe sur un mode dégradé — voir
   avec les dernières lignes des logs démon + plugin, actualisées automatiquement.
   Pensez à le désactiver une fois le diagnostic terminé (appels réseau
   périodiques tant qu'il est ouvert).
-- **Jauge d'intensité** — Imax (A) / Réseau (mono/tri) / Seuils jauge ambre-rouge
-  (%) : alimentent uniquement la jauge d'intensité du dashboard, aucun impact sur
-  la régulation elle-même (cf. onglet Comportement pour la régulation).
+- **Jauge d'intensité** — Imax (A) / Seuils jauge ambre-rouge (%) : alimentent
+  uniquement la jauge d'intensité du dashboard, aucun impact sur la régulation
+  elle-même (cf. onglet Comportement pour la régulation). Imax (A) est
+  **facultatif** : utilisé seulement si la source "Imax abonnement" (onglet
+  Sources) n'est pas renseignée.
 
 Un aperçu statique de chaque dashboard est visible directement dans cet onglet du
 formulaire de configuration.
