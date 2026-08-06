@@ -240,9 +240,13 @@ $eqLogics = eqLogic::byType($plugin->getId());
                     // Closure plutôt qu'une function nommée : ce template peut en théorie
                     // être inclus plus d'une fois dans le même process PHP (double
                     // "Cannot redeclare" sinon).
-                    $renderSourceRow = function ($key, $label) {
+                    $renderSourceRow = function ($key, $label, $note = '') {
                         echo '<div class="form-group">';
-                        echo '<label class="col-sm-3 control-label">' . $label . '</label>';
+                        echo '<label class="col-sm-3 control-label">' . $label;
+                        if ($note != '') {
+                            echo '<br><small class="text-muted" style="font-weight:normal;">' . $note . '</small>';
+                        }
+                        echo '</label>';
                         echo '<div class="col-sm-6">';
                         echo '<div class="input-group">';
                         echo '<input type="text" class="eqLogicAttr form-control roundedLeft" data-l1key="configuration" data-l2key="' . $key . '" placeholder="{{Aucune commande sélectionnée}}" />';
@@ -257,12 +261,12 @@ $eqLogics = eqLogic::byType($plugin->getId());
 
                     <legend style="font-size:14px;"><i class="fas fa-bolt"></i> {{Pilotage}}</legend>
                     <?php
-                    $renderSourceRow('src_grid_papp', '{{Puissance prélevée sur le réseau (W) — pince/compteur dédié recommandé, plus fiable qu\'un Téléinfo (PAPP = puissance apparente mono-quadrant, ne distingue pas bien l\'injection)}}');
+                    $renderSourceRow('src_grid_papp', '{{Puissance prélevée sur le réseau (W)}}', '{{Pince/compteur dédié recommandé — plus fiable qu\'un Téléinfo pour l\'injection}}');
                     ?>
                     <p class="text-muted" style="margin:0 0 4px 15px;font-size:11px;">{{Avancé — laisser vide sauf besoin spécifique, le Zendure connaît déjà sa propre injection/production}}</p>
                     <?php
-                    $renderSourceRow('src_injection', '{{Injection maison (Zendure) — vide = repli sur la télémétrie Zendure}}');
-                    $renderSourceRow('src_solaire', '{{Production solaire (dashboard) — vide = repli sur la télémétrie Zendure}}');
+                    $renderSourceRow('src_injection', '{{Injection maison (Zendure)}}', '{{Vide = repli sur la télémétrie Zendure}}');
+                    $renderSourceRow('src_solaire', '{{Production solaire (dashboard)}}', '{{Vide = repli sur la télémétrie Zendure}}');
                     ?>
 
                     <legend style="font-size:14px;"><i class="fas fa-cloud-sun"></i> {{Prévision solaire}}</legend>
@@ -272,9 +276,10 @@ $eqLogics = eqLogic::byType($plugin->getId());
                     ?>
 
                     <legend style="font-size:14px;"><i class="fas fa-tachometer-alt"></i> {{Compteur}}</legend>
+                    <p class="text-muted" style="margin:0 0 4px 15px;font-size:11px;">{{Alimentent l'affichage jauge (intensité) du dashboard}}</p>
                     <?php
-                    $renderSourceRow('src_intensite', '{{Pince ampèremétrique (intensité) — pas de valeur par défaut}}');
-                    $renderSourceRow('src_imax_abonnement', '{{Imax abonnement — vide = champ "Imax (A)" de l\'onglet Comportement, 30A si lui aussi vide}}');
+                    $renderSourceRow('src_intensite', '{{Intensité instantanée}}');
+                    $renderSourceRow('src_imax_abonnement', '{{Imax abonnement}}');
                     ?>
 
                     <legend style="font-size:14px;"><i class="fas fa-euro-sign"></i> {{Option tarifaire}}</legend>
@@ -289,32 +294,22 @@ $eqLogics = eqLogic::byType($plugin->getId());
                         </div>
                     </div>
                     <div id="bloc_src_tarif_hphc">
-                        <?php $renderSourceRow('src_periode_tarif', '{{Période tarifaire (PTEC / HP-HC) — pas de valeur par défaut}}'); ?>
+                        <?php $renderSourceRow('src_periode_tarif', '{{Période tarifaire (PTEC / HP-HC)}}'); ?>
                     </div>
                     <div id="bloc_src_tarif_tempo">
                         <?php
-                        $renderSourceRow('src_tempo_now', '{{Tempo — période courante (HP/HC + couleur, ex. HCJB) — pas de valeur par défaut}}');
-                        $renderSourceRow('src_tempo_j', '{{Tempo — couleur du jour — pas de valeur par défaut}}');
-                        $renderSourceRow('src_tempo_j1', '{{Tempo — couleur de demain (J+1) — pas de valeur par défaut}}');
+                        $renderSourceRow('src_tempo_now', '{{Tempo — période courante (HP/HC + couleur, ex. HCJB)}}');
+                        $renderSourceRow('src_tempo_j', '{{Tempo — couleur du jour}}');
+                        $renderSourceRow('src_tempo_j1', '{{Tempo — couleur de demain (J+1)}}');
                         ?>
                     </div>
 
                     <legend style="font-size:14px;"><i class="fas fa-coins"></i> {{Coût}}</legend>
                     <?php
-                    $renderSourceRow('src_depense_jour', '{{Dépense jour (€) — ex. Teleinfo STAT_TODAY_INDEX00_COUT — vide = calculée en interne}}');
-                    $renderSourceRow('src_depense_veille', '{{Dépense veille (€) — ex. Teleinfo STAT_YESTERDAY_INDEX00_COUT — vide = calculée en interne}}');
+                    $renderSourceRow('src_depense_jour', '{{Dépense jour (€)}}');
+                    $renderSourceRow('src_depense_veille', '{{Dépense veille (€)}}');
                     ?>
                 </fieldset>
-                <div class="alert alert-info">
-                    <strong>{{À quoi sert cet onglet}}</strong>
-                    <ul style="margin-bottom:0;">
-                        <li>{{Pilotage : la puissance réseau est l'entrée principale de la boucle anti-injection rapide (onglet Comportement) — sans elle, le pilotage retombe sur la télémétrie interne Zendure, moins fiable pour mesurer l'injection réelle. Injection maison / Production solaire (avancé) : le dashboard utilise par défaut les commandes curées "injected_power"/"solar_power" (télémétrie Zendure) si ces sources sont laissées vides — cas normal pour la grande majorité des installations.}}</li>
-                        <li>{{Prévision solaire : J+0 ET J+1 sont utilisées (pas redondant) — la source externe (ex. Solcast) se rafraîchit typiquement après le cron de stratégie nuit (00h00) ; tant que J+0 n'a pas encore été recollectée aujourd'hui, le plugin bascule automatiquement sur J+1, qui correspond alors au bon jour calendaire.}}</li>
-                        <li>{{Compteur : Imax abonnement alimente la jauge d'intensité du dashboard, avec repli sur le champ "Imax (A)" de l'onglet Comportement (puis 30A) si vide.}}</li>
-                        <li>{{Option tarifaire : le sélecteur "Type de contrat" ici est le même réglage que celui de l'onglet Comportement (section Tarifs) — les deux restent synchronisés. Il détermine quelles sources apparaissent : aucune en Base, PTEC/HP-HC seul en Heures Pleines/Creuses, les 3 sources Tempo en Tempo. Utilisées pour le calcul du gain (€) et la stratégie de charge nocturne (charger davantage si demain est en jour Tempo Rouge).}}</li>
-                        <li>{{Toutes ces sources doivent déjà exister comme commandes "info" ailleurs dans Jeedom (téléinfo, RTE Tempo, prévision solaire...) — ce plugin ne les crée pas, il les référence. Exception : les commandes de télémétrie brute Zendure, elles, sont créées automatiquement par ce plugin lui-même.}}</li>
-                    </ul>
-                </div>
             </div>
 
             <div role="tabpanel" class="tab-pane" id="tab_comportement">
