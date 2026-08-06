@@ -235,27 +235,12 @@ $eqLogics = eqLogic::byType($plugin->getId());
 
             <div role="tabpanel" class="tab-pane" id="tab_sources">
                 <fieldset>
-                    <legend><i class="fas fa-satellite-dish"></i> {{Sources de lecture (jamais d'ID en dur)}}</legend>
-                    <div class="alert alert-info">
-                        {{Chaque source pointe vers une commande "info" existante (pince, téléinfo, Tempo, prévision solaire...) via le sélecteur natif Jeedom.}}
-                    </div>
+                    <legend><i class="fas fa-satellite-dish"></i> {{Sources de lecture}}</legend>
                     <?php
-                    $sources = [
-                        'src_intensite' => '{{Pince ampèremétrique (intensité)}}',
-                        'src_grid_papp' => '{{PAPP réseau}}',
-                        'src_imax_abonnement' => '{{Imax abonnement}}',
-                        'src_periode_tarif' => '{{Période tarifaire (PTEC / HP-HC)}}',
-                        'src_tempo_now' => '{{Tempo — période courante (HP/HC + couleur, ex. HCJB)}}',
-                        'src_tempo_j' => '{{Tempo — couleur du jour}}',
-                        'src_tempo_j1' => '{{Tempo — couleur de demain (J+1)}}',
-                        'src_prevision_solaire' => '{{Prévision solaire J+0 (Wh)}}',
-                        'src_prevision_solaire_j1' => '{{Prévision solaire J+1 (Wh)}}',
-                        'src_depense_jour' => '{{Dépense jour (€) — ex. Teleinfo STAT_TODAY_INDEX00_COUT — laisser vide pour calculer en interne}}',
-                        'src_depense_veille' => '{{Dépense veille (€) — ex. Teleinfo STAT_YESTERDAY_INDEX00_COUT — laisser vide pour calculer en interne}}',
-                        'src_injection' => '{{Injection maison (Zendure) — laisser vide pour utiliser la valeur par défaut}}',
-                        'src_solaire' => '{{Production solaire (dashboard) — laisser vide pour utiliser la valeur par défaut}}',
-                    ];
-                    foreach ($sources as $key => $label) {
+                    // Closure plutôt qu'une function nommée : ce template peut en théorie
+                    // être inclus plus d'une fois dans le même process PHP (double
+                    // "Cannot redeclare" sinon).
+                    $renderSourceRow = function ($key, $label) {
                         echo '<div class="form-group">';
                         echo '<label class="col-sm-3 control-label">' . $label . '</label>';
                         echo '<div class="col-sm-6">';
@@ -267,17 +252,63 @@ $eqLogics = eqLogic::byType($plugin->getId());
                         echo '</div>';
                         echo '</div>';
                         echo '</div>';
-                    }
+                    };
+                    ?>
+
+                    <legend style="font-size:14px;"><i class="fas fa-bolt"></i> {{Pilotage}}</legend>
+                    <?php
+                    $renderSourceRow('src_grid_papp', '{{PAPP réseau — vide = repli sur la télémétrie Zendure}}');
+                    $renderSourceRow('src_injection', '{{Injection maison (Zendure) — vide = repli sur la télémétrie Zendure}}');
+                    $renderSourceRow('src_solaire', '{{Production solaire (dashboard) — vide = repli sur la télémétrie Zendure}}');
+                    ?>
+
+                    <legend style="font-size:14px;"><i class="fas fa-cloud-sun"></i> {{Prévision solaire}}</legend>
+                    <?php
+                    $renderSourceRow('src_prevision_solaire', '{{Prévision solaire J+0 (Wh)}}');
+                    $renderSourceRow('src_prevision_solaire_j1', '{{Prévision solaire J+1 (Wh)}}');
+                    ?>
+
+                    <legend style="font-size:14px;"><i class="fas fa-tachometer-alt"></i> {{Compteur}}</legend>
+                    <?php
+                    $renderSourceRow('src_intensite', '{{Pince ampèremétrique (intensité) — pas de valeur par défaut}}');
+                    $renderSourceRow('src_imax_abonnement', '{{Imax abonnement — vide = champ "Imax (A)" de l\'onglet Comportement, 30A si lui aussi vide}}');
+                    ?>
+
+                    <legend style="font-size:14px;"><i class="fas fa-euro-sign"></i> {{Option tarifaire}}</legend>
+                    <div class="form-group">
+                        <label class="col-sm-3 control-label">{{Type de contrat}}</label>
+                        <div class="col-sm-3">
+                            <select id="sel_type_contrat_sources" class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="type_contrat">
+                                <option value="base">{{Base}}</option>
+                                <option value="hphc">{{Heures Pleines / Heures Creuses}}</option>
+                                <option value="tempo">{{Tempo}}</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div id="bloc_src_tarif_hphc">
+                        <?php $renderSourceRow('src_periode_tarif', '{{Période tarifaire (PTEC / HP-HC) — pas de valeur par défaut}}'); ?>
+                    </div>
+                    <div id="bloc_src_tarif_tempo">
+                        <?php
+                        $renderSourceRow('src_tempo_now', '{{Tempo — période courante (HP/HC + couleur, ex. HCJB) — pas de valeur par défaut}}');
+                        $renderSourceRow('src_tempo_j', '{{Tempo — couleur du jour — pas de valeur par défaut}}');
+                        $renderSourceRow('src_tempo_j1', '{{Tempo — couleur de demain (J+1) — pas de valeur par défaut}}');
+                        ?>
+                    </div>
+
+                    <legend style="font-size:14px;"><i class="fas fa-coins"></i> {{Coût}}</legend>
+                    <?php
+                    $renderSourceRow('src_depense_jour', '{{Dépense jour (€) — ex. Teleinfo STAT_TODAY_INDEX00_COUT — vide = calculée en interne}}');
+                    $renderSourceRow('src_depense_veille', '{{Dépense veille (€) — ex. Teleinfo STAT_YESTERDAY_INDEX00_COUT — vide = calculée en interne}}');
                     ?>
                 </fieldset>
                 <div class="alert alert-info">
                     <strong>{{À quoi sert cet onglet}}</strong>
                     <ul style="margin-bottom:0;">
-                        <li>{{Pince ampèremétrique / PAPP réseau : la mesure de puissance au niveau du compteur EDF. C'est l'entrée principale de la boucle anti-injection rapide (onglet Comportement) — sans elle, le pilotage automatique ne peut pas fonctionner.}}</li>
-                        <li>{{Imax abonnement : intensité max souscrite (A), sert à la jauge d'intensité du dashboard.}}</li>
-                        <li>{{Période tarifaire (PTEC/HP-HC) et les 3 sources Tempo : utilisées pour le calcul du gain (€) et la stratégie de charge nocturne (charger davantage si demain est en jour Tempo Rouge).}}</li>
-                        <li>{{Prévision solaire : utilisée par la boucle lente (hors périmètre direct du démon) pour moduler le SOC cible nocturne.}}</li>
-                        <li>{{Injection maison (Zendure) / Production solaire : le dashboard utilise par défaut les commandes curées "injected_power"/"solar_power" (télémétrie Zendure). Le démon capture désormais TOUTE la télémétrie brute reçue (une commande "info" par valeur, créée automatiquement au premier signalement, visible dans la liste des commandes de cet équipement) — si vous jugez une autre commande plus fiable (ex. la clé brute "outputHomePower", ou une pince externe type Tableau_Zendure), sélectionnez-la ici. Le bilan Réseau utilise déjà le même principe via "PAPP réseau".}}</li>
+                        <li>{{Pilotage : PAPP réseau est l'entrée principale de la boucle anti-injection rapide (onglet Comportement) — sans elle, le pilotage automatique ne peut pas fonctionner. Injection maison / Production solaire : le dashboard utilise par défaut les commandes curées "injected_power"/"solar_power" (télémétrie Zendure) si ces sources sont laissées vides.}}</li>
+                        <li>{{Prévision solaire : J+0 ET J+1 sont utilisées (pas redondant) — la source externe (ex. Solcast) se rafraîchit typiquement après le cron de stratégie nuit (00h00) ; tant que J+0 n'a pas encore été recollectée aujourd'hui, le plugin bascule automatiquement sur J+1, qui correspond alors au bon jour calendaire.}}</li>
+                        <li>{{Compteur : Imax abonnement alimente la jauge d'intensité du dashboard, avec repli sur le champ "Imax (A)" de l'onglet Comportement (puis 30A) si vide.}}</li>
+                        <li>{{Option tarifaire : le sélecteur "Type de contrat" ici est le même réglage que celui de l'onglet Comportement (section Tarifs) — les deux restent synchronisés. Il détermine quelles sources apparaissent : aucune en Base, PTEC/HP-HC seul en Heures Pleines/Creuses, les 3 sources Tempo en Tempo. Utilisées pour le calcul du gain (€) et la stratégie de charge nocturne (charger davantage si demain est en jour Tempo Rouge).}}</li>
                         <li>{{Toutes ces sources doivent déjà exister comme commandes "info" ailleurs dans Jeedom (téléinfo, RTE Tempo, prévision solaire...) — ce plugin ne les crée pas, il les référence. Exception : les commandes de télémétrie brute Zendure, elles, sont créées automatiquement par ce plugin lui-même.}}</li>
                     </ul>
                 </div>
@@ -820,11 +851,20 @@ $(function () {
         $('#bloc_cloud').toggle(mode == 'cloud');
     }).trigger('change');
 
-    $('#sel_type_contrat').on('change', function () {
+    // Deux <select> distincts liés à la même clé de config (onglets Comportement
+    // et Sources, cf. addendum du 2026-08-06) : Jeedom peuple bien les deux au
+    // chargement d'un équipement, mais un changement manuel sur l'un ne met à
+    // jour l'autre que si on le fait nous-mêmes (pas de sync native entre deux
+    // éléments .eqLogicAttr sur la même clé) -- d'où ce val() croisé avant de
+    // ré-appliquer l'affichage conditionnel, des deux côtés.
+    $('#sel_type_contrat, #sel_type_contrat_sources').on('change', function () {
         var type = $(this).val();
+        $('#sel_type_contrat, #sel_type_contrat_sources').not(this).val(type);
         $('#bloc_tarif_base').toggle(type == 'base');
         $('#bloc_tarif_hphc').toggle(type == 'hphc');
         $('#bloc_tarif_tempo').toggle(type == 'tempo');
+        $('#bloc_src_tarif_hphc').toggle(type == 'hphc');
+        $('#bloc_src_tarif_tempo').toggle(type == 'tempo');
     }).trigger('change');
 
     // Sélecteur natif de commande (onglet Sources) — pattern confirmé fonctionnel
