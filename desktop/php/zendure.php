@@ -286,17 +286,66 @@ $eqLogics = eqLogic::byType($plugin->getId());
                     <div class="form-group">
                         <label class="col-sm-3 control-label">{{Type de contrat}}</label>
                         <div class="col-sm-3">
-                            <select id="sel_type_contrat_sources" class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="type_contrat">
+                            <select id="sel_type_contrat" class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="type_contrat">
                                 <option value="base">{{Base}}</option>
                                 <option value="hphc">{{Heures Pleines / Heures Creuses}}</option>
                                 <option value="tempo">{{Tempo}}</option>
                             </select>
                         </div>
+                        <label class="col-sm-3 control-label">{{Mise à jour auto (mensuelle)}}</label>
+                        <div class="col-sm-2">
+                            <input type="checkbox" class="eqLogicAttr" data-l1key="configuration" data-l2key="maj_tarifs_auto" />
+                        </div>
                     </div>
-                    <div id="bloc_src_tarif_hphc">
+                    <div id="bloc_tarif_base">
+                        <div class="form-group">
+                            <label class="col-sm-3 control-label">{{Prix du kWh (€)}}</label>
+                            <div class="col-sm-2">
+                                <input type="number" step="0.0001" class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="tarif_base" />
+                            </div>
+                        </div>
+                    </div>
+                    <div id="bloc_tarif_hphc">
+                        <div class="form-group">
+                            <label class="col-sm-3 control-label">{{Prix HC (€/kWh)}}</label>
+                            <div class="col-sm-2">
+                                <input type="number" step="0.0001" class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="tarif_hphc_hc" />
+                            </div>
+                            <label class="col-sm-3 control-label">{{Prix HP (€/kWh)}}</label>
+                            <div class="col-sm-2">
+                                <input type="number" step="0.0001" class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="tarif_hphc_hp" />
+                            </div>
+                        </div>
                         <?php $renderSourceRow('src_periode_tarif', '{{Période tarifaire (PTEC / HP-HC)}}'); ?>
                     </div>
-                    <div id="bloc_src_tarif_tempo">
+                    <div id="bloc_tarif_tempo">
+                        <div class="form-group">
+                            <label class="col-sm-3 control-label">{{Bleu — HC / HP (€/kWh)}}</label>
+                            <div class="col-sm-2">
+                                <input type="number" step="0.0001" class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="tarif_tempo_bleu_hc" />
+                            </div>
+                            <div class="col-sm-2">
+                                <input type="number" step="0.0001" class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="tarif_tempo_bleu_hp" />
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label class="col-sm-3 control-label">{{Blanc — HC / HP (€/kWh)}}</label>
+                            <div class="col-sm-2">
+                                <input type="number" step="0.0001" class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="tarif_tempo_blanc_hc" />
+                            </div>
+                            <div class="col-sm-2">
+                                <input type="number" step="0.0001" class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="tarif_tempo_blanc_hp" />
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label class="col-sm-3 control-label">{{Rouge — HC / HP (€/kWh)}}</label>
+                            <div class="col-sm-2">
+                                <input type="number" step="0.0001" class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="tarif_tempo_rouge_hc" />
+                            </div>
+                            <div class="col-sm-2">
+                                <input type="number" step="0.0001" class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="tarif_tempo_rouge_hp" />
+                            </div>
+                        </div>
                         <?php
                         $renderSourceRow('src_tempo_now', '{{Tempo — période courante (HP/HC + couleur, ex. HCJB)}}');
                         $renderSourceRow('src_tempo_j', '{{Tempo — couleur du jour}}');
@@ -365,28 +414,6 @@ $eqLogics = eqLogic::byType($plugin->getId());
                         </div>
                     </div>
                     <div class="form-group">
-                        <label class="col-sm-3 control-label">{{Imax (A)}}</label>
-                        <div class="col-sm-2">
-                            <input type="number" class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="imax_ampere" />
-                        </div>
-                        <label class="col-sm-3 control-label">{{Réseau}}</label>
-                        <div class="col-sm-2">
-                            <select class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="phases">
-                                <option value="mono">{{Monophasé}}</option>
-                                <option value="tri">{{Triphasé}}</option>
-                            </select>
-                        </div>
-                    </div>
-                    <div class="form-group">
-                        <label class="col-sm-3 control-label">{{Seuil jauge ambre / rouge (%)}}</label>
-                        <div class="col-sm-2">
-                            <input type="number" class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="seuil_intensite_ambre" placeholder="70" />
-                        </div>
-                        <div class="col-sm-2">
-                            <input type="number" class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="seuil_intensite_rouge" placeholder="90" />
-                        </div>
-                    </div>
-                    <div class="form-group">
                         <label class="col-sm-3 control-label">{{Cron HP en simulation}}</label>
                         <div class="col-sm-2">
                             <input type="checkbox" class="eqLogicAttr" data-l1key="configuration" data-l2key="cron_hp_dry_run" checked />
@@ -423,78 +450,6 @@ $eqLogics = eqLogic::byType($plugin->getId());
                             <input type="text" class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="ble_address" placeholder="AA:BB:CC:DD:EE:FF" />
                         </div>
                     </div>
-                    <div class="alert alert-info">
-                        {{Désactivé par défaut. Quand la télémétrie MQTT/cloud devient muette (WiFi du boîtier instable) et que cette option est cochée, le démon tente une lecture ponctuelle en direct par Bluetooth (adresse MAC ci-dessus, cf. app Zendure ou un scan BLE pour la trouver) -- lecture seule, aucune commande n'est jamais envoyée par ce canal. Cadencé sur le cron HP (5 min), PAS une connexion permanente : volontairement occasionnel et borné dans le temps pour ne pas monopoliser un adaptateur Bluetooth déjà utilisé par ailleurs (ex. relevés de température BLE via TheengsGateway) -- ne se déclenche de toute façon que si la télémétrie est déjà confirmée muette, jamais en fonctionnement normal.}}
-                    </div>
-                </fieldset>
-                <fieldset>
-                    <legend><i class="fas fa-euro-sign"></i> {{Tarifs}}</legend>
-                    <div class="form-group">
-                        <label class="col-sm-3 control-label">{{Type de contrat}}</label>
-                        <div class="col-sm-3">
-                            <select id="sel_type_contrat" class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="type_contrat">
-                                <option value="base" selected>{{Base}}</option>
-                                <option value="hphc">{{Heures Pleines / Heures Creuses}}</option>
-                                <option value="tempo">{{Tempo}}</option>
-                            </select>
-                        </div>
-                        <label class="col-sm-3 control-label">{{Mise à jour auto (mensuelle)}}</label>
-                        <div class="col-sm-2">
-                            <input type="checkbox" class="eqLogicAttr" data-l1key="configuration" data-l2key="maj_tarifs_auto" />
-                        </div>
-                    </div>
-                    <div id="bloc_tarif_base">
-                        <div class="form-group">
-                            <label class="col-sm-3 control-label">{{Prix du kWh (€)}}</label>
-                            <div class="col-sm-2">
-                                <input type="number" step="0.0001" class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="tarif_base" />
-                            </div>
-                        </div>
-                    </div>
-                    <div id="bloc_tarif_hphc">
-                        <div class="form-group">
-                            <label class="col-sm-3 control-label">{{Prix HC (€/kWh)}}</label>
-                            <div class="col-sm-2">
-                                <input type="number" step="0.0001" class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="tarif_hphc_hc" />
-                            </div>
-                            <label class="col-sm-3 control-label">{{Prix HP (€/kWh)}}</label>
-                            <div class="col-sm-2">
-                                <input type="number" step="0.0001" class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="tarif_hphc_hp" />
-                            </div>
-                        </div>
-                    </div>
-                    <div id="bloc_tarif_tempo">
-                        <div class="form-group">
-                            <label class="col-sm-3 control-label">{{Bleu — HC / HP (€/kWh)}}</label>
-                            <div class="col-sm-2">
-                                <input type="number" step="0.0001" class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="tarif_tempo_bleu_hc" />
-                            </div>
-                            <div class="col-sm-2">
-                                <input type="number" step="0.0001" class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="tarif_tempo_bleu_hp" />
-                            </div>
-                        </div>
-                        <div class="form-group">
-                            <label class="col-sm-3 control-label">{{Blanc — HC / HP (€/kWh)}}</label>
-                            <div class="col-sm-2">
-                                <input type="number" step="0.0001" class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="tarif_tempo_blanc_hc" />
-                            </div>
-                            <div class="col-sm-2">
-                                <input type="number" step="0.0001" class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="tarif_tempo_blanc_hp" />
-                            </div>
-                        </div>
-                        <div class="form-group">
-                            <label class="col-sm-3 control-label">{{Rouge — HC / HP (€/kWh)}}</label>
-                            <div class="col-sm-2">
-                                <input type="number" step="0.0001" class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="tarif_tempo_rouge_hc" />
-                            </div>
-                            <div class="col-sm-2">
-                                <input type="number" step="0.0001" class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="tarif_tempo_rouge_hp" />
-                            </div>
-                        </div>
-                    </div>
-                    <div class="alert alert-info">
-                        {{Ces prix alimentent le calcul du gain/dépense (€). Toujours éditables à la main : la mise à jour auto (si activée) les écrase une fois par mois depuis open-dpe.fr (source qui couvre Base/HP-HC/Tempo en un seul appel), avec un bémol de fiabilité assumé — elle est alimentée par un pipeline PDF→LLM mensuel côté source. En cas d'échec (réseau, format inattendu), les prix existants ne sont jamais effacés ni écrasés par une valeur invalide : la saisie manuelle reste le filet de sécurité.}}
-                    </div>
                 </fieldset>
                 <fieldset>
                     <legend><i class="fas fa-moon"></i> {{Stratégie nuit}}</legend>
@@ -528,29 +483,7 @@ $eqLogics = eqLogic::byType($plugin->getId());
                             <input type="time" class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="heure_debut_hc_soir" placeholder="22:00" />
                         </div>
                     </div>
-                    <div class="alert alert-info">
-                        {{Cron à 00h00 : bascule l'appareil en charge (mode Entrée) et fixe un SOC cible (SOC maximum) selon la couleur Tempo de demain et la prévision solaire du jour à venir (source "Prévision solaire", cf. onglet Sources — nécessite un plugin externe type Solcast). Tempo Rouge demain -> toujours charge à 100% (le tarif Rouge HP est assez élevé pour préférer se couvrir plutôt que parier sur la prévision solaire). Sinon deux logiques possibles : (1) Capacité batterie (kWh) renseignée -> modèle en kWh réels -- principe : un électron solaire ne coûte rien, un électron HC stocké la nuit a un coût, donc on ne charge que ce que le solaire de demain ne couvrira pas. Cible = (consommation typique du foyer sur la fenêtre HP réelle réveil→retour HC soir, médiane glissante 7 jours d'historique) moins la prévision solaire du lendemain, jamais négatif, ramené en % de la capacité (mini 20%, jamais plus de 100%). Sans tarif HP/HC configuré (contrat Base), la fenêtre couvre toute la journée (0h-24h) faute de créneau "cher" identifiable — le plugin reste utilisable sans cet abonnement. Retombe automatiquement sur la logique (2) tant que l'historique est insuffisant (installation récente). (2) Capacité batterie vide, ou historique pas encore assez profond -> ancienne logique à seuils fixes (Tempo Bleu + prévision solaire ≥ 4 kWh -> 60% ; sinon 80%). Piège de fraîcheur du cache géré automatiquement : si la prévision "J+0" de la source n'a pas encore été rafraîchie aujourd'hui (typique avant le rafraîchissement matinal de Solcast, souvent ~6h), la "J+1" du cache d'hier est utilisée à la place — elle correspond alors au bon jour calendaire. Puissance de charge nuit (par défaut 1200W, la limite AC du Hyper 2000) : cible envoyée à l'automation de charge de l'appareil -- sans cette commande explicite, l'appareil ne charge jamais réellement (bug corrigé le 2026-07-22, cf. README ; effet réel sur la batterie toujours pas confirmé en conditions réelles à ce jour, cf. docs/brief_strategie_charge.md). Stratégie nuit en simulation : logue la décision (niveau info, préfixe "[cronStrategieNuit] [SIMULATION]") sans jamais toucher à l'appareil tant que cette case est cochée. Réveil du mode charge (cron HP, toutes les 5 min) : si un tarif HP/HC ou Tempo est configuré (onglet Sources), c'est le passage réel en HP côté fournisseur (PTEC) qui déclenche le retour en décharge — précis, pas d'horaire supposé. Sans tarif HP/HC configuré (contrat Base), le champ "Fin de la charge nuit" ci-dessus (défaut 06:00) sert de repli, ainsi que pour le début de la fenêtre HP du modèle kWh. "Retour HC le soir" (défaut 22:00, horaire standard Tempo/HP-HC) ferme cette même fenêtre HP côté modèle kWh uniquement.}}
-                    </div>
                 </fieldset>
-                <div class="alert alert-info">
-                    <strong>{{Logique de la boucle anti-injection}}</strong>
-                    <p>{{target = clamp(0, limite_max, grid_power + injected_power - marge), recalculé en absolu à chaque mesure de la pince, jamais depuis une valeur mémorisée. Convention : grid_power > 0 = import réseau (normal), < 0 = injection (à éviter). Deux sens, deux cadences (corrigé le 2026-07-28 : avant cette date, le sens import ne faisait rien du tout et une coupure d'urgence pouvait rester bloquée jusqu'à 5 min, cf. brief) : côté injection (grid < marge), réactivité maximale — cooldown court, pas de zone morte, bypass total en cas d'injection avérée (urgent_injection_w). Côté import (grid >= marge), cadence volontairement plus lente (cooldown import) + zone morte en % autour de la dernière valeur envoyée, pour laisser l'appareil se stabiliser entre deux corrections et ne pas re-déclencher une commande pour une variation négligeable — réagir aussi vite que côté injection dans ce sens a un historique d'oscillation réseau.}}</p>
-                    <ul style="margin-bottom:0;">
-                        <li>{{Connexion active : décochez pour couper complètement la connexion MQTT du démon vers ce boîtier (déconnexion propre, y compris la sortie du "Mode intelligent" sur l'appli mobile) — utile pour cohabiter avec un autre pilote du même compte cloud (ex. Home Assistant) : deux clients connectés simultanément avec les mêmes identifiants se coupent mutuellement la session. Décocher ici libère la session sans désinstaller le plugin ; les autres réglages de cet équipement restent intacts pour une réactivation ultérieure.}}</li>
-                        <li>{{Anti-injection active : décochez pour couper la boucle rapide ET le cron HP (mais pas la connexion elle-même) — le plugin continue de recevoir la télémétrie et d'afficher le dashboard, mais ne commande plus jamais la limite de sortie. Utile si un autre outil (scénario, HA...) pilote déjà cet appareil et que seule la régulation doit être neutralisée.}}</li>
-                        <li>{{Marge anti-injection (W) : objectif de puissance importée du réseau à maintenir (jamais tout à 0, pour absorber les variations entre deux mesures de la pince). Ex. 30W.}}</li>
-                        <li>{{Cooldown (s) : délai minimum entre deux commandes côté injection (grid < marge). Ignoré en cas d'injection avérée (seuil urgent, non exposé dans cet onglet — cf. urgent_injection_w).}}</li>
-                        <li>{{Cooldown import (s) : délai minimum entre deux commandes côté import (grid >= marge, pas de risque d'injection immédiat) — volontairement plus long que le cooldown ci-dessus, le temps que l'appareil se stabilise sur la commande précédente. Défaut 15s.}}</li>
-                        <li>{{Tolérance import (%) : ignore une correction côté import si la nouvelle cible reste à +/- X% de la dernière valeur commandée. Défaut 10%. Ne s'applique jamais côté injection/urgence.}}</li>
-                        <li>{{Limites sortie min/max (W) : bornes physiques/souhaitées de la limite de sortie envoyée à la batterie (ex. 0 à 1200W pour un Hyper 2000).}}</li>
-                        <li>{{Cette boucle rapide ne joue que sur la décharge (plancher 0W) : elle ne bascule jamais en charge, conformément au scénario Jeedom de référence — la charge programmée reste une décision distincte (stratégie nuit HC, hors périmètre de cette boucle).}}</li>
-                        <li>{{Cron HP en simulation : reproduit la branche HP du scénario (toutes les 5 min, même formule que la boucle rapide) mais se contente de logger ce qu'il ferait (log plugin, niveau info, préfixe "[cronOptimisationHP] [SIMULATION]") sans jamais toucher à l'appareil tant que cette case est cochée.}}</li>
-                        <li>{{Imax (A) / Réseau (mono/tri) / Seuils jauge : alimentent uniquement la jauge d'intensité du dashboard "Condensé", aucun impact sur la régulation elle-même.}}</li>
-                        <li>{{Intervalle minimum (s) : le démon ne pousse une valeur de télémétrie vers Jeedom que si elle a changé depuis le dernier envoi, sauf si ce délai est dépassé (heartbeat, pour ne jamais laisser une commande "morte" trop longtemps). N'affecte pas l'anti-injection elle-même (qui reste temps réel).}}</li>
-                        <li>{{Tolérance de bruit : un écart numérique en dessous de cette valeur n'est pas considéré comme un changement (ex. 3 = les puissances qui frémissent de quelques W en permanence ne déclenchent plus un envoi à chaque trame). Sans tolérance, seules les valeurs stables (SOC%, état...) bénéficient vraiment du filtre.}}</li>
-                        <li>{{Capture télémétrie complète (1h) : désactive temporairement ce filtre — tout est poussé sans filtrage pendant 1h (diagnostic), puis le filtrage normal reprend automatiquement.}}</li>
-                    </ul>
-                </div>
             </div>
 
             <div role="tabpanel" class="tab-pane" id="tab_ihm">
@@ -574,6 +507,31 @@ $eqLogics = eqLogic::byType($plugin->getId());
                         <label class="col-sm-3 control-label">{{Panneau debug (widget Flux)}}</label>
                         <div class="col-sm-2">
                             <input type="checkbox" class="eqLogicAttr" data-l1key="configuration" data-l2key="debug_widget_actif" />
+                        </div>
+                    </div>
+                </fieldset>
+                <fieldset>
+                    <legend style="font-size:14px;"><i class="fas fa-tachometer-alt"></i> {{Jauge d'intensité}}</legend>
+                    <div class="form-group">
+                        <label class="col-sm-3 control-label">{{Imax (A)}}</label>
+                        <div class="col-sm-2">
+                            <input type="number" class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="imax_ampere" />
+                        </div>
+                        <label class="col-sm-3 control-label">{{Réseau}}</label>
+                        <div class="col-sm-2">
+                            <select class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="phases">
+                                <option value="mono">{{Monophasé}}</option>
+                                <option value="tri">{{Triphasé}}</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="col-sm-3 control-label">{{Seuil jauge ambre / rouge (%)}}</label>
+                        <div class="col-sm-2">
+                            <input type="number" class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="seuil_intensite_ambre" placeholder="70" />
+                        </div>
+                        <div class="col-sm-2">
+                            <input type="number" class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="seuil_intensite_rouge" placeholder="90" />
                         </div>
                     </div>
                 </fieldset>
@@ -849,20 +807,11 @@ $(function () {
         $('#bloc_cloud').toggle(mode == 'cloud');
     }).trigger('change');
 
-    // Deux <select> distincts liés à la même clé de config (onglets Comportement
-    // et Sources, cf. addendum du 2026-08-06) : Jeedom peuple bien les deux au
-    // chargement d'un équipement, mais un changement manuel sur l'un ne met à
-    // jour l'autre que si on le fait nous-mêmes (pas de sync native entre deux
-    // éléments .eqLogicAttr sur la même clé) -- d'où ce val() croisé avant de
-    // ré-appliquer l'affichage conditionnel, des deux côtés.
-    $('#sel_type_contrat, #sel_type_contrat_sources').on('change', function () {
+    $('#sel_type_contrat').on('change', function () {
         var type = $(this).val();
-        $('#sel_type_contrat, #sel_type_contrat_sources').not(this).val(type);
         $('#bloc_tarif_base').toggle(type == 'base');
         $('#bloc_tarif_hphc').toggle(type == 'hphc');
         $('#bloc_tarif_tempo').toggle(type == 'tempo');
-        $('#bloc_src_tarif_hphc').toggle(type == 'hphc');
-        $('#bloc_src_tarif_tempo').toggle(type == 'tempo');
     }).trigger('change');
 
     // Sélecteur natif de commande (onglet Sources) — pattern confirmé fonctionnel
