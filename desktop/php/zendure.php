@@ -89,7 +89,8 @@ $eqLogics = eqLogic::byType($plugin->getId());
         <div class="input-group pull-right" style="display:inline-flex">
             <span class="input-group-btn">
                 <!-- Les balises <a></a> sont volontairement fermées à la ligne suivante pour éviter les espaces entre les boutons. Ne pas modifier -->
-                <a class="btn btn-sm btn-default eqLogicAction roundedLeft" data-action="configure"><i class="fas fa-cogs"></i><span class="hidden-xs"> {{Configuration avancée}}</span>
+                <a class="btn btn-sm btn-default pluginAction roundedLeft" data-action="openLocation" data-location="<?= $plugin->getDocumentation() ?>"><i class="fas fa-book"></i><span class="hidden-xs"> {{Documentation}}</span>
+                </a><a class="btn btn-sm btn-default eqLogicAction" data-action="configure"><i class="fas fa-cogs"></i><span class="hidden-xs"> {{Configuration avancée}}</span>
                 </a><a class="btn btn-sm btn-default eqLogicAction" data-action="copy"><i class="fas fa-copy"></i><span class="hidden-xs"> {{Dupliquer}}</span>
                 </a><a class="btn btn-sm btn-success eqLogicAction" data-action="save"><i class="fas fa-check-circle"></i> {{Sauvegarder}}
                 </a><a class="btn btn-sm btn-danger eqLogicAction roundedRight" data-action="remove"><i class="fas fa-minus-circle"></i> {{Supprimer}}
@@ -645,9 +646,6 @@ $eqLogics = eqLogic::byType($plugin->getId());
             </div>
 
             <div role="tabpanel" class="tab-pane" id="commandtab">
-                <div class="alert alert-info">
-                    {{Toutes les commandes de cet équipement : les "curées" (utilisées par le plugin, ex. solar_power) et celles créées automatiquement par le démon à partir de la télémétrie brute Zendure (ex. outputHomePower, packData0_socLevel...). Table standard Jeedom (identique aux autres plugins, ex. Zigbee) : Afficher/Historiser/type/etc. directement éditables par commande.}}
-                </div>
                 <div class="table-responsive">
                     <table id="table_cmd" class="table table-bordered table-condensed">
                     </table>
