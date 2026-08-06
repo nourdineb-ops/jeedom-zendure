@@ -21,9 +21,6 @@ class zendure extends eqLogic
         'output_limit' => array('Limite puissance de sortie', 'numeric', 'W'),
         'input_limit' => array('Limite max entrée solaire', 'numeric', 'W'),
         'mode' => array('Mode de fonctionnement', 'string', ''),
-        'total_output_kwh' => array('Total_output', 'numeric', 'kWh'),
-        'total_solar_kwh' => array('Total_Solaire', 'numeric', 'kWh'),
-        'total_from_edf_kwh' => array('Total from EDF', 'numeric', 'kWh'),
         'forecast_today_kwh' => array('forecast_today', 'numeric', 'kWh'),
         'transport_connected' => array('Transport connecté', 'binary', ''),
     );
@@ -60,6 +57,20 @@ class zendure extends eqLogic
         'gain_batterie_veille' => array('Gain batterie (veille)', 'numeric', '€'),
         'depense_veille' => array('Dépense veille (J-1)', 'numeric', '€'),
         'depense_jour' => array('Dépense jour', 'numeric', '€'),
+        // Intégration logicielle (puissance x temps), même principe que le
+        // moteur gain/dépense ci-dessus -- le Hyper 2000 n'expose aucun compteur
+        // kWh cumulé natif dans sa télémétrie (vérifié : ni dans les trames
+        // captées sur ce projet, ni dans la source de zendure_ha, qui calcule
+        // elle-même ses capteurs "energy" de la même façon, cf. sensor.py). Un
+        // compteur jour/veille comme celui-ci évite de dépendre uniquement de
+        // l'historique/archive Jeedom (coût requête) pour un total simple --
+        // même logique qu'un compteur Téléinfo qui maintient ses propres index.
+        'total_solar_kwh' => array('Solaire produit (jour)', 'numeric', 'kWh'),
+        'total_solar_kwh_veille' => array('Solaire produit (veille)', 'numeric', 'kWh'),
+        'total_output_kwh' => array('Délivré par la batterie (jour)', 'numeric', 'kWh'),
+        'total_output_kwh_veille' => array('Délivré par la batterie (veille)', 'numeric', 'kWh'),
+        'total_from_edf_kwh' => array('Prélevé au réseau (jour)', 'numeric', 'kWh'),
+        'total_from_edf_kwh_veille' => array('Prélevé au réseau (veille)', 'numeric', 'kWh'),
         'jauge_intensite_marge' => array('Marge intensité (Imax - IINST)', 'numeric', 'A'),
         'periode_tarif' => array('Période HP/HC', 'string', ''),
     );
@@ -458,6 +469,9 @@ class zendure extends eqLogic
             '##DEPENSE_JOUR##' => number_format((float) $this->getCmdValue('depense_jour'), 2),
             '##DEPENSE_VEILLE##' => number_format((float) $this->getCmdValue('depense_veille'), 2),
             '##SOC##' => round((float) $this->getCmdValue('soc')),
+            '##SOLAR_KWH##' => number_format((float) $this->getCmdValue('total_solar_kwh'), 2),
+            '##OUTPUT_KWH##' => number_format((float) $this->getCmdValue('total_output_kwh'), 2),
+            '##FROM_EDF_KWH##' => number_format((float) $this->getCmdValue('total_from_edf_kwh'), 2),
         );
         return str_replace(array_keys($tokens), array_values($tokens), $html);
     }
@@ -1351,6 +1365,9 @@ class zendure extends eqLogic
         $rollovers = array(
             'gain_solaire_jour' => 'gain_solaire_veille',
             'gain_batterie_jour' => 'gain_batterie_veille',
+            'total_solar_kwh' => 'total_solar_kwh_veille',
+            'total_output_kwh' => 'total_output_kwh_veille',
+            'total_from_edf_kwh' => 'total_from_edf_kwh_veille',
         );
         // depense_jour/veille exclus si une source externe est configurée (ex.
         // Teleinfo) : elle gère déjà sa propre bascule jour -> veille à son propre
@@ -1935,7 +1952,7 @@ class zendure extends eqLogic
         if (is_object($eqLogic)) {
             // Convention grid_power > 0 = import réseau (normal), < 0 = injection (à
             // éviter) — cf. toHtmlCondense(). La dépense ne compte jamais l'export.
-            $eqLogic->accumulateEuro('depense_jour', (float) $value);
+            $eqLogic->accumulateEuro('depense_jour', (float) $value, 'total_from_edf_kwh');
         }
     }
 
@@ -1946,7 +1963,7 @@ class zendure extends eqLogic
      */
     public static function onSolarPowerEvent($_options)
     {
-        self::onTelemetryAccumulationEvent($_options, 'gain_solaire_jour');
+        self::onTelemetryAccumulationEvent($_options, 'gain_solaire_jour', 'total_solar_kwh');
     }
 
     /**
@@ -1955,10 +1972,10 @@ class zendure extends eqLogic
      */
     public static function onInjectedPowerEvent($_options)
     {
-        self::onTelemetryAccumulationEvent($_options, 'gain_batterie_jour');
+        self::onTelemetryAccumulationEvent($_options, 'gain_batterie_jour', 'total_output_kwh');
     }
 
-    private static function onTelemetryAccumulationEvent($_options, $cumulLogicalId)
+    private static function onTelemetryAccumulationEvent($_options, $cumulLogicalId, $kwhLogicalId = null)
     {
         $eqId = $_options['eq_id'] ?? null;
         $value = $_options['value'] ?? null;
@@ -1967,7 +1984,7 @@ class zendure extends eqLogic
         }
         $eqLogic = eqLogic::byId((int) $eqId);
         if (is_object($eqLogic)) {
-            $eqLogic->accumulateEuro($cumulLogicalId, (float) $value);
+            $eqLogic->accumulateEuro($cumulLogicalId, (float) $value, $kwhLogicalId);
         }
     }
 
@@ -1977,8 +1994,15 @@ class zendure extends eqLogic
      * commande cumulative $cumulLogicalId (depense_jour / gain_solaire_jour /
      * gain_batterie_jour). dt est dérivé de collectDate() de la commande cumulative
      * elle-même : pas de nouvel état séparé à maintenir.
+     *
+     * $kwhLogicalId (optionnel) : compteur kWh brut jumeau (total_solar_kwh/
+     * total_output_kwh/total_from_edf_kwh), incrémenté du même $kwh dans le même
+     * verrou -- le Hyper 2000 n'expose aucun cumul kWh natif dans sa télémétrie,
+     * ce compteur logiciel jour/veille (comme un index Téléinfo) évite de dépendre
+     * d'une requête sur l'historique/archive Jeedom pour un total aussi simple
+     * (cf. échange utilisateur 2026-08-06).
      */
-    private function accumulateEuro($cumulLogicalId, $valueW)
+    private function accumulateEuro($cumulLogicalId, $valueW, $kwhLogicalId = null)
     {
         // Dépense : s'auto-désactive si une source externe fait déjà ce calcul en
         // mieux (ex. Teleinfo STAT_TODAY_INDEX00_COUT, basé sur les vrais index
@@ -2044,6 +2068,13 @@ class zendure extends eqLogic
             $kwh = max(0, $valueW) * $dt / 3600 / 1000;
             $euros = $kwh * $this->currentTariffEurPerKwh();
             $cmd->event((float) $cmd->execCmd() + $euros);
+
+            if ($kwhLogicalId !== null) {
+                $kwhCmd = $this->getCmd(null, $kwhLogicalId);
+                if (is_object($kwhCmd)) {
+                    $kwhCmd->event((float) $kwhCmd->execCmd() + $kwh);
+                }
+            }
 
             if ($cumulLogicalId == 'gain_solaire_jour' || $cumulLogicalId == 'gain_batterie_jour') {
                 $this->recomputeGainTotal('jour');

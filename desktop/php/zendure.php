@@ -628,11 +628,11 @@ $eqLogics = eqLogic::byType($plugin->getId());
                                 </div>
                             </div>
                             <div class="zd-breakdown">
-                                <span>☀ Solaire : 0.90 €</span>
-                                <span>🔋 Batterie : 0.34 €</span>
+                                <span>☀ Solaire : 0.90 € (2.10 kWh)</span>
+                                <span>🔋 Batterie : 0.34 € (0.85 kWh)</span>
                             </div>
                             <div class="zd-breakdown">
-                                <span>Dépense jour : 0.31 €</span>
+                                <span>Dépense jour : 0.31 € (1.40 kWh)</span>
                                 <span>Dépense veille : 0.28 €</span>
                             </div>
                             <div class="zd-footer">
