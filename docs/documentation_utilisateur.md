@@ -257,9 +257,14 @@ sont configurées, sinon la logique retombe sur un mode dégradé — voir
   - **Flux** : losange animé Solaire/Réseau/Maison/Batterie, jauge d'intensité,
     Tempo J/J+1, indicateurs financiers et curseurs de pilotage (limite de sortie
     AC, SOC minimum).
-  - **Historique** : pas encore implémenté — en le sélectionnant, l'équipement
-    retombe sur l'affichage générique Jeedom (liste de commandes), sans plantage
-    mais sans le rendu visuel prévu à terme.
+  - **Résumé** : digest du jour en gros chiffres (gain aujourd'hui/veille,
+    répartition solaire/batterie, dépense jour/veille, SOC) — pas des courbes.
+    Pour ça, la page **Analyse** native de Jeedom (Outils → Analyse →
+    Historique) fait déjà bien mieux : superposition de plusieurs courbes,
+    groupement par période, comparaison, et même une formule calculée
+    combinant plusieurs commandes — sans aucun code à écrire. Choisissez par
+    exemple `solar_power`, `grid_power`, `injected_power` et `soc` pour
+    visualiser une journée complète.
 - **Animations** : désactivez si vous préférez un rendu statique (utile sur
   mobile/tablette).
 - **Panneau debug** (widget Flux) : ajoute un bandeau repliable en bas du widget

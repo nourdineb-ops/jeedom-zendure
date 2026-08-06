@@ -495,7 +495,7 @@ $eqLogics = eqLogic::byType($plugin->getId());
                             <select class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="template_dashboard">
                                 <option value="condense">{{Condensé}}</option>
                                 <option value="flux">{{Flux}}</option>
-                                <option value="historique">{{Historique}}</option>
+                                <option value="historique">{{Résumé}}</option>
                             </select>
                         </div>
                         <label class="col-sm-2 control-label">{{Animations}}</label>
@@ -611,20 +611,36 @@ $eqLogics = eqLogic::byType($plugin->getId());
                     </div>
 
                     <div class="col-md-4 text-center">
-                        <p><strong>{{Historique}}</strong> <span class="label label-default">{{pas encore implémenté}}</span></p>
-                        <div class="zh-preview">
-                            <div class="zh-bars">
-                                <div class="zh-bar" style="height:20%"></div>
-                                <div class="zh-bar" style="height:35%"></div>
-                                <div class="zh-bar" style="height:55%"></div>
-                                <div class="zh-bar" style="height:80%"></div>
-                                <div class="zh-bar" style="height:65%"></div>
-                                <div class="zh-bar" style="height:40%"></div>
-                                <div class="zh-bar" style="height:25%"></div>
+                        <p><strong>{{Résumé}}</strong> <span class="label label-success">{{implémenté}}</span></p>
+                        <div class="zd-preview zendure-digest">
+                            <div class="zd-header">
+                                <span class="zd-name">Panneaux solaires</span>
+                                <span>Résumé</span>
                             </div>
-                            <div class="zh-footer">{{Solaire}} / {{Maison}} / {{Injection}} — {{Gain cumulé}} : 4.80 €</div>
+                            <div class="zd-gains">
+                                <div class="zd-gain-card">
+                                    <div class="zd-gain-value zd-positive">1.24 €</div>
+                                    <div class="zd-gain-label">Gain aujourd'hui</div>
+                                </div>
+                                <div class="zd-gain-card">
+                                    <div class="zd-gain-value zd-positive">0.85 €</div>
+                                    <div class="zd-gain-label">Gain veille (J-1)</div>
+                                </div>
+                            </div>
+                            <div class="zd-breakdown">
+                                <span>☀ Solaire : 0.90 €</span>
+                                <span>🔋 Batterie : 0.34 €</span>
+                            </div>
+                            <div class="zd-breakdown">
+                                <span>Dépense jour : 0.31 €</span>
+                                <span>Dépense veille : 0.28 €</span>
+                            </div>
+                            <div class="zd-footer">
+                                <span>SOC</span>
+                                <span class="zd-soc-value">74%</span>
+                            </div>
                         </div>
-                        <p class="text-muted" style="font-size:11px;">{{Courbes du jour + totaux, basé sur l'historisation des commandes.}}</p>
+                        <p class="text-muted" style="font-size:11px;">{{Digest du jour (gain/dépense, répartition solaire/batterie, SOC) -- pour les courbes, la page Analyse native de Jeedom fait déjà ça très bien, cf. documentation.}}</p>
                     </div>
                 </div>
             </div>
@@ -761,19 +777,28 @@ $eqLogics = eqLogic::byType($plugin->getId());
 .zendure-flux.zf-preview-static .zf-gauge-svg { width: 70px; height: 44px; }
 .zendure-flux.zf-preview-static .zf-slider { width: 100%; }
 
-/* Aperçu conceptuel "Historique" (pas encore implémenté) : mini barres du jour */
-.zh-preview { max-width: 260px; margin: 0 auto; }
-.zh-preview .zh-bars {
-    display: flex;
-    align-items: flex-end;
-    gap: 4px;
-    height: 80px;
-    background: var(--bg-widget, #1e1e1e);
-    border-radius: 8px;
-    padding: 8px;
+/* Aperçu "Résumé" (onglet IHM) : copie de core/template/dashboard/digest/digest.html,
+   mêmes classes .zendure-digest/.zd-* que le vrai template (cf. convention .zendure-condense
+   ci-dessus), à retenir en sync à chaque évolution du vrai template. */
+.zd-preview.zendure-digest {
+    display: inline-block;
+    text-align: left;
+    width: 100%;
+    max-width: 340px;
+    color: var(--txt-color, #333);
+    font-size: 13px;
 }
-.zh-preview .zh-bar { flex: 1 1 auto; background: #4cd964; border-radius: 2px 2px 0 0; }
-.zh-preview .zh-footer { font-size: 11px; margin-top: 6px; opacity: 0.85; }
+.zd-preview .zd-header { display: flex; justify-content: space-between; font-weight: 600; margin-bottom: 8px; }
+.zd-preview .zd-gains { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
+.zd-preview .zd-gain-card { background: rgba(127, 127, 127, 0.08); border-radius: 10px; padding: 8px 10px; text-align: center; }
+.zd-preview .zd-gain-value { font-size: 22px; font-weight: 700; }
+.zd-preview .zd-gain-value.zd-positive { color: #3B6D11; }
+.zd-preview .zd-gain-value.zd-negative { color: #B91C1C; }
+.zd-preview .zd-gain-label { font-size: 10.5px; opacity: 0.7; margin-top: 2px; }
+.zd-preview .zd-breakdown { display: flex; justify-content: space-between; gap: 10px; margin-bottom: 8px; font-size: 11.5px; }
+.zd-preview .zd-breakdown span:first-child { opacity: 0.75; }
+.zd-preview .zd-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 6px; padding-top: 6px; border-top: 1px solid rgba(127, 127, 127, 0.2); font-size: 11.5px; }
+.zd-preview .zd-soc-value { font-weight: 700; }
 </style>
 
 <script>

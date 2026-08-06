@@ -1,0 +1,125 @@
+<!--
+Template "Résumé" (ex-"Historique", cf. échange utilisateur 2026-08-06) :
+digest du jour en gros chiffres (gain/dépense/SOC), pas des courbes -- la
+page Analyse native de Jeedom (Outils > Analyse > Historique) fait déjà très
+bien les graphiques multi-courbes/formules calculées, inutile de la
+réinventer moins bien dans une tuile dashboard. Ce template complète plutôt
+Condensé/Flux avec ce qu'ils n'affichent pas : la comparaison jour/veille et
+la répartition solaire/batterie du gain.
+
+Mêmes conventions que condense.html (CSS inline, fond transparent, pas de
+JS -- le remplacement HTML automatique de Jeedom sur les widgets eqLogic
+suffit à tenir ces valeurs à jour).
+-->
+<style>
+    .zendure-digest {
+        width: 410px;
+        max-width: 100%;
+        border-radius: 10px;
+        padding: 10px 14px;
+        color: var(--txt-color, #333);
+        font-size: 13px;
+        box-sizing: border-box;
+    }
+
+    .zendure-digest .zd-header {
+        display: flex;
+        justify-content: space-between;
+        font-weight: 600;
+        margin-bottom: 8px;
+    }
+
+    .zendure-digest .zd-name {
+        color: inherit;
+        text-decoration: none;
+    }
+
+    .zendure-digest .zd-name:hover {
+        text-decoration: underline;
+    }
+
+    .zendure-digest .zd-gains {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+        margin-bottom: 10px;
+    }
+
+    .zendure-digest .zd-gain-card {
+        background: rgba(127, 127, 127, 0.08);
+        border-radius: 10px;
+        padding: 8px 10px;
+        text-align: center;
+    }
+
+    .zendure-digest .zd-gain-value {
+        font-size: 22px;
+        font-weight: 700;
+    }
+
+    .zendure-digest .zd-gain-value.zd-positive { color: #3B6D11; }
+    .zendure-digest .zd-gain-value.zd-negative { color: #B91C1C; }
+
+    .zendure-digest .zd-gain-label {
+        font-size: 10.5px;
+        opacity: 0.7;
+        margin-top: 2px;
+    }
+
+    .zendure-digest .zd-breakdown {
+        display: flex;
+        justify-content: space-between;
+        gap: 10px;
+        margin-bottom: 8px;
+        font-size: 11.5px;
+    }
+
+    .zendure-digest .zd-breakdown span:first-child {
+        opacity: 0.75;
+    }
+
+    .zendure-digest .zd-footer {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-top: 6px;
+        padding-top: 6px;
+        border-top: 1px solid rgba(127, 127, 127, 0.2);
+        font-size: 11.5px;
+    }
+
+    .zendure-digest .zd-soc-value {
+        font-weight: 700;
+    }
+</style>
+<div class="zendure-digest" data-eqid="##EQ_ID##">
+    <div class="zd-header">
+        <a class="zd-name" href="##EQ_LINK##">##NAME##</a>
+        <span>{{Résumé}}</span>
+    </div>
+
+    <div class="zd-gains">
+        <div class="zd-gain-card">
+            <div class="zd-gain-value ##GAIN_JOUR_CLASS##">##GAIN_JOUR## €</div>
+            <div class="zd-gain-label">{{Gain aujourd'hui}}</div>
+        </div>
+        <div class="zd-gain-card">
+            <div class="zd-gain-value ##GAIN_VEILLE_CLASS##">##GAIN_VEILLE## €</div>
+            <div class="zd-gain-label">{{Gain veille (J-1)}}</div>
+        </div>
+    </div>
+
+    <div class="zd-breakdown">
+        <span>☀ {{Solaire}} : ##GAIN_SOLAIRE_JOUR## €</span>
+        <span>🔋 {{Batterie}} : ##GAIN_BATTERIE_JOUR## €</span>
+    </div>
+    <div class="zd-breakdown">
+        <span>{{Dépense jour}} : ##DEPENSE_JOUR## €</span>
+        <span>{{Dépense veille}} : ##DEPENSE_VEILLE## €</span>
+    </div>
+
+    <div class="zd-footer">
+        <span>{{SOC}}</span>
+        <span class="zd-soc-value">##SOC##%</span>
+    </div>
+</div>

@@ -9,9 +9,9 @@
   automatique sur une logique à seuils fixes si l'historique est insuffisant.
 * Calcul du gain (€) au jour le jour, tarifs Base / Heures Pleines-Creuses /
   Tempo, mise à jour mensuelle automatique optionnelle des prix.
-* Deux dashboards : "Condensé" (tuile compacte, anneau SOC) et "Flux" (diagramme
-  animé Solaire/Réseau/Maison/Batterie avec curseurs de pilotage directs).
-  "Historique" pas encore implémenté.
+* Trois dashboards : "Condensé" (tuile compacte, anneau SOC), "Flux" (diagramme
+  animé Solaire/Réseau/Maison/Batterie avec curseurs de pilotage directs) et
+  "Résumé" (digest du jour : gain/dépense/SOC).
 * Mode de connexion "Simulation" : scénario synthétique de consommation/
   production solaire pilotant la même boucle anti-injection et les mêmes
   dashboards, sans appareil ni broker MQTT requis.
