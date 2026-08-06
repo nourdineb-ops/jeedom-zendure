@@ -54,7 +54,13 @@ réseau public (anti-injection).
   - **Simulation** : aucun appareil ni broker requis. Un scénario synthétique de
     consommation/production solaire, généré par le démon, pilote la même boucle
     anti-injection et le même dashboard qu'en conditions réelles — utile pour
-    découvrir le plugin ou tester un réglage sans matériel.
+    découvrir le plugin ou tester un réglage sans matériel. La capacité batterie
+    utilisée par le scénario reprend le champ "Capacité batterie" (onglet
+    Comportement, section Stratégie nuit) ; 5 kWh par défaut si ce champ est vide.
+  - Le mode **Local** (Chemin B, broker MQTT sur site) n'apparaît plus dans ce
+    menu — abandonné après plusieurs tentatives sans succès, voir
+    `docs/brief_chemin_b_local.md`. Le code transport reste en place si une
+    nouvelle piste le rend viable un jour.
 - **Identifiant appareil (device_id) / Product key** : voir "Compatibilité" ci-dessus.
 - **Modèle d'appareil** : Hyper 2000 (validé), Hub 1200/2000, AIO 2400, SuperBase
   V4600/V6400 (profils dérivés du code source Home Assistant, jamais testés

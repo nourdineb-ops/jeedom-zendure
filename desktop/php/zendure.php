@@ -156,13 +156,25 @@ $eqLogics = eqLogic::byType($plugin->getId());
                         <legend><i class="fas fa-plug"></i> {{Connexion}}</legend>
                         <fieldset>
                             <div class="form-group">
+                                <label class="col-sm-4 control-label">{{Modèle d'appareil}}</label>
+                                <div class="col-sm-8">
+                                    <select class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="device_model">
+                                        <option value="hyper2000">{{Hyper 2000}}</option>
+                                        <option value="hub1200">{{Hub 1200 (non testé)}}</option>
+                                        <option value="hub2000">{{Hub 2000 (non testé)}}</option>
+                                        <option value="aio2400">{{AIO 2400 (non testé)}}</option>
+                                        <option value="superbasev4600">{{SuperBase V4600 (non testé)}}</option>
+                                        <option value="superbasev6400">{{SuperBase V6400 (non testé)}}</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="form-group">
                                 <label class="col-sm-4 control-label">{{Mode de connexion}}</label>
                                 <div class="col-sm-8">
                                     <select id="sel_mode_connexion" class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="mode_connexion">
                                         <option value="cloud">{{Cloud}}</option>
                                         <option value="simulation">{{Simulation (aucun appareil requis)}}</option>
                                     </select>
-                                    <span class="help-block" style="margin-bottom:0;">{{Chemin B (local) retiré de ce menu -- abandonné après plusieurs tentatives sans succès, cf. docs/brief_chemin_b_local.md. Le code transport reste en place si une nouvelle piste le rend viable un jour. Simulation : scénario synthétique de conso/production solaire généré par le démon, pour voir tourner la régulation anti-injection et le dashboard sans appareil réel ni broker MQTT -- capacité batterie reprise du champ "Capacité batterie" ci-dessous (onglet Stratégie nuit), 5kWh par défaut si vide.}}</span>
                                 </div>
                             </div>
                             <div class="form-group">
@@ -177,26 +189,12 @@ $eqLogics = eqLogic::byType($plugin->getId());
                                     <input class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="product_key" />
                                 </div>
                             </div>
-                            <div class="form-group">
-                                <label class="col-sm-4 control-label">{{Modèle d'appareil}}</label>
-                                <div class="col-sm-8">
-                                    <select class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="device_model">
-                                        <option value="hyper2000">{{Hyper 2000 (testé en conditions réelles)}}</option>
-                                        <option value="hub1200">{{Hub 1200 (non testé -- dérivé du code source Home Assistant)}}</option>
-                                        <option value="hub2000">{{Hub 2000 (non testé -- dérivé du code source Home Assistant)}}</option>
-                                        <option value="aio2400">{{AIO 2400 (non testé -- dérivé du code source Home Assistant)}}</option>
-                                        <option value="superbasev4600">{{SuperBase V4600 (non testé -- dérivé du code source Home Assistant)}}</option>
-                                        <option value="superbasev6400">{{SuperBase V6400 (non testé -- dérivé du code source Home Assistant)}}</option>
-                                    </select>
-                                    <span class="help-block" style="margin-bottom:0;">{{Seul le Hyper 2000 a été validé contre un appareil réel sur ce projet -- les autres profils sont dérivés de la lecture du code source de l'intégration Home Assistant Zendure-HA, jamais vérifiés en conditions réelles (cf. resources/zendure_daemon/device_profiles/). ACE1500 et la famille SolarFlow (800/1600/2400/4000) ne sont pas supportés du tout : mécanisme de pilotage trop différent (nécessite soit un Hub Zendure physique, soit un protocole distinct).}}</span>
-                                </div>
-                            </div>
                         </fieldset>
                     </div>
 
                     <div class="col-md-6">
                         <div id="bloc_cloud">
-                            <legend><i class="fas fa-cloud"></i> {{Identifiants Cloud (Chemin A)}}</legend>
+                            <legend><i class="fas fa-cloud"></i> {{Identifiants Cloud}}</legend>
                             <fieldset>
                                 <div class="form-group">
                                     <label class="col-sm-4 control-label">{{Broker cloud}}</label>
