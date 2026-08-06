@@ -90,7 +90,13 @@ Regroupées par usage :
 
 | Source | Valeur par défaut si vide |
 |---|---|
-| PAPP réseau | Commande curée `grid_power` (télémétrie Zendure). **Entrée principale de la boucle anti-injection rapide** — sans une pince/PAPP externe fiable, le pilotage automatique reste possible mais moins précis que sur mesure. |
+| Puissance prélevée sur le réseau (W) | Commande curée `grid_power` (télémétrie Zendure). **Entrée principale de la boucle anti-injection rapide.** Idéalement une pince/compteur dédié plutôt qu'un Téléinfo : le PAPP Téléinfo est une puissance apparente mono-quadrant, qui ne distingue pas bien l'injection réelle — une pince à mesure bidirectionnelle est un meilleur capteur pour cet usage. Sans source configurée, le pilotage retombe sur la télémétrie interne Zendure, moins fiable pour ça. |
+
+**Avancé** (laisser vide sauf besoin spécifique — le Zendure connaît déjà sa
+propre injection et sa propre production solaire) :
+
+| Source | Valeur par défaut si vide |
+|---|---|
 | Injection maison (Zendure) | Commande curée `injected_power`. |
 | Production solaire (dashboard) | Commande curée `solar_power`. |
 

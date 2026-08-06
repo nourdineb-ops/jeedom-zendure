@@ -257,7 +257,10 @@ $eqLogics = eqLogic::byType($plugin->getId());
 
                     <legend style="font-size:14px;"><i class="fas fa-bolt"></i> {{Pilotage}}</legend>
                     <?php
-                    $renderSourceRow('src_grid_papp', '{{PAPP réseau — vide = repli sur la télémétrie Zendure}}');
+                    $renderSourceRow('src_grid_papp', '{{Puissance prélevée sur le réseau (W) — pince/compteur dédié recommandé, plus fiable qu\'un Téléinfo (PAPP = puissance apparente mono-quadrant, ne distingue pas bien l\'injection)}}');
+                    ?>
+                    <p class="text-muted" style="margin:0 0 4px 15px;font-size:11px;">{{Avancé — laisser vide sauf besoin spécifique, le Zendure connaît déjà sa propre injection/production}}</p>
+                    <?php
                     $renderSourceRow('src_injection', '{{Injection maison (Zendure) — vide = repli sur la télémétrie Zendure}}');
                     $renderSourceRow('src_solaire', '{{Production solaire (dashboard) — vide = repli sur la télémétrie Zendure}}');
                     ?>
@@ -305,7 +308,7 @@ $eqLogics = eqLogic::byType($plugin->getId());
                 <div class="alert alert-info">
                     <strong>{{À quoi sert cet onglet}}</strong>
                     <ul style="margin-bottom:0;">
-                        <li>{{Pilotage : PAPP réseau est l'entrée principale de la boucle anti-injection rapide (onglet Comportement) — sans elle, le pilotage automatique ne peut pas fonctionner. Injection maison / Production solaire : le dashboard utilise par défaut les commandes curées "injected_power"/"solar_power" (télémétrie Zendure) si ces sources sont laissées vides.}}</li>
+                        <li>{{Pilotage : la puissance réseau est l'entrée principale de la boucle anti-injection rapide (onglet Comportement) — sans elle, le pilotage retombe sur la télémétrie interne Zendure, moins fiable pour mesurer l'injection réelle. Injection maison / Production solaire (avancé) : le dashboard utilise par défaut les commandes curées "injected_power"/"solar_power" (télémétrie Zendure) si ces sources sont laissées vides — cas normal pour la grande majorité des installations.}}</li>
                         <li>{{Prévision solaire : J+0 ET J+1 sont utilisées (pas redondant) — la source externe (ex. Solcast) se rafraîchit typiquement après le cron de stratégie nuit (00h00) ; tant que J+0 n'a pas encore été recollectée aujourd'hui, le plugin bascule automatiquement sur J+1, qui correspond alors au bon jour calendaire.}}</li>
                         <li>{{Compteur : Imax abonnement alimente la jauge d'intensité du dashboard, avec repli sur le champ "Imax (A)" de l'onglet Comportement (puis 30A) si vide.}}</li>
                         <li>{{Option tarifaire : le sélecteur "Type de contrat" ici est le même réglage que celui de l'onglet Comportement (section Tarifs) — les deux restent synchronisés. Il détermine quelles sources apparaissent : aucune en Base, PTEC/HP-HC seul en Heures Pleines/Creuses, les 3 sources Tempo en Tempo. Utilisées pour le calcul du gain (€) et la stratégie de charge nocturne (charger davantage si demain est en jour Tempo Rouge).}}</li>

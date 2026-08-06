@@ -52,9 +52,11 @@ Détail complet de chaque réglage : [`docs/documentation_utilisateur.md`](docs/
 3. Créer un équipement Zendure, renseigner `device_id`/`product_key` (voir
    [Compatibilité](docs/documentation_utilisateur.md#compatibilité--prérequis)
    pour savoir où les trouver), et choisir le mode de connexion Cloud.
-4. Configurer au minimum une source "PAPP réseau" (onglet Sources) — c'est
-   l'entrée de la boucle anti-injection, sans elle le pilotage automatique ne
-   peut pas fonctionner.
+4. Configurer au minimum une source "Puissance prélevée sur le réseau" (onglet
+   Sources, groupe Pilotage) — idéalement une pince/compteur dédié, plus fiable
+   qu'un Téléinfo pour mesurer l'injection réelle. C'est l'entrée de la boucle
+   anti-injection ; sans elle, le pilotage retombe sur la télémétrie interne
+   Zendure, moins précise.
 
 Pas d'appareil sous la main, ou juste envie de voir comment ça se comporte ?
 Choisissez le mode de connexion **Simulation** à l'étape 3 : aucun matériel ni
@@ -94,7 +96,7 @@ Aucune valeur de comportement, endpoint ou seuil n'est en dur dans le code — t
 descend de la config Jeedom, sur trois étages :
 
 1. **Transport** (par équipement) : mode cloud/simulation, credentials.
-2. **Sources** (par équipement) : chaque donnée d'entrée (pince, PAPP, tarif,
+2. **Sources** (par équipement) : chaque donnée d'entrée (puissance réseau, tarif,
    prévision solaire...) est un sélecteur de commande Jeedom, jamais un ID en dur.
 3. **Comportement** (par équipement) : marge anti-injection, cooldown, limites W,
    tarifs, seuils de jauge.
