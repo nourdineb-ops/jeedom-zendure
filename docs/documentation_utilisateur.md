@@ -76,28 +76,65 @@ réseau public (anti-injection).
 
 Chaque source pointe vers une commande "info" **existante ailleurs dans Jeedom**
 (pince, téléinfo, Tempo, prévision solaire...) via le sélecteur natif Jeedom —
-jamais un identifiant écrit en dur dans la configuration.
+jamais un identifiant écrit en dur dans la configuration. Toutes doivent déjà
+exister comme commandes "info" ailleurs dans Jeedom (téléinfo, RTE Tempo,
+prévision solaire...) — ce plugin ne les crée pas, il les référence. Exception :
+les commandes de télémétrie brute Zendure, elles, sont créées automatiquement par
+ce plugin lui-même (une par valeur, au premier signalement, visible dans l'onglet
+Commandes) — si une clé brute vous semble plus fiable qu'une valeur curée pour un
+usage donné (ex. `outputHomePower`), vous pouvez la sélectionner ici aussi.
+
+Regroupées par usage :
+
+### Pilotage
+
+| Source | Valeur par défaut si vide |
+|---|---|
+| PAPP réseau | Commande curée `grid_power` (télémétrie Zendure). **Entrée principale de la boucle anti-injection rapide** — sans une pince/PAPP externe fiable, le pilotage automatique reste possible mais moins précis que sur mesure. |
+| Injection maison (Zendure) | Commande curée `injected_power`. |
+| Production solaire (dashboard) | Commande curée `solar_power`. |
+
+### Prévision solaire
 
 | Source | Rôle |
 |---|---|
-| Pince ampèremétrique (intensité) | Jauge d'intensité du dashboard. |
-| PAPP réseau | Mesure de puissance au niveau du compteur. **Entrée principale de la boucle anti-injection rapide** — sans elle, le pilotage automatique ne peut pas fonctionner. |
-| Imax abonnement | Intensité max souscrite (A), alimente aussi la jauge d'intensité. |
-| Période tarifaire (PTEC / HP-HC) + 3 sources Tempo | Calcul du gain (€) et stratégie de charge nocturne (charger davantage si demain est en jour Tempo Rouge). |
-| Prévision solaire J+0 / J+1 (Wh) | Utilisée par la stratégie nuit pour moduler le SOC cible. |
-| Dépense jour / veille (€) | Optionnel — laisser vide pour calculer en interne. |
-| Injection maison / Production solaire (Zendure) | Optionnel — le dashboard utilise par défaut les commandes curées `injected_power`/`solar_power` (télémétrie Zendure). |
+| Prévision solaire J+0 (Wh) | Utilisée par la stratégie nuit pour moduler le SOC cible. |
+| Prévision solaire J+1 (Wh) | **Pas redondante avec J+0** : sert de repli automatique tant que J+0 n'a pas encore été recollectée aujourd'hui (typique avant le rafraîchissement matinal d'une source comme Solcast, souvent après le cron de minuit) — dans ce cas J+1 correspond alors au bon jour calendaire. |
 
-Le démon capture désormais **toute** la télémétrie brute reçue (une commande
-"info" par valeur, créée automatiquement au premier signalement, visible dans
-l'onglet Commandes) — si une autre commande vous semble plus fiable pour un usage
-donné (ex. la clé brute `outputHomePower`, ou une pince externe), sélectionnez-la
-ici plutôt que de dépendre des valeurs curées par défaut.
+Aucune valeur par défaut si vide — la stratégie nuit retombe sur une logique à
+seuils fixes plus grossière (cf. onglet Comportement, section Stratégie nuit).
 
-Toutes ces sources doivent déjà exister comme commandes "info" ailleurs dans
-Jeedom (téléinfo, RTE Tempo, prévision solaire...) — ce plugin ne les crée pas, il
-les référence. Exception : les commandes de télémétrie brute Zendure, elles, sont
-créées automatiquement par ce plugin lui-même.
+### Compteur
+
+| Source | Valeur par défaut si vide |
+|---|---|
+| Pince ampèremétrique (intensité) | Aucune — la jauge d'intensité du dashboard reste à 0. |
+| Imax abonnement | Champ "Imax (A)" de l'onglet Comportement ; 30A si ce champ est lui aussi vide. |
+
+### Option tarifaire
+
+Un sélecteur **Type de contrat** (Base / Heures Pleines-Creuses / Tempo) — le
+même réglage que celui de l'onglet Comportement, les deux restent synchronisés —
+détermine quelles sources apparaissent :
+
+| Type de contrat | Sources affichées | Valeur par défaut si vide |
+|---|---|---|
+| Base | Aucune | — |
+| Heures Pleines / Heures Creuses | Période tarifaire (PTEC / HP-HC) | Aucune |
+| Tempo | Tempo — période courante, couleur du jour, couleur de demain (J+1) | Aucune |
+
+Utilisées pour le calcul du gain (€) et la stratégie de charge nocturne (charger
+davantage si demain est en jour Tempo Rouge).
+
+### Coût
+
+| Source | Valeur par défaut si vide |
+|---|---|
+| Dépense jour (€) | Calculée en interne à partir des tarifs configurés (onglet Comportement) et de la télémétrie. |
+| Dépense veille (€) | Idem. |
+
+Exemple pour ces deux champs avec Teleinfo : `STAT_TODAY_INDEX00_COUT` /
+`STAT_YESTERDAY_INDEX00_COUT`.
 
 ## Onglet Comportement
 
