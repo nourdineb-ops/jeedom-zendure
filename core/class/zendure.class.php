@@ -421,7 +421,45 @@ class zendure extends eqLogic
         if ($template == 'condense') {
             return $this->toHtmlCondense();
         }
+        if ($template == 'historique') {
+            return $this->toHtmlDigest();
+        }
         return parent::toHtml($_version);
+    }
+
+    /**
+     * Template "Résumé" (ex-"Historique", cf. échange utilisateur 2026-08-06) :
+     * digest du jour en gros chiffres, pas des courbes -- la page Analyse
+     * native de Jeedom fait déjà bien mieux le graphique multi-courbes/
+     * formules calculées, inutile de la réinventer en moins bien ici (cf.
+     * core/template/dashboard/digest/digest.html pour le détail du
+     * raisonnement). Garde la valeur de config `historique` (pas de
+     * migration nécessaire, personne d'autre que ce projet n'a encore
+     * choisi cette option).
+     */
+    private function toHtmlDigest()
+    {
+        $path = dirname(__FILE__) . '/../template/dashboard/digest/digest.html';
+        $html = file_get_contents($path);
+
+        $gainJour = (float) $this->getCmdValue('gain_jour');
+        $gainVeille = (float) $this->getCmdValue('gain_veille');
+
+        $tokens = array(
+            '##EQ_ID##' => $this->getId(),
+            '##NAME##' => $this->getName(),
+            '##EQ_LINK##' => $this->getLinkToConfiguration(),
+            '##GAIN_JOUR##' => number_format($gainJour, 2),
+            '##GAIN_JOUR_CLASS##' => $gainJour < 0 ? 'zd-negative' : 'zd-positive',
+            '##GAIN_VEILLE##' => number_format($gainVeille, 2),
+            '##GAIN_VEILLE_CLASS##' => $gainVeille < 0 ? 'zd-negative' : 'zd-positive',
+            '##GAIN_SOLAIRE_JOUR##' => number_format((float) $this->getCmdValue('gain_solaire_jour'), 2),
+            '##GAIN_BATTERIE_JOUR##' => number_format((float) $this->getCmdValue('gain_batterie_jour'), 2),
+            '##DEPENSE_JOUR##' => number_format((float) $this->getCmdValue('depense_jour'), 2),
+            '##DEPENSE_VEILLE##' => number_format((float) $this->getCmdValue('depense_veille'), 2),
+            '##SOC##' => round((float) $this->getCmdValue('soc')),
+        );
+        return str_replace(array_keys($tokens), array_values($tokens), $html);
     }
 
     private function toHtmlCondense()

@@ -15,8 +15,10 @@ près du matériel.
   en kWh réels), avec repli automatique sur une logique à seuils fixes si
   l'historique est insuffisant.
 - **Calcul de gain (€)** au jour le jour, compatible tarifs Base / HP-HC / Tempo.
-- **Deux dashboards** : une tuile compacte ("Condensé") et un diagramme de flux
-  animé ("Flux") avec curseurs de pilotage directs.
+- **Trois dashboards** : une tuile compacte ("Condensé"), un diagramme de flux
+  animé ("Flux") avec curseurs de pilotage directs, et un digest du jour
+  ("Résumé", gain/dépense/SOC). Pour l'historique en courbes, la page Analyse
+  native de Jeedom s'en charge très bien, pas de widget dédié pour ça.
 - **Mode simulation** intégré : découvrez ou testez le comportement de la
   régulation sans aucun appareil ni broker MQTT — un scénario synthétique de
   consommation/production solaire pilote exactement la même boucle qu'en réel.
@@ -122,8 +124,6 @@ docs/brief_*.md                 notes de conception techniques (historique)
 
 ## Limitations connues
 
-- Dashboard "Historique" pas encore implémenté (retombe sur l'affichage
-  générique Jeedom, sans plantage).
 - Mode de connexion local (broker MQTT sur site) non fonctionnel — voir
   [`docs/brief_chemin_b_local.md`](docs/brief_chemin_b_local.md).
 - Seul le Hyper 2000 est validé contre un appareil réel — les autres profils
