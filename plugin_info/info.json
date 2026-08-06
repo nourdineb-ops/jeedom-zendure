@@ -8,7 +8,7 @@
   "website": "https://github.com/nourdineb-ops/jeedom-zendure",
   "version": "0.1.0-dev",
   "require": "4.4",
-  "changelog": "core/config/changelog.txt",
+  "changelog": "https://github.com/nourdineb-ops/jeedom-zendure/blob/main/core/config/changelog.txt",
   "documentation": "https://github.com/nourdineb-ops/jeedom-zendure/blob/main/docs/documentation_utilisateur.md",
   "state": "dev",
   "level": "advanced",
