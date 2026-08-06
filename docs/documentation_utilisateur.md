@@ -112,9 +112,11 @@ seuils fixes plus grossière (cf. onglet Comportement, section Stratégie nuit).
 
 ### Compteur
 
+Alimentent l'affichage jauge (intensité) du dashboard.
+
 | Source | Valeur par défaut si vide |
 |---|---|
-| Pince ampèremétrique (intensité) | Aucune — la jauge d'intensité du dashboard reste à 0. |
+| Intensité instantanée | Aucune — la jauge d'intensité du dashboard reste à 0. |
 | Imax abonnement | Champ "Imax (A)" de l'onglet Comportement ; 30A si ce champ est lui aussi vide. |
 
 ### Option tarifaire
