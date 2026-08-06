@@ -615,7 +615,6 @@ $eqLogics = eqLogic::byType($plugin->getId());
                         <div class="zd-preview zendure-digest">
                             <div class="zd-header">
                                 <span class="zd-name">Panneaux solaires</span>
-                                <span>Résumé</span>
                             </div>
                             <div class="zd-gains">
                                 <div class="zd-gain-card">
@@ -785,8 +784,14 @@ $eqLogics = eqLogic::byType($plugin->getId());
     text-align: left;
     width: 100%;
     max-width: 340px;
+    border-radius: 10px;
+    padding: 10px 14px;
+    background: #fff;
     color: var(--txt-color, #333);
     font-size: 13px;
+}
+@media (prefers-color-scheme: dark) {
+    .zd-preview.zendure-digest { background: #1e1e1e; }
 }
 .zd-preview .zd-header { display: flex; justify-content: space-between; font-weight: 600; margin-bottom: 8px; }
 .zd-preview .zd-gains { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }

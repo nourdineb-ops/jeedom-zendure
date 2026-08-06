@@ -7,19 +7,29 @@ réinventer moins bien dans une tuile dashboard. Ce template complète plutôt
 Condensé/Flux avec ce qu'ils n'affichent pas : la comparaison jour/veille et
 la répartition solaire/batterie du gain.
 
-Mêmes conventions que condense.html (CSS inline, fond transparent, pas de
-JS -- le remplacement HTML automatique de Jeedom sur les widgets eqLogic
-suffit à tenir ces valeurs à jour).
+Mêmes conventions que condense.html pour le CSS inline/pas de JS. Fond blanc
+(pas transparent comme condense.html) : demande explicite le 2026-08-06 --
+sans lui, la tuile Résumé restait plus petite que la cellule allouée par
+Jeedom (héritée du gabarit précédent si l'équipement changeait de template
+sans redimensionner sa tuile), laissant apparaître le fond de la page
+derrière plutôt que de "fondre" avec les autres widgets comme condense.html
+le fait. width/height 100% pour occuper toute la cellule quelle que soit sa
+taille, plutôt que de dépendre d'un redimensionnement manuel.
 -->
 <style>
     .zendure-digest {
-        width: 410px;
-        max-width: 100%;
+        width: 100%;
+        height: 100%;
         border-radius: 10px;
         padding: 10px 14px;
+        background: #fff;
         color: var(--txt-color, #333);
         font-size: 13px;
         box-sizing: border-box;
+    }
+
+    @media (prefers-color-scheme: dark) {
+        .zendure-digest { background: #1e1e1e; }
     }
 
     .zendure-digest .zd-header {
@@ -95,7 +105,6 @@ suffit à tenir ces valeurs à jour).
 <div class="zendure-digest" data-eqid="##EQ_ID##">
     <div class="zd-header">
         <a class="zd-name" href="##EQ_LINK##">##NAME##</a>
-        <span>Résumé</span>
     </div>
 
     <div class="zd-gains">
