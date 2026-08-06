@@ -19,7 +19,7 @@ réseau public (anti-injection).
   récupérer est de sniffer les infos d'une intégration existante qui pilote déjà
   l'appareil (ex. Home Assistant : fichier `.storage/zendure_ha.storage`, champs
   `productKey`/`deviceKey`).
-- **Tarifs (onglet Comportement)** : le contrat **Base** fonctionne partout sans
+- **Tarifs (onglet Sources)** : le contrat **Base** fonctionne partout sans
   rien de plus. Les contrats **Heures Pleines/Creuses** et **Tempo** sont des
   spécificités du marché français (EDF/Linky) — ils nécessitent en plus une source
   de données tarifaires externe (ex. plugin Téléinfo, RTE Tempo) branchée via
@@ -117,28 +117,32 @@ Alimentent l'affichage jauge (intensité) du dashboard.
 | Source | Valeur par défaut si vide |
 |---|---|
 | Intensité instantanée | Aucune — la jauge d'intensité du dashboard reste à 0. |
-| Imax abonnement | Champ "Imax (A)" de l'onglet Comportement ; 30A si ce champ est lui aussi vide. |
+| Imax abonnement | Champ "Imax (A)" de l'onglet IHM (section Jauge d'intensité) ; 30A si ce champ est lui aussi vide. |
 
 ### Option tarifaire
 
-Un sélecteur **Type de contrat** (Base / Heures Pleines-Creuses / Tempo) — le
-même réglage que celui de l'onglet Comportement, les deux restent synchronisés —
-détermine quelles sources apparaissent :
+Un sélecteur **Type de contrat** (Base / Heures Pleines-Creuses / Tempo)
+détermine à la fois quels **prix** (€/kWh) et quelles **sources** apparaissent :
 
-| Type de contrat | Sources affichées | Valeur par défaut si vide |
-|---|---|---|
-| Base | Aucune | — |
-| Heures Pleines / Heures Creuses | Période tarifaire (PTEC / HP-HC) | Aucune |
-| Tempo | Tempo — période courante, couleur du jour, couleur de demain (J+1) | Aucune |
+| Type de contrat | Prix affichés | Sources affichées | Valeur par défaut si vide |
+|---|---|---|---|
+| Base | Prix du kWh | Aucune | — |
+| Heures Pleines / Heures Creuses | Prix HC, Prix HP | Période tarifaire (PTEC / HP-HC) | Aucune |
+| Tempo | Bleu/Blanc/Rouge — HC/HP | Tempo — période courante, couleur du jour, couleur de demain (J+1) | Aucune |
 
-Utilisées pour le calcul du gain (€) et la stratégie de charge nocturne (charger
-davantage si demain est en jour Tempo Rouge).
+Ces prix alimentent le calcul du gain (€) et la stratégie de charge nocturne
+(charger davantage si demain est en jour Tempo Rouge). Toujours éditables à la
+main : la case **Mise à jour auto (mensuelle)**, si cochée, les écrase une fois
+par mois depuis une source externe qui couvre Base/HP-HC/Tempo (marché
+français), avec un bémol de fiabilité assumé. En cas d'échec (réseau, format
+inattendu), les prix existants ne sont jamais effacés ni écrasés par une valeur
+invalide : la saisie manuelle reste le filet de sécurité.
 
 ### Coût
 
 | Source | Valeur par défaut si vide |
 |---|---|
-| Dépense jour (€) | Calculée en interne à partir des tarifs configurés (onglet Comportement) et de la télémétrie. |
+| Dépense jour (€) | Calculée en interne à partir des tarifs configurés (ci-dessus, section Option tarifaire) et de la télémétrie. |
 | Dépense veille (€) | Idem. |
 
 Exemple pour ces deux champs avec Teleinfo : `STAT_TODAY_INDEX00_COUT` /
@@ -185,8 +189,6 @@ bascule jamais en charge — la charge programmée reste une décision distincte
 - **Limites sortie min/max (W)** / **Limite entrée max (W)** : bornes physiques de
   la limite de sortie/entrée envoyée à la batterie (ex. 0 à 1200W pour un
   Hyper 2000).
-- **Imax (A) / Réseau (mono/tri) / Seuils jauge ambre/rouge** : alimentent
-  uniquement la jauge d'intensité du dashboard, aucun impact sur la régulation.
 - **Cron HP en simulation** : reproduit la branche périodique du scénario (toutes
   les minutes) mais se contente de logger ce qu'il ferait, sans jamais toucher à
   l'appareil tant que cette case est cochée.
@@ -214,15 +216,6 @@ Cadencé sur le cron HP (5 min), pas une connexion permanente : volontairement
 occasionnel pour ne pas monopoliser un adaptateur Bluetooth déjà utilisé par
 ailleurs. Ne se déclenche de toute façon que si la télémétrie est déjà confirmée
 muette, jamais en fonctionnement normal.
-
-### Tarifs
-
-Ces prix alimentent le calcul du gain/dépense (€). Toujours éditables à la main :
-la mise à jour auto (si activée) les écrase une fois par mois depuis une source
-externe qui couvre Base/HP-HC/Tempo (marché français), avec un bémol de fiabilité
-assumé. En cas d'échec (réseau, format inattendu), les prix existants ne sont
-jamais effacés ni écrasés par une valeur invalide : la saisie manuelle reste le
-filet de sécurité.
 
 ### Stratégie nuit
 
@@ -273,6 +266,9 @@ sont configurées, sinon la logique retombe sur un mode dégradé — voir
   avec les dernières lignes des logs démon + plugin, actualisées automatiquement.
   Pensez à le désactiver une fois le diagnostic terminé (appels réseau
   périodiques tant qu'il est ouvert).
+- **Jauge d'intensité** — Imax (A) / Réseau (mono/tri) / Seuils jauge ambre-rouge
+  (%) : alimentent uniquement la jauge d'intensité du dashboard, aucun impact sur
+  la régulation elle-même (cf. onglet Comportement pour la régulation).
 
 Un aperçu statique de chaque dashboard est visible directement dans cet onglet du
 formulaire de configuration.
