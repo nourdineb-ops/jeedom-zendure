@@ -188,6 +188,91 @@ class zendure extends eqLogic
     }
 
     /**
+     * Hook générique Jeedom (core/class/jeedom.class.php::health(), auto-détecté
+     * par method_exists() -- cf. plugin.class.php, bloc "Fonctionnalités" de la
+     * page de gestion du plugin) : agrégé à la page Santé de Jeedom, à côté des
+     * checks core (cache, Apache...). Rien à câbler pour l'activer, juste exister
+     * avec cette signature.
+     */
+    public static function health()
+    {
+        $return = array();
+
+        $venvOk = file_exists(dirname(__FILE__) . '/../../resources/venv/bin/python3');
+        $return[] = array(
+            'name' => __('Zendure : environnement Python (venv)', __FILE__),
+            'state' => $venvOk,
+            'result' => $venvOk ? __('OK', __FILE__) : __('NOK', __FILE__),
+            'comment' => $venvOk ? '' : __('Dépendances non installées -- page du plugin, bouton "Installer les dépendances".', __FILE__),
+            'key' => 'zendure::venv',
+        );
+
+        $daemonOk = (self::deamon_info()['state'] == 'ok');
+        $return[] = array(
+            'name' => __('Zendure : démon', __FILE__),
+            'state' => $daemonOk,
+            'result' => $daemonOk ? __('OK', __FILE__) : __('NOK', __FILE__),
+            'comment' => $daemonOk ? '' : __('Démon arrêté -- page du plugin, bouton "(Re)Démarrer".', __FILE__),
+            'key' => 'zendure::daemon',
+        );
+
+        // Un équipement par ligne plutôt qu'un seul statut global : sur une install
+        // multi-équipement, un appareil déconnecté ne doit pas se noyer dans un
+        // état agrégé "globalement OK" alors qu'un autre équipement compense.
+        foreach (self::byType('zendure', true) as $eqLogic) {
+            /* @var zendure $eqLogic */
+            $connected = $eqLogic->getCmdValue('transport_connected') == 1;
+            $return[] = array(
+                'name' => __('Zendure : connexion', __FILE__) . ' (' . $eqLogic->getHumanName() . ')',
+                'state' => $connected,
+                'result' => $connected ? __('OK', __FILE__) : __('NOK', __FILE__),
+                'comment' => $connected ? '' : __('Appareil non joignable (cloud/simulation) -- cf. logs zendure_daemon.', __FILE__),
+                'key' => 'zendure::connected::' . $eqLogic->getId(),
+            );
+        }
+
+        return $return;
+    }
+
+    /**
+     * Hook générique Jeedom (cf. health() ci-dessus pour le mécanisme
+     * d'auto-détection) : signale les références de commande devenues invalides
+     * dans la config Sources (onglet Sources, ex. src_grid_papp) -- typiquement
+     * après suppression d'une commande d'un autre plugin (téléinfo, RTE Tempo...)
+     * encore référencée ici. Ne réutilise PAS eqLogic::deadCmdGeneric() : ce
+     * générique cherche des références numériques #123# dans le JSON de
+     * l'eqLogic, alors que nos sources stockent la référence "humaine"
+     * #[Objet][Eq][Cmd]# (cf. resolveSourceCmd()) -- un format différent qu'il
+     * ne détecterait jamais.
+     */
+    public static function deadCmd()
+    {
+        $return = array();
+        $sourceKeys = array(
+            'src_intensite', 'src_grid_papp', 'src_imax_abonnement',
+            'src_periode_tarif', 'src_tempo_now', 'src_tempo_j', 'src_tempo_j1',
+            'src_prevision_solaire', 'src_prevision_solaire_j1',
+            'src_depense_jour', 'src_depense_veille',
+            'src_injection', 'src_solaire',
+        );
+        foreach (self::byType('zendure', true) as $eqLogic) {
+            /* @var zendure $eqLogic */
+            foreach ($sourceKeys as $key) {
+                $human = $eqLogic->getConfiguration($key, '');
+                if ($human == '' || is_object($eqLogic->resolveSourceCmd($key))) {
+                    continue;
+                }
+                $return[] = array(
+                    'detail' => '<a href="/index.php?v=d&m=zendure&p=zendure&id=' . $eqLogic->getId() . '">' . $eqLogic->getHumanName() . '</a>',
+                    'help' => __('Source', __FILE__) . ' : ' . $key,
+                    'who' => $human,
+                );
+            }
+        }
+        return $return;
+    }
+
+    /**
      * Écrit le fichier de config JSON consommé par le démon (resources/zendure_daemon/config/loader.py).
      * Appelé à chaque postSave d'un eqLogic zendure : c'est le point d'application central
      * du principe "configuration over code" (brief §11) côté PHP.
