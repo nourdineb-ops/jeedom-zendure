@@ -758,7 +758,7 @@ $eqLogics = eqLogic::byType($plugin->getId());
                                 <span class="zd-soc-value">74%</span>
                             </div>
                         </div>
-                        <p class="text-muted" style="font-size:11px;">{{Digest du jour (gain/dépense, répartition solaire/batterie, SOC) -- pour les courbes, la page Analyse native de Jeedom fait déjà ça très bien, cf. documentation.}}</p>
+                        <p class="text-muted" style="font-size:11px;">{{Digest du jour (gain/dépense, détail brut/coût de charge, SOC) -- pour les courbes, la page Analyse native de Jeedom fait déjà ça très bien, cf. documentation.}}</p>
                     </div>
                 </div>
             </div>

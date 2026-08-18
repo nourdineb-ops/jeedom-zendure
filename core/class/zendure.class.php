@@ -59,12 +59,28 @@ class zendure extends eqLogic
      * Commandes calculées côté plugin (brief §14.2), pas des lectures brutes.
      */
     const COMPUTED_COMMANDS = array(
+        // gain_jour/veille : NET, seule valeur qui répond à la vraie question
+        // ("si je n'avais pas eu cet équipement, je n'aurais pas économisé
+        // telle somme", demande explicite utilisateur 2026-08-18) = gain_brut
+        // (ce que Zendure a fourni à la maison, quelle que soit sa source
+        // interne solaire/batterie/mixte -- peu importe, cf. injected_power/
+        // outputHomePower) MOINS cout_charge (ce que Zendure a dû tirer du
+        // réseau pour recharger la batterie, un coût qui n'existerait pas sans
+        // l'équipement). Remplace l'ancien découpage gain_solaire/gain_batterie
+        // (retiré, cf. removeObsoleteCommands()) : ce découpage sommait la
+        // production solaire totale (solar_power, compte TOUT le solaire produit,
+        // y compris celui qui charge la batterie) et la décharge batterie
+        // (packInputPower) -- double-comptant le solaire qui transite par la
+        // batterie avant d'être consommé (compté une fois à la production, une
+        // fois à la décharge). Le modèle brut/coût_charge n'a plus ce problème :
+        // gain_brut est UNE seule mesure physique (ce qui sort vers la maison),
+        // jamais un découpage par origine.
         'gain_jour' => array('Gain Zendure (jour)', 'numeric', '€'),
         'gain_veille' => array('Gain veille (J-1)', 'numeric', '€'),
-        'gain_solaire_jour' => array('Gain solaire (jour)', 'numeric', '€'),
-        'gain_solaire_veille' => array('Gain solaire (veille)', 'numeric', '€'),
-        'gain_batterie_jour' => array('Gain batterie (jour)', 'numeric', '€'),
-        'gain_batterie_veille' => array('Gain batterie (veille)', 'numeric', '€'),
+        'gain_brut_jour' => array('Gain Zendure brut (jour)', 'numeric', '€'),
+        'gain_brut_veille' => array('Gain Zendure brut (veille)', 'numeric', '€'),
+        'cout_charge_jour' => array('Coût charge batterie (jour)', 'numeric', '€'),
+        'cout_charge_veille' => array('Coût charge batterie (veille)', 'numeric', '€'),
         'depense_veille' => array('Dépense veille (J-1)', 'numeric', '€'),
         'depense_jour' => array('Dépense jour', 'numeric', '€'),
         // Intégration logicielle (puissance x temps), même principe que le
@@ -492,8 +508,8 @@ class zendure extends eqLogic
             '##GAIN_JOUR_CLASS##' => $gainJour < 0 ? 'zd-negative' : 'zd-positive',
             '##GAIN_VEILLE##' => number_format($gainVeille, 2),
             '##GAIN_VEILLE_CLASS##' => $gainVeille < 0 ? 'zd-negative' : 'zd-positive',
-            '##GAIN_SOLAIRE_JOUR##' => number_format((float) $this->getCmdValue('gain_solaire_jour'), 2),
-            '##GAIN_BATTERIE_JOUR##' => number_format((float) $this->getCmdValue('gain_batterie_jour'), 2),
+            '##GAIN_BRUT_JOUR##' => number_format((float) $this->getCmdValue('gain_brut_jour'), 2),
+            '##COUT_CHARGE_JOUR##' => number_format((float) $this->getCmdValue('cout_charge_jour'), 2),
             '##DEPENSE_JOUR##' => number_format((float) $this->getCmdValue('depense_jour'), 2),
             '##DEPENSE_VEILLE##' => number_format((float) $this->getCmdValue('depense_veille'), 2),
             '##SOC##' => round((float) $this->getCmdValue('soc')),
@@ -782,7 +798,26 @@ class zendure extends eqLogic
         $this->removeObsoleteCommands();
         $this->registerTelemetryListener('src_grid_papp', 'grid_power', 'onGridPowerEvent');
         $this->registerTelemetryListener('src_solaire', 'solar_power', 'onSolarPowerEvent');
-        $this->registerTelemetryListener('src_injection', 'injected_power', 'onInjectedPowerEvent');
+        // packInputPower (pas de config src_ : toujours la télémétrie Zendure brute,
+        // jamais une source externe -- cf. commentaire d'onBatteryDischargeEvent() sur
+        // le bug corrigé le 18/08) : puissance DÉCHARGÉE par la batterie seule, pas
+        // injected_power (= outputHomePower, solaire direct + batterie confondus).
+        $this->registerTelemetryListener('', 'packInputPower', 'onBatteryDischargeEvent');
+        // injected_power (= outputHomePower) : ce que Zendure délivre à la maison,
+        // toute source confondue -- cf. commentaire d'onZendureDeliveredEvent().
+        // src_injection configurable (même source que la carte "Maison" du widget
+        // Flux, cf. createOrUpdateFluxWidget()) pour rester cohérent si l'utilisateur
+        // a défini une source alternative.
+        $this->registerTelemetryListener('src_injection', 'injected_power', 'onZendureDeliveredEvent');
+        // gridInputPower (pas de config src_, même raison que packInputPower ci-dessus)
+        // : puissance tirée du réseau par Zendure lui-même, cf. onGridChargeEvent().
+        $this->registerTelemetryListener('', 'gridInputPower', 'onGridChargeEvent');
+        // Nettoyage de migration (installations existantes, dont celle-ci) : l'ancien
+        // listener sous le nom de fonction d'avant renommage reste orphelin sinon --
+        // removeTelemetryListener() est un no-op silencieux si rien à retirer. À
+        // retirer soi-même une fois raisonnablement sûr qu'aucune install ne l'a
+        // plus (ce commentaire s'auto-justifie tant qu'il est là).
+        $this->removeTelemetryListener('onInjectedPowerEvent');
         self::ensureCronRegistered();
         self::writeDaemonConfig();
         $this->reloadDaemonConfig();
@@ -1056,7 +1091,7 @@ class zendure extends eqLogic
             // externe, jamais affecté par ce WiFi -- restait frais pendant qu'injected
             // restait figé, faussant la cible calculée sans que rien ne le signale).
             // Même seuil que le côté démon (Device._injected_stale_after_s) et que
-            // l'offline threshold déjà utilisé dans accumulateEuro().
+            // l'offline threshold déjà utilisé dans accumulateValue().
             $injectedCmd = $this->resolveSourceCmdOrDefault('src_injection', 'injected_power');
             $injected = 0.0;
             if (is_object($injectedCmd)) {
@@ -1573,8 +1608,8 @@ class zendure extends eqLogic
     private function runRolloverMinuit()
     {
         $rollovers = array(
-            'gain_solaire_jour' => 'gain_solaire_veille',
-            'gain_batterie_jour' => 'gain_batterie_veille',
+            'gain_brut_jour' => 'gain_brut_veille',
+            'cout_charge_jour' => 'cout_charge_veille',
             'total_solar_kwh' => 'total_solar_kwh_veille',
             'total_output_kwh' => 'total_output_kwh_veille',
             'total_from_edf_kwh' => 'total_from_edf_kwh_veille',
@@ -1583,7 +1618,7 @@ class zendure extends eqLogic
         // Teleinfo) : elle gère déjà sa propre bascule jour -> veille à son propre
         // rythme -- inutile, et potentiellement trompeur, de réinitialiser nos
         // commandes internes que plus personne ne lit dans ce cas (cf.
-        // accumulateEuro()).
+        // accumulateValue()).
         if (!is_object($this->resolveSourceCmd('src_depense_jour'))) {
             $rollovers['depense_jour'] = 'depense_veille';
         }
@@ -1903,7 +1938,9 @@ class zendure extends eqLogic
     {
         $this->removeTelemetryListener('onGridPowerEvent');
         $this->removeTelemetryListener('onSolarPowerEvent');
-        $this->removeTelemetryListener('onInjectedPowerEvent');
+        $this->removeTelemetryListener('onBatteryDischargeEvent');
+        $this->removeTelemetryListener('onZendureDeliveredEvent');
+        $this->removeTelemetryListener('onGridChargeEvent');
     }
 
     public function postRemove()
@@ -2003,7 +2040,14 @@ class zendure extends eqLogic
         // set_manual_power : jamais câblée (ni démon, ni IHM), retirée le
         // 2026-08-06. periode_tarif : jamais alimentée, remplacée par une
         // lecture directe de la source externe, retirée le même jour.
-        $obsoleteLogicalIds = array('set_manual_power', 'periode_tarif');
+        // gain_solaire_jour/veille, gain_batterie_jour/veille : retirées le
+        // 2026-08-18, remplacées par gain_brut_jour/veille + cout_charge_jour/
+        // veille (cf. commentaire de COMPUTED_COMMANDS -- l'ancien découpage
+        // double-comptait le solaire stocké puis déchargé par la batterie).
+        $obsoleteLogicalIds = array(
+            'set_manual_power', 'periode_tarif',
+            'gain_solaire_jour', 'gain_solaire_veille', 'gain_batterie_jour', 'gain_batterie_veille',
+        );
         foreach ($obsoleteLogicalIds as $logicalId) {
             $cmd = $this->getCmd(null, $logicalId);
             if (is_object($cmd)) {
@@ -2110,7 +2154,7 @@ class zendure extends eqLogic
 
         // Les 3 cartes "argent" (widget Flux, ligne 3) : commandes déjà
         // existantes et déjà alimentées (moteur gain/dépense, cf.
-        // accumulateEuro()) -- on ne fait qu'y attacher le même habillage
+        // accumulateValue()) -- on ne fait qu'y attacher le même habillage
         // visuel que le widget Flux, aucune nouvelle commande.
         foreach (array(
             'gain_jour' => array('Gain Zendure · jour', 'fas fa-coins', true),
@@ -2202,7 +2246,7 @@ class zendure extends eqLogic
             // STAT_YESTERDAY_INDEX00_COUT) : le widget lit directement la source
             // externe si configurée -- même mécanisme que Solaire/Réseau/Injection
             // ci-dessus, pas de recopie intermédiaire. Retombe sur nos commandes
-            // internes (calcul par intégration, cf. accumulateEuro()) sinon.
+            // internes (calcul par intégration, cf. accumulateValue()) sinon.
             'DepenseVeilleId' => self::cmdIdOrZero($this->resolveSourceCmdOrDefault('src_depense_veille', 'depense_veille')),
             'DepenseJourId' => self::cmdIdOrZero($this->resolveSourceCmdOrDefault('src_depense_jour', 'depense_jour')),
             'PeriodeId' => self::cmdIdOrZero($periodeCmd),
@@ -2281,7 +2325,7 @@ class zendure extends eqLogic
      * injection, cf. addendum §11 étage 2 pour le cas grid historique). Chaîne réelle
      * (grid) : pince -> listener -> ce callback PHP -> socket démon -> décision -> MQTT
      * (addendum §12) ; (solaire/injection) : télémétrie Zendure (callback.php) ->
-     * listener -> accumulation gain (cf. accumulateEuro()).
+     * listener -> accumulation gain (cf. accumulateValue()).
      *
      * Signature confirmée contre core/class/listener.class.php (VM) et l'usage réel
      * dans plugins/alarm/core/class/alarm.class.php : pas de setClassId/setPluginId/
@@ -2346,33 +2390,89 @@ class zendure extends eqLogic
         ));
 
         $eqLogic = eqLogic::byId((int) $eqId);
-        if (is_object($eqLogic)) {
-            // Convention grid_power > 0 = import réseau (normal), < 0 = injection (à
-            // éviter) — cf. toHtmlCondense(). La dépense ne compte jamais l'export.
-            $eqLogic->accumulateEuro('depense_jour', (float) $value, 'total_from_edf_kwh');
+        if (!is_object($eqLogic)) {
+            return;
         }
+        // Convention grid_power > 0 = import réseau (normal), < 0 = injection (à
+        // éviter) — cf. toHtmlCondense(). La dépense ne compte jamais l'export.
+        // depense_jour : seulement si aucune source externe ne fait déjà ce calcul
+        // en mieux (ex. Teleinfo STAT_TODAY_INDEX00_COUT, basé sur les vrais index
+        // matériels du compteur -- résilient à toute coupure Jeedom, contrairement à
+        // cette intégration de puissance). total_from_edf_kwh reste alimenté dans
+        // tous les cas, indépendamment de cette histoire de source externe (bug
+        // corrigé le 18/08 : il restait bloqué à 0 en permanence dès qu'une source
+        // de dépense externe était configurée, cf. accumulateValue()).
+        if (!is_object($eqLogic->resolveSourceCmd('src_depense_jour'))) {
+            $eqLogic->accumulateValue('depense_jour', (float) $value, $eqLogic->currentTariffEurPerKwh());
+        }
+        $eqLogic->accumulateValue('total_from_edf_kwh', (float) $value);
     }
 
     /**
      * Télémétrie Zendure solaire (cf. moteur gain/dépense) : accumulation directe,
      * pas de relais démon (contrairement à onGridPowerEvent, qui pilote aussi
-     * l'anti-injection).
+     * l'anti-injection). Compteur kWh pur depuis le 18/08 (cf. commentaire de
+     * COMPUTED_COMMANDS) -- ne nourrit plus aucun calcul en euros : gain_brut_jour
+     * s'appuie uniquement sur injected_power (cf. onZendureDeliveredEvent()),
+     * jamais sur la production solaire totale (qui inclut ce qui charge la
+     * batterie, pas encore "gagné" à cet instant -- source du double-compte
+     * corrigé ce jour-là).
      */
     public static function onSolarPowerEvent($_options)
     {
-        self::onTelemetryAccumulationEvent($_options, 'gain_solaire_jour', 'total_solar_kwh');
+        self::accumulateKwhEvent($_options, 'total_solar_kwh');
     }
 
     /**
-     * Télémétrie Zendure injection maison (puissance déchargée par la batterie,
-     * cf. moteur gain/dépense) : même principe qu'onSolarPowerEvent.
+     * Puissance déchargée par la batterie seule (compteur kWh informatif). Ne
+     * nourrit plus aucun calcul en euros depuis le 18/08 (cf. commentaire de
+     * COMPUTED_COMMANDS), même raison qu'onSolarPowerEvent : gain_brut_jour est
+     * UNE seule mesure physique (injected_power), pas un découpage par origine.
+     * Nom de fonction hérité d'un renommage le même jour (onInjectedPowerEvent ->
+     * onBatteryDischargeEvent) : c'est bien packInputPower qui l'alimente (cf.
+     * registerTelemetryListener() dans postSave()), pas injected_power.
      */
-    public static function onInjectedPowerEvent($_options)
+    public static function onBatteryDischargeEvent($_options)
     {
-        self::onTelemetryAccumulationEvent($_options, 'gain_batterie_jour', 'total_output_kwh');
+        self::accumulateKwhEvent($_options, 'total_output_kwh');
     }
 
-    private static function onTelemetryAccumulationEvent($_options, $cumulLogicalId, $kwhLogicalId = null)
+    /**
+     * Ce que Zendure délivre à la maison, quelle que soit sa source interne au
+     * même instant (solaire direct, décharge batterie, ou un mélange des deux --
+     * cf. commentaire de la carte "Maison" dans cmd.info.string.flux_widget.html,
+     * "outputHomePower... combine solaire direct et décharge") : injected_power/
+     * outputHomePower EST déjà cette mesure unique, inutile de la reconstituer
+     * depuis solar_power+packInputPower (ce qui redonnerait le double-compte
+     * corrigé le 18/08). Alimente gain_brut_jour, premier terme du gain net (cf.
+     * commentaire de COMPUTED_COMMANDS et recomputeGainTotal()) -- demande
+     * explicite utilisateur ce jour-là : "ce qu'il faut mesurer, c'est ce qui est
+     * envoyé à la maison de la part de Zendure, quelle que soit sa source".
+     */
+    public static function onZendureDeliveredEvent($_options)
+    {
+        self::accumulateEuroEvent($_options, 'gain_brut_jour');
+    }
+
+    /**
+     * Puissance tirée du RÉSEAU par Zendure lui-même (gridInputPower, télémétrie
+     * brute Zendure -- PAS l'alias curé grid_power, qui reflète plutôt la pince/
+     * Teleinfo externe de toute la maison quand elle est configurée, une mesure
+     * différente). Nul tant que la batterie se recharge sur excédent solaire,
+     * non-nul seulement quand Zendure a dû compléter avec du réseau -- typiquement
+     * la charge nuit HC (cf. runStrategieNuit()). C'est le coût que l'utilisateur
+     * n'aurait jamais eu sans la batterie à remplir : second terme (soustrait) du
+     * gain net (demande explicite utilisateur 2026-08-18 : "ce gain doit être
+     * pénalisé par le coût du remplissage de la batterie aux heures creuses" --
+     * "si je n'avais pas eu cet équipement, je n'aurais pas économisé telle
+     * somme").
+     */
+    public static function onGridChargeEvent($_options)
+    {
+        self::accumulateEuroEvent($_options, 'cout_charge_jour');
+    }
+
+    private static function accumulateKwhEvent($_options, $kwhLogicalId)
     {
         $eqId = $_options['eq_id'] ?? null;
         $value = $_options['value'] ?? null;
@@ -2381,36 +2481,44 @@ class zendure extends eqLogic
         }
         $eqLogic = eqLogic::byId((int) $eqId);
         if (is_object($eqLogic)) {
-            $eqLogic->accumulateEuro($cumulLogicalId, (float) $value, $kwhLogicalId);
+            $eqLogic->accumulateValue($kwhLogicalId, (float) $value);
+        }
+    }
+
+    private static function accumulateEuroEvent($_options, $eurLogicalId)
+    {
+        $eqId = $_options['eq_id'] ?? null;
+        $value = $_options['value'] ?? null;
+        if ($eqId === null || $value === null) {
+            return;
+        }
+        $eqLogic = eqLogic::byId((int) $eqId);
+        if (!is_object($eqLogic)) {
+            return;
+        }
+        $eqLogic->accumulateValue($eurLogicalId, (float) $value, $eqLogic->currentTariffEurPerKwh());
+        if ($eurLogicalId == 'gain_brut_jour' || $eurLogicalId == 'cout_charge_jour') {
+            $eqLogic->recomputeGainTotal('jour');
         }
     }
 
     /**
-     * Coeur du moteur gain/dépense : intègre une puissance instantanée (W) dans le
-     * temps depuis le dernier passage, valorisée au tarif courant, et l'ajoute à la
-     * commande cumulative $cumulLogicalId (depense_jour / gain_solaire_jour /
-     * gain_batterie_jour). dt est dérivé de collectDate() de la commande cumulative
-     * elle-même : pas de nouvel état séparé à maintenir.
-     *
-     * $kwhLogicalId (optionnel) : compteur kWh brut jumeau (total_solar_kwh/
-     * total_output_kwh/total_from_edf_kwh), incrémenté du même $kwh dans le même
-     * verrou -- le Hyper 2000 n'expose aucun cumul kWh natif dans sa télémétrie,
-     * ce compteur logiciel jour/veille (comme un index Téléinfo) évite de dépendre
-     * d'une requête sur l'historique/archive Jeedom pour un total aussi simple
-     * (cf. échange utilisateur 2026-08-06).
+     * Coeur du moteur gain/dépense/kWh (réécrit le 18/08, cf. commentaire de
+     * COMPUTED_COMMANDS) : intègre une puissance instantanée (W) dans le temps
+     * depuis le dernier passage sur CETTE commande précise (son collectDate()
+     * sert de base dt, pas d'état séparé à maintenir), et l'ajoute telle quelle
+     * si $eurPerKwh est null (compteur kWh brut : total_solar_kwh/
+     * total_output_kwh/total_from_edf_kwh), ou valorisée au tarif fourni sinon
+     * (compteur monétaire : depense_jour/gain_brut_jour/cout_charge_jour).
+     * Chaque commande a désormais SON PROPRE dt -- avant le 18/08, un compteur
+     * kWh "jumeau" partageait le dt d'une commande euro "primaire", ce qui a
+     * provoqué un bug réel (total_from_edf_kwh bloqué à 0 dès que depense_jour
+     * était désactivée par une source externe, cf. onGridPowerEvent()) :
+     * séparer complètement les deux évite ce genre de couplage accidentel.
      */
-    private function accumulateEuro($cumulLogicalId, $valueW, $kwhLogicalId = null)
+    private function accumulateValue($logicalId, $valueW, $eurPerKwh = null)
     {
-        // Dépense : s'auto-désactive si une source externe fait déjà ce calcul en
-        // mieux (ex. Teleinfo STAT_TODAY_INDEX00_COUT, basé sur les vrais index
-        // matériels du compteur -- résilient à toute coupure Jeedom, contrairement
-        // à cette intégration de puissance). Ne concerne pas gain_solaire_jour/
-        // gain_batterie_jour : pas d'équivalent externe possible, l'autoconsommation
-        // ne passe jamais par un compteur (cf. échange avec l'utilisateur).
-        if ($cumulLogicalId == 'depense_jour' && is_object($this->resolveSourceCmd('src_depense_jour'))) {
-            return;
-        }
-        $cmd = $this->getCmd(null, $cumulLogicalId);
+        $cmd = $this->getCmd(null, $logicalId);
         if (!is_object($cmd)) {
             return;
         }
@@ -2419,8 +2527,8 @@ class zendure extends eqLogic
         // callback (déclenché par callback.php, un webhook HTTP appelé par le
         // démon) peut recevoir des requêtes qui se chevauchent (rafale de
         // télémétrie MQTT + éventuel aller-retour BLE) -- constaté 2026-07-26,
-        // gain_batterie_jour retombant brutalement de 0.125€ à 0.0000133€ en
-        // quelques secondes sans qu'aucun code n'écrive explicitement une
+        // un compteur de gain retombant brutalement à une valeur bien plus basse
+        // en quelques secondes sans qu'aucun code n'écrive explicitement une
         // valeur plus basse : deux processus PHP concurrents lisant la même
         // ancienne valeur via execCmd() avant que l'un des deux n'ait fini
         // d'écrire (perte de mise à jour classique). GET_LOCK/RELEASE_LOCK
@@ -2460,22 +2568,11 @@ class zendure extends eqLogic
             }
 
             // Ne compte que le sens positif (import réseau / production solaire /
-            // décharge batterie), jamais l'export — même convention que l'ancien
-            // scénario Jeedom de référence.
+            // décharge batterie / délivré à la maison), jamais l'export — même
+            // convention que l'ancien scénario Jeedom de référence.
             $kwh = max(0, $valueW) * $dt / 3600 / 1000;
-            $euros = $kwh * $this->currentTariffEurPerKwh();
-            $cmd->event((float) $cmd->execCmd() + $euros);
-
-            if ($kwhLogicalId !== null) {
-                $kwhCmd = $this->getCmd(null, $kwhLogicalId);
-                if (is_object($kwhCmd)) {
-                    $kwhCmd->event((float) $kwhCmd->execCmd() + $kwh);
-                }
-            }
-
-            if ($cumulLogicalId == 'gain_solaire_jour' || $cumulLogicalId == 'gain_batterie_jour') {
-                $this->recomputeGainTotal('jour');
-            }
+            $delta = $eurPerKwh === null ? $kwh : $kwh * $eurPerKwh;
+            $cmd->event((float) $cmd->execCmd() + $delta);
         } finally {
             DB::Prepare('SELECT RELEASE_LOCK(:name)', array('name' => $lockName), DB::FETCH_TYPE_ROW, PDO::FETCH_COLUMN);
         }
@@ -2483,17 +2580,22 @@ class zendure extends eqLogic
 
     /**
      * gain_jour/gain_veille sont des valeurs DÉRIVÉES (jamais accumulées
-     * indépendamment) : recalculées à chaque mise à jour d'un des deux compteurs
-     * détaillés, pour ne jamais risquer de drift entre le total affiché sur la
-     * tuile et le détail solaire/batterie.
+     * indépendamment) : recalculées à chaque mise à jour d'un des deux termes,
+     * pour ne jamais risquer de drift entre le total affiché sur la tuile et le
+     * détail brut/coût. Modèle net (réécrit le 18/08, cf. commentaire de
+     * COMPUTED_COMMANDS) : gain_brut (ce que Zendure a fourni à la maison, quelle
+     * que soit sa source) MOINS cout_charge (ce que Zendure a dû tirer du réseau
+     * pour recharger la batterie) -- peut légitimement être négatif (ex. juste
+     * après une charge nuit HC, avant toute décharge le lendemain), cf.
+     * ##GAIN_JOUR_CLASS## déjà prévu pour ce cas dans toHtmlDigest()/digest.html.
      */
     private function recomputeGainTotal($suffix)
     {
-        $solaire = (float) $this->getCmdValue('gain_solaire_' . $suffix);
-        $batterie = (float) $this->getCmdValue('gain_batterie_' . $suffix);
+        $brut = (float) $this->getCmdValue('gain_brut_' . $suffix);
+        $coutCharge = (float) $this->getCmdValue('cout_charge_' . $suffix);
         $cmd = $this->getCmd(null, 'gain_' . $suffix);
         if (is_object($cmd)) {
-            $cmd->event($solaire + $batterie);
+            $cmd->event($brut - $coutCharge);
         }
     }
 

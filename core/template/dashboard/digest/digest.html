@@ -5,7 +5,10 @@ page Analyse native de Jeedom (Outils > Analyse > Historique) fait déjà très
 bien les graphiques multi-courbes/formules calculées, inutile de la
 réinventer moins bien dans une tuile dashboard. Ce template complète plutôt
 Condensé/Flux avec ce qu'ils n'affichent pas : la comparaison jour/veille et
-la répartition solaire/batterie du gain.
+le détail brut/coût du gain (cf. commentaire de COMPUTED_COMMANDS dans
+zendure.class.php pour le modèle -- gain net = ce que Zendure a fourni à la
+maison MOINS ce qu'il a dû tirer du réseau pour recharger la batterie,
+remplace le 18/08 l'ancien découpage solaire/batterie, qui double-comptait).
 
 Mêmes conventions que condense.html pour le CSS inline/pas de JS. Fond blanc
 (pas transparent comme condense.html) : demande explicite le 2026-08-06 --
@@ -119,8 +122,12 @@ taille, plutôt que de dépendre d'un redimensionnement manuel.
     </div>
 
     <div class="zd-breakdown">
-        <span>☀ Solaire : ##GAIN_SOLAIRE_JOUR## € (##SOLAR_KWH## kWh)</span>
-        <span>🔋 Batterie : ##GAIN_BATTERIE_JOUR## € (##OUTPUT_KWH## kWh)</span>
+        <span>⚡ Gain brut : ##GAIN_BRUT_JOUR## €</span>
+        <span>🔌 Coût charge batterie : -##COUT_CHARGE_JOUR## €</span>
+    </div>
+    <div class="zd-breakdown">
+        <span>☀ Solaire produit : ##SOLAR_KWH## kWh</span>
+        <span>🔋 Batterie déchargée : ##OUTPUT_KWH## kWh</span>
     </div>
     <div class="zd-breakdown">
         <span>Dépense jour : ##DEPENSE_JOUR## € (##FROM_EDF_KWH## kWh)</span>
