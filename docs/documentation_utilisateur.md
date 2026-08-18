@@ -13,12 +13,18 @@ réseau public (anti-injection).
   ACE1500 et la famille SolarFlow (800/1600/2400/4000) ne sont pas supportés :
   leur mécanisme de pilotage diffère trop (nécessite un Hub Zendure physique ou
   un protocole entièrement différent).
-- **Identifiants appareil** (`device_id`/`product_key`) : identifiants internes
-  Zendure de votre Hyper 2000, pas le numéro de série visible sur l'étiquette. Ils
-  ne sont pas exposés par l'app officielle — la façon la plus fiable de les
-  récupérer est de sniffer les infos d'une intégration existante qui pilote déjà
-  l'appareil (ex. Home Assistant : fichier `.storage/zendure_ha.storage`, champs
-  `productKey`/`deviceKey`).
+- **Identifiants appareil et Cloud** (`device_id`/`product_key`/identifiants MQTT) :
+  onglet Équipement, bloc "Récupération assistée" — collez le **Token ZendureApp**
+  (appli mobile Zendure → réglages du compte **principal**, pas un compte invité →
+  option "token"/"développeur"/"intégration") et cliquez sur "Récupérer via Token" :
+  tous ces champs se remplissent automatiquement. Aucune installation Home
+  Assistant requise, malgré ce que suggérait une version précédente de cette doc —
+  ce chemin reproduit simplement l'appel que fait l'intégration HA officielle, pas
+  besoin qu'elle tourne. Si plusieurs appareils sont liés au compte, un sélecteur
+  apparaît pour choisir lequel appliquer à cet équipement. En secours (ou pour
+  comprendre ce que fait ce bouton) : ces mêmes identifiants sont aussi lisibles
+  dans le fichier `.storage/zendure_ha.storage` d'une intégration Home Assistant
+  déjà configurée sur cet appareil, champs `productKey`/`deviceKey`.
 - **Tarifs (onglet Sources)** : le contrat **Base** fonctionne partout sans
   rien de plus. Les contrats **Heures Pleines/Creuses** et **Tempo** sont des
   spécificités du marché français (EDF/Linky) — ils nécessitent en plus une source
@@ -67,10 +73,11 @@ réseau public (anti-injection).
   contre un appareil réel — voir "Compatibilité" en tête de doc).
 - **Identifiants Cloud** (visibles seulement en mode Cloud) : le nom
   d'utilisateur/mot de passe MQTT ne sont **pas** le compte de l'app Zendure — ce
-  sont des identifiants de session MQTT (obtenus par ex. en récupérant ceux
-  utilisés par une intégration Home Assistant existante). Le champ "Client ID MQTT"
-  est optionnel : à laisser vide sauf besoin de diagnostic, certains brokers
-  limitent la réception de télémétrie à un clientId précis lié au compte.
+  sont des identifiants de session MQTT, normalement remplis automatiquement par
+  le bouton "Récupérer via Token" (voir "Compatibilité" en tête de doc). Le champ
+  "Client ID MQTT" est optionnel : à laisser vide sauf besoin de diagnostic,
+  certains brokers limitent la réception de télémétrie à un clientId précis lié
+  au compte.
 
 ## Onglet Sources
 

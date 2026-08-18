@@ -23,6 +23,10 @@ class zendure extends eqLogic
         'mode' => array('Mode de fonctionnement', 'string', ''),
         'forecast_today_kwh' => array('Prévision solaire du jour', 'numeric', 'kWh'),
         'transport_connected' => array('Transport connecté', 'binary', ''),
+        // Alias curé de la propriété brute socStatus (cf. telemetry_map.py) -- 0=normal,
+        // 1=auto-calibration en cours (confirmé dans les traductions de Zendure/Zendure-HA).
+        // Suivi purement informatif : aucune action ne se déclenche là-dessus.
+        'calibration_status' => array('État calibration SOC (0=normal, 1=en cours)', 'numeric', ''),
     );
 
     /*
@@ -85,6 +89,14 @@ class zendure extends eqLogic
         // l'onglet Commandes, 2026-08-06 -- l'ancien libellé "Marge intensité
         // (Imax - IINST)" laissait croire à une vraie lecture).
         'jauge_intensite_marge' => array('Jauge intensité (support widget)', 'numeric', 'A'),
+        // Suivi informatif demandé le 16/08 : la stratégie nuit vise des cibles
+        // basses (parfois 20%, voire moins) qui pourraient ne jamais remonter la
+        // batterie à 100% -- or c'est ce qui déclenche la calibration du BMS côté
+        // firmware (cf. calibration_status ci-dessus + zendure_ha device.py :
+        // nextCalibration relancé uniquement quand electricLevel==100). Alimentée
+        // dans runOptimisationHP() (déjà appelé ~1x/min, indépendant du pilotage
+        // anti-injection actif ou non -- pur constat, jamais une décision).
+        'derniere_calibration' => array('Dernière calibration SOC (100% atteint)', 'string', ''),
     );
 
     /*     * *********************Attributs****************************** */
@@ -421,6 +433,10 @@ class zendure extends eqLogic
             $conf['local_host'] = $this->getConfiguration('local_host');
             $conf['local_port'] = $this->getConfiguration('local_port', 1883);
             $conf['local_tls'] = (bool) $this->getConfiguration('local_tls', false);
+            // Certificat non vérifié : UNIQUEMENT sous mode local (jamais posé côté
+            // cloud, cf. bloc if($mode=='cloud') ci-dessus qui n'a pas cette clé) --
+            // pensé pour un broker local avec certificat auto-signé (Chemin B).
+            $conf['local_tls_insecure'] = (bool) $this->getConfiguration('local_tls_insecure', false);
             $conf['local_username'] = $this->getConfiguration('local_username');
             $conf['local_password'] = $this->getConfiguration('local_password');
         }
@@ -866,8 +882,69 @@ class zendure extends eqLogic
         }
     }
 
+    /**
+     * Seuil "priorité charge" (cf. runOptimisationHP()) -- optionnellement plus
+     * élevé par temps froid, sur le même principe que le profil saisonnier
+     * documenté par un projet communautaire tiers (Utini2000/Zendure-Solarflow-
+     * Local-HomeAssistant : plancher de décharge 8% l'été / 20% l'hiver, "to
+     * protect battery chemistry during cold months"). Volontairement basé sur
+     * une température RÉELLE (source Jeedom au choix, ex. sonde extérieure),
+     * pas un calendrier été/hiver fixe -- un redoux en janvier ou une vague de
+     * froid en septembre restent couverts correctement. Entièrement optionnel :
+     * sans source de température configurée, comportement inchangé (seuil
+     * unique `seuil_soc_priorite_charge`).
+     */
+    private function resolveSeuilPrioriteCharge()
+    {
+        $seuilDefaut = (int) $this->getConfiguration('seuil_soc_priorite_charge', 20);
+        $seuilFroid = trim((string) $this->getConfiguration('seuil_soc_priorite_charge_froid', ''));
+        if ($seuilFroid === '') {
+            return $seuilDefaut;
+        }
+        $tempCmd = $this->resolveSourceCmd('src_temperature_exterieure');
+        if (!is_object($tempCmd)) {
+            return $seuilDefaut;
+        }
+        $temperature = $tempCmd->execCmd();
+        if (!is_numeric($temperature)) {
+            return $seuilDefaut;
+        }
+        $seuilTemperatureFroid = (float) $this->getConfiguration('temperature_seuil_froid', 5);
+        if ((float) $temperature < $seuilTemperatureFroid) {
+            return (int) $seuilFroid;
+        }
+        return $seuilDefaut;
+    }
+
+    /**
+     * Met à jour derniere_calibration quand le SOC atteint réellement 100% --
+     * c'est le déclencheur de calibration côté firmware (cf. commentaire de
+     * COMPUTED_COMMANDS). Écrit au plus une fois par jour (évite de spammer
+     * l'historique à chaque cycle tant que le SOC reste à 100%).
+     */
+    private function trackCalibration()
+    {
+        if ((int) $this->getCmdValue('soc') !== 100) {
+            return;
+        }
+        $cmd = $this->getCmd(null, 'derniere_calibration');
+        if (!is_object($cmd)) {
+            return;
+        }
+        $today = date('Y-m-d');
+        if (strpos((string) $cmd->execCmd(), $today) === 0) {
+            return;
+        }
+        $cmd->event(date('Y-m-d H:i:s'));
+    }
+
     private function runOptimisationHP()
     {
+        // Suivi calibration : simple constat, jamais une décision -- tourne donc
+        // AVANT le garde anti_injection_active, indépendamment de son état, pour
+        // ne pas perdre de visibilité juste parce que le pilotage est coupé.
+        $this->trackCalibration();
+
         if (!$this->getConfiguration('anti_injection_active', 1)) {
             // Coupure complète (même flag que la boucle rapide côté démon, cf.
             // toDaemonConfig()) : pas même un log de simulation, pour ne pas
@@ -915,18 +992,37 @@ class zendure extends eqLogic
             // en heures pleines. En HP, la batterie doit pouvoir se remplir jusqu'à
             // 100% : c'est la stratégie nuit qui décide de la baisser, seulement pour
             // la nuit suivante.
+            //
+            // MAIS ne force PAS la bascule en décharge (set_mode 2) si le SOC est
+            // encore sous un seuil bas -- angle mort réel trouvé le 15/08 (retour
+            // utilisateur) : ce garde-fou forçait la décharge sans jamais regarder le
+            // SOC ni le surplus solaire. Batterie quasi vide + fort surplus solaire au
+            // même moment -> demander une automation décharge n'a aucun sens (rien à
+            // débiter), et pouvait faire concurrence à la logique de charge normale de
+            // l'appareil. Le plafond reste relevé à 100% dans tous les cas (ça ne fait
+            // que laisser plus de marge au solaire), seule la bascule de mode est
+            // retardée jusqu'à ce que le SOC repasse au-dessus du seuil.
+            $socActuel = (int) $this->getCmdValue('soc');
+            $seuilChargePrioritaire = $this->resolveSeuilPrioriteCharge();
+            $socBasPrioriteCharge = ($socActuel > 0 && $socActuel < $seuilChargePrioritaire);
+
             log::add('zendure', 'info', sprintf(
-                '[cronOptimisationHP]%s eq_id=%d %s, appareil encore en mode charge -> repasse en décharge + SOC max 100%%',
-                $dryRun ? ' [SIMULATION]' : '', $this->getId(), $motifReveil
+                '[cronOptimisationHP]%s eq_id=%d %s, appareil encore en mode charge (SOC=%d%%) -> %s',
+                $dryRun ? ' [SIMULATION]' : '', $this->getId(), $motifReveil, $socActuel,
+                $socBasPrioriteCharge
+                    ? sprintf('SOC < seuil %d%% -> laisse charger, SOC max repassé à 100%% seulement', $seuilChargePrioritaire)
+                    : 'repasse en décharge + SOC max 100%'
             ));
             if (!$dryRun) {
-                $modeCmd = $this->getCmd(null, 'set_mode');
-                if (is_object($modeCmd)) {
-                    $modeCmd->execCmd(array('select' => 2));
-                }
                 $socMaxCmd = $this->getCmd(null, 'set_soc_max');
                 if (is_object($socMaxCmd)) {
                     $socMaxCmd->execCmd(array('slider' => 100));
+                }
+                if (!$socBasPrioriteCharge) {
+                    $modeCmd = $this->getCmd(null, 'set_mode');
+                    if (is_object($modeCmd)) {
+                        $modeCmd->execCmd(array('select' => 2));
+                    }
                 }
             }
         }
@@ -1082,6 +1178,17 @@ class zendure extends eqLogic
         }
 
         if (!$this->getConfiguration('strategie_nuit_active', 0)) {
+            // Retour silencieux jusqu'au 17/08 (repéré ce jour-là : la nuit du
+            // 16->17/08, cronStrategieNuit a tourné à 00:00:05 (forecast_today_kwh
+            // mis à jour) mais s'est arrêté ici sans que rien ne l'indique nulle
+            // part -- aucune commande de charge envoyée cette nuit-là, cause
+            // introuvable sans relire le code faute de log. Un simple event ici
+            // suffit à distinguer "désactivé volontairement" de "cible calculée
+            // mais jugée nulle" (cf. log plus bas) ou d'un vrai bug de délivrance.
+            log::add('zendure', 'info', sprintf(
+                '[cronStrategieNuit] eq_id=%d strategie_nuit_active désactivée -> aucune action',
+                $this->getId()
+            ));
             return;
         }
 
@@ -1240,6 +1347,36 @@ class zendure extends eqLogic
      *   (installation trop récente, sources pas encore configurées) : jamais de
      *   cible calculée sur une médiane à zéro échantillon.
      */
+    /**
+     * Somme les commandes horaires Solcast d0h{N} ("Jour 0 entre {N-1}h et {N}h",
+     * en Wh) de l'équipement Solcast lié (config solcast_eqlogic_id, sélecteur
+     * dédié -- PAS src_prevision_solaire, qui reste un total journalier
+     * générique agnostique du fournisseur). Volontairement couplé au nommage
+     * Solcast (contrairement au reste du plugin) : c'est un raffinement
+     * explicitement optionnel et nommé comme tel, pas une hypothèse silencieuse
+     * -- sans lien configuré ou commandes introuvables (autre fournisseur, pas
+     * de config), retombe sur 0.0 sans erreur, cf. appelant.
+     */
+    private function resolveSolcastMorningForecastKwh($startH, $endH)
+    {
+        $eqLogicId = (int) $this->getConfiguration('solcast_eqlogic_id', 0);
+        if ($eqLogicId <= 0) {
+            return 0.0;
+        }
+        $solcast = eqLogic::byId($eqLogicId);
+        if (!is_object($solcast)) {
+            return 0.0;
+        }
+        $totalWh = 0.0;
+        for ($h = $startH + 1; $h <= $endH; $h++) {
+            $cmd = $solcast->getCmd(null, 'd0h' . $h);
+            if (is_object($cmd) && is_numeric($cmd->execCmd())) {
+                $totalWh += (float) $cmd->execCmd();
+            }
+        }
+        return $totalWh / 1000;
+    }
+
     private function kwhSocTarget($tempoTomorrow, $forecastKwh, $capacityKwh)
     {
         if (strpos($tempoTomorrow, 'ROUG') !== false || $tempoTomorrow === 'RED') {
@@ -1257,7 +1394,6 @@ class zendure extends eqLogic
         $forecastKwhSafe = $forecastKwh !== null ? $forecastKwh : 0.0;
         $netNeedKwh = max(0, $hpConsumptionKwh - $forecastKwhSafe);
         $socTarget = (int) ceil(($netNeedKwh / $capacityKwh) * 100);
-        $socTarget = max(20, min(100, $socTarget));
 
         $reason = sprintf(
             'modèle kWh : conso HP %02dh-%02dh ~%.1fkWh (médiane %dj) - prévision solaire %s -> besoin net %.1fkWh / capacité %.1fkWh -> cible %d%%',
@@ -1270,6 +1406,53 @@ class zendure extends eqLogic
             $capacityKwh,
             $socTarget
         );
+
+        // Réserve mini avant la vraie montée du solaire -- angle mort réel trouvé
+        // le 15/08 (retour utilisateur) : la prévision solaire est un total
+        // JOURNALIER, le modèle ci-dessus ne sait pas QUAND dans la journée ce
+        // solaire arrive. Une bonne prévision peut malgré tout faire retenir une
+        // cible basse (ex. 20% le 15/08, prévision 5.7kWh quasi égale à la conso
+        // HP attendue) alors que le solaire réel restait proche de 0W jusqu'à
+        // ~1h15 après le début des heures pleines ce jour-là -- la batterie a dû
+        // couvrir seule toute la conso du réveil, s'est vidée à 5% avant que le
+        // solaire ne prenne le relais. Le vrai fond du problème n'est pas le
+        // total prévu (qui était correct), c'est l'absence de solaire exploitable
+        // sur la fenêtre startH -> heure_fin_montee_solaire : cette tranche doit
+        // être couverte par la seule réserve nocturne, quelle que soit la
+        // prévision du jour. Même mécanisme statistique que le calcul principal
+        // (médiane glissante, repli silencieux si historique insuffisant), pas de
+        // nouvelle logique à maintenir.
+        $heureFinMonteeSolaire = (int) $this->getConfiguration('heure_fin_montee_solaire', 9);
+        if ($heureFinMonteeSolaire > $startH && $heureFinMonteeSolaire <= $endH) {
+            $earlyConsumptionKwh = $this->estimateWindowConsumptionKwh($startH, $heureFinMonteeSolaire, $days);
+            if ($earlyConsumptionKwh !== null) {
+                // Affiné si un équipement Solcast est lié (onglet Sources) : sa
+                // prévision HORAIRE (d0h{N}, en Wh, contrairement à notre
+                // src_prevision_solaire qui n'est qu'un total journalier) permet
+                // de savoir si CETTE fenêtre précise aura vraiment peu de soleil,
+                // au lieu de le supposer aveuglément. Sans lien configuré (ou
+                // commandes horaires introuvables, ex. autre fournisseur), repli
+                // silencieux sur l'hypothèse solaire=0 -- comportement identique
+                // à avant cet ajout.
+                $earlySolarKwh = $this->resolveSolcastMorningForecastKwh($startH, $heureFinMonteeSolaire);
+                $earlyNeedKwh = max(0, $earlyConsumptionKwh - $earlySolarKwh);
+                $socTargetReserveMatin = (int) ceil(($earlyNeedKwh / $capacityKwh) * 100);
+                if ($socTargetReserveMatin > $socTarget) {
+                    $reason .= sprintf(
+                        ' [relevée à %d%% : réserve avant %02dh (montée solaire), conso ~%.1fkWh%s sur %02dh-%02dh]',
+                        $socTargetReserveMatin,
+                        $heureFinMonteeSolaire,
+                        $earlyConsumptionKwh,
+                        $earlySolarKwh > 0 ? sprintf(' - solaire Solcast %.1fkWh', $earlySolarKwh) : '',
+                        $startH,
+                        $heureFinMonteeSolaire
+                    );
+                    $socTarget = $socTargetReserveMatin;
+                }
+            }
+        }
+
+        $socTarget = max(20, min(100, $socTarget));
         return array($socTarget, $reason);
     }
 
@@ -1560,6 +1743,160 @@ class zendure extends eqLogic
 
         $all = preg_split('/\r\n|\r|\n/', trim((string) $content));
         return array_slice($all, -$lines);
+    }
+
+    /**
+     * Onboarding sans Home Assistant : reproduit l'appel que fait l'intégration
+     * HA officielle (Zendure/Zendure-HA, api.py::ApiHA) vers l'endpoint privé
+     * /api/ha/deviceList à partir du "Token ZendureApp" que l'utilisateur va
+     * chercher lui-même dans l'appli mobile Zendure (compte principal --
+     * sinon aucun appareil ne remonte, cf. leur wiki). Avant ça, le seul
+     * chemin documenté ici était de sniffer .storage/zendure_ha.storage d'une
+     * install HA existante -- ce qui rendait le plugin inutilisable par un
+     * utilisateur n'ayant jamais eu HA, alors même que la description du
+     * plugin promet "sans passer par Home Assistant".
+     *
+     * Volontairement PAS l'API développeur officielle de Zendure
+     * (developer-device-data-report, /developer/api/apply) : testée en
+     * conditions réelles, elle authentifie mais refuse la souscription aux
+     * topics (SUBACK qos=128, aucune donnée) -- probablement un scope pensé
+     * pour du reporting unidirectionnel, pas du pilotage temps réel. Ce
+     * chemin-ci (HA) est non documenté officiellement par Zendure mais
+     * hébergé sous leur propre org GitHub, et c'est le seul des deux qui
+     * fonctionne réellement pour du pilotage (cf. docs/brief_zendure_addendum_11-15.md).
+     *
+     * Le header HTTP "clientid" DOIT rester "zenHa" -- corrigé après un test en
+     * live le 14/08 avec un vrai token qui a révélé le contraire de ce qu'on
+     * pensait après simple lecture du code source : il est bien absent de la
+     * signature HMAC (donc pas vérifiable par calcul), mais Zendure semble
+     * quand même filtrer sur une liste blanche de valeurs reconnues côté
+     * serveur -- "Jeedom" ou toute autre valeur renvoie "appKey not exist"
+     * (code 1002) avec le MÊME appKey qui réussit avec "zenHa". Un mécanisme
+     * de vérification qui ne passe pas par la signature, mais un mécanisme
+     * quand même. Cf. [[project_zendure_ha_coexistence]].
+     *
+     * @param string $token Token ZendureApp collé par l'utilisateur.
+     * @return array{
+     *   devices: array<int, array{device_id: string, product_key: string, model: string, name: string}>,
+     *   cloud_host: string, cloud_port: string, cloud_username: string,
+     *   cloud_auth_key: string, cloud_client_id: string
+     * }
+     * @throws Exception Token invalide, appel réseau échoué, ou API Zendure en erreur.
+     */
+    public static function fetchCloudCredentialsFromToken($token)
+    {
+        $token = trim((string) $token);
+        if ($token == '') {
+            throw new Exception(__('Token ZendureApp vide', __FILE__));
+        }
+
+        $decoded = base64_decode($token, true);
+        $sepPos = ($decoded === false) ? false : strrpos($decoded, '.');
+        if ($decoded === false || $sepPos === false) {
+            throw new Exception(__('Token ZendureApp invalide (décodage échoué -- vérifiez le copier-coller)', __FILE__));
+        }
+        $apiUrl = substr($decoded, 0, $sepPos);
+        $appKey = substr($decoded, $sepPos + 1);
+        if ($apiUrl == '' || $appKey == '' || strpos($apiUrl, 'http') !== 0) {
+            throw new Exception(__('Token ZendureApp invalide (contenu décodé inattendu)', __FILE__));
+        }
+
+        // Clé de signature publique, codée en dur dans Zendure/Zendure-HA
+        // (const.py::CONF_HAKEY) -- même mécanisme que l'intégration HA officielle,
+        // "secrète" seulement au sens où Zendure ne la documente pas, pas au sens
+        // où elle est protégée (le repo est public, sous leur propre org).
+        $haKey = 'C*dafwArEOXK';
+        $timestamp = (string) time();
+        $nonce = (string) random_int(10000, 99999);
+
+        $signParams = array('appKey' => $appKey, 'nonce' => $nonce, 'timestamp' => $timestamp);
+        ksort($signParams);
+        $bodyStr = '';
+        foreach ($signParams as $k => $v) {
+            $bodyStr .= $k . $v;
+        }
+        $sign = strtoupper(sha1($haKey . $bodyStr . $haKey));
+
+        $headers = array(
+            'Content-Type: application/json',
+            'timestamp: ' . $timestamp,
+            'nonce: ' . $nonce,
+            'clientid: zenHa',
+            'sign: ' . $sign,
+        );
+
+        $ch = curl_init(rtrim($apiUrl, '/') . '/api/ha/deviceList');
+        curl_setopt($ch, CURLOPT_POST, true);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode(array('appKey' => $appKey)));
+        curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 8);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 12);
+        $response = curl_exec($ch);
+        $curlErr = curl_error($ch);
+        curl_close($ch);
+
+        if ($response === false || $response === '') {
+            throw new Exception(__('Échec de connexion à l\'API Zendure : ', __FILE__) . $curlErr);
+        }
+        $data = json_decode($response, true);
+        if (!is_array($data) || !isset($data['code']) || $data['code'] != 200 || empty($data['success'])) {
+            $msg = (is_array($data) && isset($data['msg']) && $data['msg'] != '') ? $data['msg'] : $response;
+            throw new Exception(__('L\'API Zendure a rejeté la requête : ', __FILE__) . $msg);
+        }
+        $result = isset($data['data']) ? $data['data'] : null;
+        if (!is_array($result) || empty($result['deviceList'])) {
+            throw new Exception(__('Aucun appareil renvoyé par l\'API Zendure -- vérifiez que le token vient bien du compte principal', __FILE__));
+        }
+        if (empty($result['mqtt']) || empty($result['mqtt']['username']) || empty($result['mqtt']['password'])) {
+            throw new Exception(__('Aucun identifiant MQTT renvoyé par l\'API Zendure', __FILE__));
+        }
+
+        $devices = array();
+        foreach ($result['deviceList'] as $dev) {
+            if (empty($dev['deviceKey']) || empty($dev['productKey'])) {
+                continue;
+            }
+            $model = isset($dev['productModel']) ? $dev['productModel'] : '';
+            $devices[] = array(
+                'device_id' => $dev['deviceKey'],
+                'product_key' => $dev['productKey'],
+                'model' => $model,
+                'model_key' => self::guessDeviceModelKey($model),
+                'name' => (isset($dev['deviceName']) && $dev['deviceName'] != '') ? $dev['deviceName'] : ($model != '' ? $model : $dev['deviceKey']),
+            );
+        }
+        if (count($devices) == 0) {
+            throw new Exception(__('Liste d\'appareils vide ou mal formée', __FILE__));
+        }
+
+        $mqtt = $result['mqtt'];
+        $host = isset($mqtt['url']) ? $mqtt['url'] : '';
+        $port = '';
+        if (strpos($host, ':') !== false) {
+            list($host, $port) = explode(':', $host, 2);
+        }
+
+        return array(
+            'devices' => $devices,
+            'cloud_host' => $host,
+            'cloud_port' => $port,
+            'cloud_username' => $mqtt['username'],
+            'cloud_auth_key' => $mqtt['password'],
+            'cloud_client_id' => isset($mqtt['clientId']) ? $mqtt['clientId'] : '',
+        );
+    }
+
+    /**
+     * "Hyper 2000" -> "hyper2000", "SuperBase V6400" -> "superbasev6400"...
+     * Simple normalisation ; retombe sur '' (pas de présélection) si aucun des
+     * profils connus ne correspond, plutôt que de deviner faux.
+     */
+    private static function guessDeviceModelKey($productModel)
+    {
+        $normalized = strtolower(str_replace(array(' ', '-', '_'), '', (string) $productModel));
+        $known = array('hyper2000', 'hub1200', 'hub2000', 'aio2400', 'superbasev4600', 'superbasev6400');
+        return in_array($normalized, $known) ? $normalized : '';
     }
 
     public function preRemove()
@@ -1871,8 +2208,26 @@ class zendure extends eqLogic
             'PeriodeId' => self::cmdIdOrZero($periodeCmd),
             'TempoTodayId' => self::cmdIdOrZero($this->resolveSourceCmd('src_tempo_j')),
             'TempoTomorrowId' => self::cmdIdOrZero($this->resolveSourceCmd('src_tempo_j1')),
-            'OutputLimitId' => self::cmdIdOrZero($this->getCmd(null, 'output_limit')),
-            'InputLimitId' => self::cmdIdOrZero($this->getCmd(null, 'input_limit')),
+            // OutputLimitId : la commande brute 'outputLimit' (écho appareil), PAS la
+            // curée 'output_limit' -- corrigé le 15/08 (retour utilisateur : "je veux
+            // que le curseur soit le reflet de la réalité"). 'output_limit' reste
+            // volontairement alimentée UNIQUEMENT par nos propres commandes (cf.
+            // telemetry_map.py, évite la course avec l'écho appareil PENDANT le
+            // pilotage actif) -- mais ça fige le widget dès que rien ne pilote (observé
+            // en direct : gelée sur la dernière commande de 09:34 pendant que tout le
+            // reste de l'IHM restait vivant). La logique interne de régulation
+            // (runOptimisationHP(), $currentOutput = getCmdValue('output_limit')) garde
+            // sa propre source de vérité, intacte -- seul l'affichage change ici.
+            'OutputLimitId' => self::cmdIdOrZero($this->getCmd(null, 'outputLimit')),
+            'InputLimitId' => self::cmdIdOrZero($this->getCmd(null, 'inputLimit')),
+            // LastActionOutputId/LastActionInputId : indicateur discret "dernière
+            // action" du widget (cf. zf-lastseen dans le template) -- volontairement
+            // les commandes CURÉES output_limit/input_limit (pas outputLimit/inputLimit
+            // ci-dessus), pour la raison inverse de celle qui a fait préférer le brut à
+            // l'affichage : ici on veut justement un signal qui ne bouge QUE quand ce
+            // plugin envoie réellement une commande, pas à chaque écho télémétrie.
+            'LastActionOutputId' => self::cmdIdOrZero($this->getCmd(null, 'output_limit')),
+            'LastActionInputId' => self::cmdIdOrZero($this->getCmd(null, 'input_limit')),
             // MinSocRawId/SocMaxRawId : PAS les commandes action set_soc_min/set_soc_max
             // elles-mêmes -- jeedom.cmd.execute() sur une commande de type "action" la
             // DÉCLENCHE (même sans valeur), il ne fait pas qu'en lire la valeur (signalé :

@@ -1,4 +1,8 @@
 = 0.1.0-dev =
+* Onboarding sans Home Assistant : bouton "Récupérer via Token" (onglet
+  Équipement) qui remplit automatiquement device_id/product_key/identifiants
+  Cloud à partir du Token ZendureApp (appli mobile Zendure), sans plus
+  nécessiter d'avoir configuré Home Assistant au moins une fois.
 * Connexion Cloud au broker MQTT Zendure, protocole confirmé en conditions réelles
   (topics, deviceAutomation, properties/write) contre un Hyper 2000.
 * Boucle rapide anti-injection temps réel (double sens injection/import, chacun
