@@ -54,6 +54,22 @@ FLAP_BACKOFF_START_S = 30.0
 FLAP_BACKOFF_MAX_S = 300.0
 FLAP_STABLE_AFTER_S = 30.0
 
+# Retry des écritures properties/write sur absence d'accusé de réception.
+# Découvert le 16/08 : le device répond bien à chaque properties/write sur
+# .../properties/write/reply (success:1 + valeur appliquée, ~150-300ms en
+# temps normal) -- PAS du fire-and-forget comme supposé auparavant. Mais le
+# device se connecte en clean_session=true (confirmé dans les logs Mosquitto,
+# "c1"), donc tout ce qu'on publie pendant qu'il est déconnecté (flap TLS,
+# cf. project_local_mqtt_chemin_b) est perdu sans trace côté broker -- mesuré
+# en conditions réelles le 16/08 : ~5% des properties/write jamais acquittées
+# (207 envoyées, 196 ack, 1 refus explicite, ~10 perdues). WRITE_ACK_TIMEOUT_S
+# nettement sous la cadence de la boucle anti-injection (~10s) pour réduire la
+# fenêtre où le device tourne sur un réglage périmé, sans pour autant spammer
+# le broker à chaque round-trip normal (150-300ms).
+WRITE_ACK_TIMEOUT_S = 5.0
+WRITE_MAX_RETRIES = 2
+WRITE_RETRY_CHECK_INTERVAL_S = 1.0
+
 
 class MqttTransport(Transport):
     def __init__(self, conn: dict):
@@ -94,10 +110,31 @@ class MqttTransport(Transport):
         self._backoff_stop = threading.Event()
         self._manually_stopped = False
 
+        # Retry des properties/write sans accusé (cf. constantes WRITE_* ci-dessus).
+        # messageId -> {"name", "topic", "payload", "sent_at", "attempts"}.
+        self._pending_writes: dict = {}
+        # Dernier messageId envoyé par nom de propriété -- une relance dont la
+        # valeur a été remplacée entre-temps par une commande plus récente
+        # (boucle anti-injection) est abandonnée plutôt que ré-émise en retard.
+        self._latest_message_id_for_property: dict = {}
+        self._pending_lock = threading.Lock()
+        self._retry_stop = threading.Event()
+        self._retry_thread = threading.Thread(target=self._retry_loop, daemon=True)
+        self._retry_thread.start()
+
         if conn.get("username"):
             self._client.username_pw_set(conn.get("username"), conn.get("password"))
         if conn.get("tls"):
-            self._client.tls_set(cert_reqs=ssl.CERT_REQUIRED)
+            if conn.get("tls_insecure"):
+                # Certificat non vérifié -- pensé pour un broker LOCAL avec un
+                # certificat auto-signé (Chemin B, cf. docs/brief_chemin_b_local.md),
+                # jamais pour le cloud Zendure. La config PHP (writeDaemonConfig())
+                # ne pose ce flag que sous mode_connexion=local, jamais cloud --
+                # même filet de sécurité voulu ici, pas de check dupliqué.
+                self._client.tls_set(cert_reqs=ssl.CERT_NONE)
+                self._client.tls_insecure_set(True)
+            else:
+                self._client.tls_set(cert_reqs=ssl.CERT_REQUIRED)
 
         self._client.on_connect = self._on_connect
         self._client.on_disconnect = self._on_disconnect
@@ -116,6 +153,7 @@ class MqttTransport(Transport):
         self._manually_stopped = True
         self._backoff_stop.set()
         self._cancel_stable_timer()
+        self._retry_stop.set()
         self._client.loop_stop()
         self._client.disconnect()
 
@@ -125,7 +163,19 @@ class MqttTransport(Transport):
             return self._connected
 
     def set_output_limit(self, watts: int) -> None:
-        self._publish_automation(self._profile.discharge_automation(int(watts)))
+        # Écriture de propriété brute (outputLimit), PAS deviceAutomation -- reproduit
+        # ZendureDevice.entityWrite() de zendure_ha (device.py), la méthode de base
+        # dont hérite Hyper2000/ZendureLegacy SANS la redéfinir : leurs curseurs
+        # number.output_limit/input_limit passent par là, jamais par charge()/
+        # discharge(). Changé le 15/08 : reproduit en direct sur le vrai compte via
+        # l'API HA -- 10 écritures de ce type en rafale (10s, 200-350W) n'ont
+        # provoqué aucune réactivation du mode intelligent (acMode/autoModel/
+        # chargingMode inchangés), alors que la même plage de valeurs via notre
+        # ancien chemin deviceAutomation (autoModel=8, cf. historique) y était
+        # associée à chaque fois. discharge_automation()/charge_automation() restent
+        # dans les profils (cf. device_profiles/) mais ne sont plus appelés d'ici --
+        # gardés pour référence/diagnostic, pas supprimés.
+        self._publish_property("outputLimit", int(watts), ram=True)
 
     def set_input_limit(self, watts: int) -> None:
         if not self._profile.supports_ac_charge():
@@ -134,12 +184,12 @@ class MqttTransport(Transport):
                 self._conn.get("device_id"), self._profile.name, watts,
             )
             return
-        self._publish_automation(self._profile.charge_automation(int(watts)))
+        self._publish_property("inputLimit", int(watts), ram=True)
 
     def set_mode(self, mode: int) -> None:
         # acMode (1=input/2=output) passe par properties/write, PAS function/invoke
         # (canal distinct, cf. ZendureDevice.entityWrite dans zendure_ha) — confirmé en direct.
-        self._publish_property("acMode", int(mode))
+        self._publish_property("acMode", int(mode), ram=True)
 
     def set_soc_min(self, percent: int) -> None:
         # Facteur x10 côté device (confirmé dans zendure_ha : ZendureNumber(...,
@@ -147,7 +197,7 @@ class MqttTransport(Transport):
         # onwrite(factor * value)) -- sans lui, régler 40% envoyait en réalité 4%
         # au boîtier (signalé : le curseur SOC minimum ne faisait pas ce qu'il
         # affichait).
-        self._publish_property("minSoc", int(percent) * 10)
+        self._publish_property("minSoc", int(percent) * 10, ram=True)
 
     def set_soc_max(self, percent: int) -> None:
         # Même mécanique que set_soc_min (propriété socSet, même facteur x10) :
@@ -155,7 +205,7 @@ class MqttTransport(Transport):
         # app/HA) -- absent du plugin jusqu'ici alors que c'est, avec la limite
         # de sortie, l'un des deux leviers réellement utilisés pour piloter la
         # charge en HC (retour utilisateur).
-        self._publish_property("socSet", int(percent) * 10)
+        self._publish_property("socSet", int(percent) * 10, ram=True)
 
     def set_smart_mode(self, enabled: bool) -> None:
         self._publish_property("smartMode", 1 if enabled else 0)
@@ -183,6 +233,22 @@ class MqttTransport(Transport):
         return self._message_id
 
     def _publish_automation(self, argument: dict) -> None:
+        # NE PAS repousser smartMode=0 ici avant chaque appel -- tenté le 15/08
+        # matin puis retiré le jour même. Zendure/Zendure-HA a connu texto le
+        # même symptôme (issue #1521, "smart mode alternates after every mqtt
+        # command") : leur PR #1507 (commit f4e2267, 12/07) faisait la même
+        # chose -- forcer smartMode/acMode à chaque écriture de limite -- pour
+        # corriger un autre bug (#1505). Effet de bord confirmé par 4
+        # rapporteurs : dès qu'une automation pilote input_limit/output_limit de
+        # façon répétée (exactement notre boucle rapide, ~1-2s), smartMode
+        # alterne 0/1 à chaque commande et l'appareil se retrouve parqué en
+        # standby. Reverté par eux le 11/08 (commit 6fc073d) -- retour à une
+        # simple écriture de propriété, sans réaffirmation systématique.
+        # On suit la même conclusion : ne pas réaffirmer smartMode à chaque
+        # automation. Si smartMode se réactive vraiment tout seul (pas encore
+        # confirmé avec certitude, cf. mémoire projet), la correction passe
+        # ailleurs -- pas par un forçage à chaque appel, qui est précisément ce
+        # que Zendure-HA a dû annuler.
         topic = self._conn["topic_function"].format(
             device_id=self._conn["device_id"], product_key=self._conn.get("product_key", "")
         )
@@ -203,20 +269,102 @@ class MqttTransport(Transport):
         log.debug("Publish %s -> %s", topic, payload)
         self._client.publish(topic, payload, qos=1)
 
-    def _publish_property(self, name: str, value) -> None:
+    def _publish_property(self, name: str, value, ram: bool = False) -> None:
+        # ram=True : ajoute smartMode=1 dans le MÊME message -- "Flash Guard", cf.
+        # Utini2000/Zendure-Solarflow-Local-HomeAssistant (README, 15/08) : smartMode
+        # sélectionnerait où le firmware écrit un réglage, RAM (volatile, écritures
+        # illimitées) si 1, Flash (persiste au redémarrage, nombre d'écritures limité
+        # dans le temps) sinon -- pas juste "IA autonome" comme supposé plus tôt dans
+        # la journée. Sans ça, set_output_limit/set_input_limit (potentiellement
+        # appelées toutes les 1-2s par la boucle anti-injection) userait la Flash en
+        # quelques semaines d'usage normal. Étendu à toutes les propriétés pilotées
+        # par cohérence (retour utilisateur), pas seulement celles à haute fréquence
+        # -- set_smart_mode() lui-même reste séparé, c'est SA valeur qui est pilotée,
+        # pas un effet de bord à ajouter.
+        properties = {name: value}
+        if ram:
+            properties["smartMode"] = 1
         topic = self._conn["topic_write"].format(
             device_id=self._conn["device_id"], product_key=self._conn.get("product_key", "")
         )
-        payload = json.dumps(
-            {
-                "deviceId": self._conn["device_id"],
-                "messageId": self._next_message_id(),
-                "timestamp": int(time.time()),
-                "properties": {name: value},
+        message_id = self._next_message_id()
+        payload_dict = {
+            "deviceId": self._conn["device_id"],
+            "messageId": message_id,
+            "timestamp": int(time.time()),
+            "properties": properties,
+        }
+        with self._pending_lock:
+            self._pending_writes[message_id] = {
+                "name": name,
+                "topic": topic,
+                "payload": payload_dict,
+                "sent_at": time.monotonic(),
+                "attempts": 1,
             }
-        )
+            self._latest_message_id_for_property[name] = message_id
+        self._publish_write(topic, payload_dict)
+
+    def _publish_write(self, topic: str, payload_dict: dict) -> None:
+        payload = json.dumps(payload_dict)
         log.debug("Publish %s -> %s", topic, payload)
         self._client.publish(topic, payload, qos=1)
+
+    def _retry_loop(self) -> None:
+        while not self._retry_stop.wait(WRITE_RETRY_CHECK_INTERVAL_S):
+            self._check_pending_writes()
+
+    def _check_pending_writes(self) -> None:
+        now = time.monotonic()
+        to_retry = []
+        to_drop = []
+        with self._pending_lock:
+            for message_id, entry in list(self._pending_writes.items()):
+                if now - entry["sent_at"] < WRITE_ACK_TIMEOUT_S:
+                    continue
+                if self._latest_message_id_for_property.get(entry["name"]) != message_id:
+                    # Une commande plus récente a déjà remplacé celle-ci pour
+                    # la même propriété -- relancer une valeur périmée serait
+                    # contre-productif (pourrait écraser la commande à jour).
+                    to_drop.append(message_id)
+                    continue
+                if entry["attempts"] > WRITE_MAX_RETRIES:
+                    to_drop.append(message_id)
+                    log.warning(
+                        "Commande messageId=%s (%s) abandonnée après %d tentative(s) sans accusé de réception",
+                        message_id, entry["payload"].get("properties"), entry["attempts"],
+                    )
+                    continue
+                entry["attempts"] += 1
+                entry["sent_at"] = now
+                to_retry.append((message_id, entry["topic"], entry["payload"], entry["attempts"]))
+            for message_id in to_drop:
+                self._pending_writes.pop(message_id, None)
+        for message_id, topic, payload_dict, attempt in to_retry:
+            log.info(
+                "Relance commande messageId=%s (tentative %d/%d, pas d'accusé sous %.0fs) -> %s",
+                message_id, attempt, WRITE_MAX_RETRIES + 1, WRITE_ACK_TIMEOUT_S, payload_dict.get("properties"),
+            )
+            self._publish_write(topic, payload_dict)
+
+    def _handle_write_reply(self, msg) -> None:
+        log.debug("Reçu %s -> %s", msg.topic, msg.payload)
+        try:
+            data = json.loads(msg.payload.decode("utf-8"))
+        except (ValueError, UnicodeDecodeError):
+            return
+        message_id = data.get("messageId")
+        success = data.get("success")
+        with self._pending_lock:
+            entry = self._pending_writes.pop(message_id, None)
+        if entry is None:
+            return
+        if success != 1:
+            log.warning(
+                "Écriture refusée par l'appareil : messageId=%s properties=%s (success=%s) -- pas de nouvelle "
+                "tentative (valeur probablement invalide plutôt que perdue)",
+                message_id, entry["payload"].get("properties"), success,
+            )
 
     def _on_connect(self, client, userdata, flags, rc):
         with self._lock:
@@ -318,6 +466,11 @@ class MqttTransport(Transport):
         # (suffixe properties/report) alimente le callback, mais on logue tout le
         # reste en debug (replies, ack, erreurs) pour garder de la visibilité en
         # diagnostic — notamment sur function/invoke/reply et properties/read/reply.
+        if msg.topic.endswith("properties/write/reply"):
+            # Accusé de réception réel (découvert 16/08, cf. constantes WRITE_*) :
+            # dépile la commande en attente et coupe court à son propre retry.
+            self._handle_write_reply(msg)
+            return
         if not msg.topic.endswith("properties/report"):
             log.debug("Reçu %s -> %s", msg.topic, msg.payload[:300])
             return

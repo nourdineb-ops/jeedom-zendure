@@ -63,11 +63,19 @@ fichier reste correct si on le replace un jour en `type=cmd`.
 
 .zendure-flux .zf-header {
     display: flex;
-    justify-content: flex-end;
+    justify-content: space-between;
     align-items: center;
     margin-bottom: 0;
+    gap: 8px;
 }
-.zendure-flux .zf-badges { display: flex; gap: 6px; }
+/* Indicateur "dernière télémétrie / dernière action" (demande explicite du
+   16/08) : très discret par construction -- petit, atténué, pas de fond ni
+   de bordure comme les badges. Simple texte d'horodatage, avec le détail
+   complet (date + heure) en title (tooltip natif) pour ne pas encombrer
+   l'espace en permanence. */
+.zendure-flux .zf-lastseen { font-size: 9.5px; color: var(--zf-text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.zendure-flux .zf-lastseen-sep { margin: 0 5px; opacity: 0.5; }
+.zendure-flux .zf-badges { display: flex; gap: 6px; flex-shrink: 0; }
 .zendure-flux .zf-badge {
     font-size: 11px;
     padding: 3px 10px;
@@ -248,6 +256,9 @@ fichier reste correct si on le replace un jour en `type=cmd`.
 .zendure-flux.zf-design-context .zf-row3 .zf-money:nth-child(3) { display: none !important; }
 </style>
     <div class="zf-header">
+        <div class="zf-lastseen" id="zf-lastseen-#id#">
+            <span id="zf-lastseen-telemetry-wrap-#id#" title="Dernière télémétrie Zendure reçue">Télé <span id="zf-lastseen-telemetry-#id#">—</span></span><span class="zf-lastseen-sep">·</span><span id="zf-lastseen-action-wrap-#id#" title="Dernière commande réellement envoyée">Cmd <span id="zf-lastseen-action-#id#">—</span></span>
+        </div>
         <div class="zf-badges">
             <span class="zf-badge zf-badge-offline" id="zf-offlineBadge-#id#"><i class="fas fa-exclamation-triangle"></i> Hors ligne</span>
             <span class="zf-badge zf-badge-tarif" id="zf-periodebadge-#id#"><i class="fas fa-sun" id="zf-periodeicon-#id#"></i></span>
@@ -441,6 +452,8 @@ fichier reste correct si on le replace un jour en `type=cmd`.
         tempoTomorrowId: #TempoTomorrowId#,
         outputLimitId: #OutputLimitId#,
         inputLimitId: #InputLimitId#,
+        lastActionOutputId: #LastActionOutputId#,
+        lastActionInputId: #LastActionInputId#,
         minSocRawId: #MinSocRawId#,
         socMaxRawId: #SocMaxRawId#,
         setOutputLimitId: #SetOutputLimitId#,
@@ -738,6 +751,34 @@ fichier reste correct si on le replace un jour en `type=cmd`.
     // dupliquer/désynchroniser la logique d'un seul rendu.
     var lastSeenTs = Date.now();
     var isOffline = false;
+    // Indicateur discret "dernière télémétrie / dernière action" (cf. .zf-lastseen
+    // dans le HTML) : lastSeenTs (déjà utilisé par le watchdog hors-ligne
+    // ci-dessus) sert directement de source pour "Télé". lastActionTs est un
+    // second horodatage séparé, alimenté uniquement par les commandes CURÉES
+    // output_limit/input_limit (cf. cfg.lastActionOutputId/InputId) -- un vrai
+    // signal "une commande est partie", distinct de la télémétrie passive.
+    // null tant qu'aucune valeur n'est connue (affiche "—", pas une fausse date).
+    var lastActionTs = null;
+
+    function pad2(n) { return (n < 10 ? '0' : '') + n; }
+    function fmtTime(ts) {
+        if (!ts) return '—';
+        var d = new Date(ts);
+        return pad2(d.getHours()) + ':' + pad2(d.getMinutes()) + ':' + pad2(d.getSeconds());
+    }
+    function fmtFullDate(ts) {
+        if (!ts) return 'inconnue';
+        var d = new Date(ts);
+        return pad2(d.getDate()) + '/' + pad2(d.getMonth() + 1) + '/' + d.getFullYear() + ' ' + fmtTime(ts);
+    }
+    function updateLastSeenDisplay() {
+        setText('lastseen-telemetry', fmtTime(lastSeenTs));
+        var telWrap = document.getElementById('zf-lastseen-telemetry-wrap-' + id);
+        if (telWrap) telWrap.title = 'Dernière télémétrie Zendure reçue : ' + fmtFullDate(lastSeenTs);
+        setText('lastseen-action', fmtTime(lastActionTs));
+        var actWrap = document.getElementById('zf-lastseen-action-wrap-' + id);
+        if (actWrap) actWrap.title = 'Dernière commande réellement envoyée : ' + fmtFullDate(lastActionTs);
+    }
 
     // Seules ces grandeurs sont de la VRAIE télémétrie Zendure (solaire, batterie,
     // SOC, mode) : seules elles doivent (a) prouver que le démon est vivant et (b)
@@ -780,6 +821,7 @@ fichier reste correct si on le replace un jour en `type=cmd`.
         if (ZENDURE_ONLY_KEYS[key]) {
             lastSeenTs = Date.now();
             setOfflineState(false);
+            updateLastSeenDisplay();
         }
         initApplyValue(key, value);
     }
@@ -809,6 +851,21 @@ fichier reste correct si on le replace un jour en `type=cmd`.
         });
     });
     recompute();
+
+    // Abonnement dédié "dernière action" (cf. lastActionTs plus haut) : distinct
+    // du driverMap ci-dessus car ces deux commandes n'ont rien à afficher, elles
+    // ne servent qu'à dater la dernière commande réellement envoyée. Pas de lecture
+    // initiale via jeedom.cmd.execute() ici -- fetchLastSeen() (plus bas) donne déjà
+    // la vraie valeur au chargement (collectDate côté serveur), la lire deux fois
+    // serait redondant et fetchLastSeen() est la seule des deux à connaître l'âge
+    // réel (jeedom.cmd.execute() ne renvoie que la valeur, jamais sa date).
+    function onActionPulse() {
+        lastActionTs = Date.now();
+        updateLastSeenDisplay();
+    }
+    if (cfg.lastActionOutputId) jeedom.cmd.addUpdateFunction(String(cfg.lastActionOutputId), onActionPulse);
+    if (cfg.lastActionInputId) jeedom.cmd.addUpdateFunction(String(cfg.lastActionInputId), onActionPulse);
+    updateLastSeenDisplay();
 
     // computeGeom() a besoin que .zf-diagram et ses noeuds soient déjà mis en
     // page (getBoundingClientRect) -- rAF pour laisser le premier layout se
@@ -852,9 +909,18 @@ fichier reste correct si on le replace un jour en `type=cmd`.
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
             body: body
         }).then(function (r) { return r.json(); }).then(function (data) {
-            if (data.state !== 'ok' || !data.result || !data.result.lastSeenMs) return;
-            lastSeenTs = data.result.lastSeenMs;
-            if (Date.now() - lastSeenTs > offlineThresholdMs) setOfflineState(true);
+            if (data.state !== 'ok' || !data.result) return;
+            if (data.result.lastSeenMs) {
+                lastSeenTs = data.result.lastSeenMs;
+                if (Date.now() - lastSeenTs > offlineThresholdMs) setOfflineState(true);
+            }
+            // lastActionMs peut légitimement être absent/0 (aucune commande encore
+            // envoyée depuis le démarrage du plugin) -- laisse lastActionTs à null
+            // ("—" affiché) dans ce cas plutôt que d'afficher une fausse date.
+            if (data.result.lastActionMs) {
+                lastActionTs = data.result.lastActionMs;
+            }
+            updateLastSeenDisplay();
         }).catch(function () { /* best-effort, cf. commentaire ci-dessus */ });
     }
     fetchLastSeen();

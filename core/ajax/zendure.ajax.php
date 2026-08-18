@@ -50,7 +50,28 @@ try {
                 $latestMs = $ms;
             }
         }
-        ajax::success(array('lastSeenMs' => $latestMs));
+        // Indicateur discret "dernière action" (cf. zf-lastseen dans le template) :
+        // output_limit/input_limit sont les commandes CURÉES (pas l'écho brut
+        // appareil) -- alimentées UNIQUEMENT quand ce plugin envoie réellement une
+        // commande (cf. commentaire de OutputLimitId côté createOrUpdateFluxWidget()),
+        // donc un vrai marqueur "une commande est partie", pas un simple pouls de
+        // télémétrie qui bougerait même sans aucun pilotage.
+        $lastActionMs = 0;
+        foreach (array('output_limit', 'input_limit') as $lid) {
+            $cmd = $eqLogic->getCmd(null, $lid);
+            if (!is_object($cmd)) {
+                continue;
+            }
+            $date = $cmd->getCollectDate(1);
+            if ($date == '') {
+                continue;
+            }
+            $ms = strtotime($date) * 1000;
+            if ($ms > $lastActionMs) {
+                $lastActionMs = $ms;
+            }
+        }
+        ajax::success(array('lastSeenMs' => $latestMs, 'lastActionMs' => $lastActionMs));
     }
 
     // Panneau debug du widget Flux (cf. cmd.info.string.flux_widget.html, fonction
@@ -94,6 +115,14 @@ try {
     // visible -- juste un plafond de sortie qui ne bouge jamais. Jusqu'ici
     // set_smart_mode n'était appelable qu'en interne (Device.stop()) ; ce bouton
     // le rend accessible à l'utilisateur sans devoir chercher dans l'app Zendure.
+    // Bouton "Récupérer via Token" (config, onglet Équipement) : onboarding sans
+    // Home Assistant, cf. zendure::fetchCloudCredentialsFromToken(). Pas d'eqLogic_id
+    // requis -- utilisable avant même la première sauvegarde de l'équipement.
+    if (init('action') == 'fetchViaToken') {
+        $result = zendure::fetchCloudCredentialsFromToken(init('token'));
+        ajax::success($result);
+    }
+
     if (init('action') == 'disableSmartMode') {
         $eqLogic = eqLogic::byId(init('eqLogic_id'));
         if (!is_object($eqLogic) || $eqLogic->getEqType_name() != 'zendure') {

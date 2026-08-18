@@ -40,6 +40,10 @@ def build_transport(eq_config: dict) -> Transport:
             "host": eq_config["local_host"],
             "port": eq_config.get("local_port", 1883),
             "tls": eq_config.get("local_tls", False),
+            # Certificat non vérifié : jamais posé côté cloud (cf. bloc ci-dessus,
+            # cette clé n'existe pas là), pensé pour un broker local avec un
+            # certificat auto-signé (Chemin B, cf. brief_chemin_b_local.md).
+            "tls_insecure": eq_config.get("local_tls_insecure", False),
             "username": eq_config.get("local_username") or None,
             "password": eq_config.get("local_password") or None,
         }

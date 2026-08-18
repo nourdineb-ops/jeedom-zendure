@@ -179,6 +179,7 @@ class Device:
         "local_host",
         "local_port",
         "local_tls",
+        "local_tls_insecure",
         "local_username",
         "local_password",
     )

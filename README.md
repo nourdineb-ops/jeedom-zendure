@@ -51,9 +51,12 @@ Détail complet de chaque réglage : [`docs/documentation_utilisateur.md`](docs/
    environnement Python isolé (`resources/venv/`) et installe les paquets du
    démon (`resources/zendure_daemon/requirements.txt`), sans rien toucher au
    Python système.
-3. Créer un équipement Zendure, renseigner `device_id`/`product_key` (voir
-   [Compatibilité](docs/documentation_utilisateur.md#compatibilité--prérequis)
-   pour savoir où les trouver), et choisir le mode de connexion Cloud.
+3. Créer un équipement Zendure, mode de connexion Cloud, puis coller votre
+   **Token ZendureApp** (trouvable dans l'appli mobile Zendure, compte
+   principal) dans le bloc "Récupération assistée" et cliquer sur "Récupérer
+   via Token" — `device_id`/`product_key`/identifiants MQTT se remplissent
+   automatiquement (aucune installation Home Assistant requise ; détail dans
+   [Compatibilité](docs/documentation_utilisateur.md#compatibilité--prérequis)).
 4. Configurer au minimum une source "Puissance prélevée sur le réseau" (onglet
    Sources, groupe Pilotage) — idéalement une pince/compteur dédié, plus fiable
    qu'un Téléinfo pour mesurer l'injection réelle. C'est l'entrée de la boucle

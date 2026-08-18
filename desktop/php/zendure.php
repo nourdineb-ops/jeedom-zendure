@@ -152,6 +152,29 @@ $eqLogics = eqLogic::byType($plugin->getId());
                     </div>
                 </fieldset>
 
+                <fieldset>
+                    <legend><i class="fas fa-magic"></i> {{Récupération assistée (sans Home Assistant)}}</legend>
+                    <div class="form-group">
+                        <label class="col-sm-2 control-label">{{Token ZendureApp}}</label>
+                        <div class="col-sm-6">
+                            <input type="text" class="form-control" id="input_zendure_token" placeholder="{{Collez ici le token trouvé dans l'appli mobile Zendure}}" />
+                            <span class="help-block" style="margin-bottom:0;">{{Appli Zendure → réglages du compte PRINCIPAL (pas un compte invité, sinon aucun appareil ne remonte) → cherchez une option "token"/"développeur"/"intégration". Ce token n'est utilisé qu'une fois ici, pas sauvegardé.}}</span>
+                        </div>
+                        <div class="col-sm-4">
+                            <a id="bt_fetchViaToken" class="btn btn-primary"><i class="fas fa-download"></i> {{Récupérer via Token}}</a>
+                        </div>
+                    </div>
+                    <div class="form-group" id="bloc_choix_appareil" style="display:none;">
+                        <label class="col-sm-2 control-label">{{Appareil détecté}}</label>
+                        <div class="col-sm-6">
+                            <select class="form-control" id="sel_zendure_device"></select>
+                        </div>
+                        <div class="col-sm-4">
+                            <a id="bt_applyZendureDevice" class="btn btn-success"><i class="fas fa-check"></i> {{Appliquer}}</a>
+                        </div>
+                    </div>
+                </fieldset>
+
                 <div class="row">
                     <div class="col-md-6">
                         <legend><i class="fas fa-plug"></i> {{Connexion}}</legend>
@@ -174,6 +197,7 @@ $eqLogics = eqLogic::byType($plugin->getId());
                                 <div class="col-sm-8">
                                     <select id="sel_mode_connexion" class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="mode_connexion">
                                         <option value="cloud">{{Cloud}}</option>
+                                        <option value="local">{{Local (expérimental)}}</option>
                                         <option value="simulation">{{Simulation (aucun appareil requis)}}</option>
                                     </select>
                                 </div>
@@ -230,6 +254,48 @@ $eqLogics = eqLogic::byType($plugin->getId());
                                 </div>
                             </fieldset>
                         </div>
+                        <div id="bloc_local">
+                            <legend><i class="fas fa-network-wired"></i> {{Identifiants Local}}</legend>
+                            <fieldset>
+                                <div class="form-group">
+                                    <label class="col-sm-4 control-label">{{Broker local}}</label>
+                                    <div class="col-sm-8">
+                                        <input class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="local_host" placeholder="192.168.1.12" />
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label class="col-sm-4 control-label">{{Port}}</label>
+                                    <div class="col-sm-8">
+                                        <input type="number" class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="local_port" placeholder="1883" />
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label class="col-sm-4 control-label">{{TLS}}</label>
+                                    <div class="col-sm-2">
+                                        <input type="checkbox" id="chk_local_tls" class="eqLogicAttr" data-l1key="configuration" data-l2key="local_tls" />
+                                    </div>
+                                    <label class="col-sm-3 control-label">{{Ignorer le certificat}}</label>
+                                    <div class="col-sm-2">
+                                        <input type="checkbox" class="eqLogicAttr" data-l1key="configuration" data-l2key="local_tls_insecure" />
+                                    </div>
+                                    <div class="col-sm-12">
+                                        <span class="help-block" style="margin-top:4px;">{{"Ignorer le certificat" : pour un broker local avec certificat auto-signé (ex. Chemin B) -- jamais à cocher pour une connexion cloud.}}</span>
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label class="col-sm-4 control-label">{{Nom d'utilisateur MQTT}}</label>
+                                    <div class="col-sm-8">
+                                        <input class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="local_username" placeholder="{{vide = accès anonyme}}" />
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label class="col-sm-4 control-label">{{Mot de passe}}</label>
+                                    <div class="col-sm-8">
+                                        <input type="password" class="eqLogicAttr inputPassword form-control" data-l1key="configuration" data-l2key="local_password" />
+                                    </div>
+                                </div>
+                            </fieldset>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -274,6 +340,11 @@ $eqLogics = eqLogic::byType($plugin->getId());
                     <?php
                     $renderSourceRow('src_prevision_solaire', '{{Prévision solaire J+0 (Wh)}}');
                     $renderSourceRow('src_prevision_solaire_j1', '{{Prévision solaire J+1 (Wh)}}');
+                    ?>
+
+                    <legend style="font-size:14px;"><i class="fas fa-thermometer-half"></i> {{Météo}}</legend>
+                    <?php
+                    $renderSourceRow('src_temperature_exterieure', '{{Température extérieure (°C)}}', '{{Optionnel -- active le seuil "priorité charge" par temps froid, onglet Comportement}}');
                     ?>
 
                     <legend style="font-size:14px;"><i class="fas fa-tachometer-alt"></i> {{Compteur}}</legend>
@@ -392,6 +463,28 @@ $eqLogics = eqLogic::byType($plugin->getId());
                         </div>
                     </div>
                     <div class="form-group">
+                        <label class="col-sm-3 control-label">{{Seuil SOC priorité charge (%)}}</label>
+                        <div class="col-sm-2">
+                            <input type="number" min="0" max="100" class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="seuil_soc_priorite_charge" placeholder="20" />
+                        </div>
+                        <div class="col-sm-7">
+                            <span class="help-block" style="margin-top:8px;">{{Sous ce SOC, le réveil HP ne force plus la décharge (le plafond reste relevé à 100%, la bascule de mode est juste retardée) -- évite de forcer une décharge sur une batterie quasi vide alors qu'un surplus solaire pourrait la recharger.}}</span>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="col-sm-3 control-label">{{Seuil priorité charge par temps froid (%)}}</label>
+                        <div class="col-sm-2">
+                            <input type="number" min="0" max="100" class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="seuil_soc_priorite_charge_froid" placeholder="{{vide = désactivé}}" />
+                        </div>
+                        <label class="col-sm-3 control-label">{{Sous cette température (°C)}}</label>
+                        <div class="col-sm-2">
+                            <input type="number" class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="temperature_seuil_froid" placeholder="5" />
+                        </div>
+                        <div class="col-sm-12">
+                            <span class="help-block" style="margin-top:4px;">{{Optionnel -- nécessite une source "Température extérieure" (onglet Sources). Si renseigné, remplace le seuil ci-dessus par celui-ci quand il fait plus froid que la température indiquée (ex. protéger davantage la batterie l'hiver, comme documenté par certains projets communautaires Zendure).}}</span>
+                        </div>
+                    </div>
+                    <div class="form-group">
                         <label class="col-sm-3 control-label">{{Cooldown import (s)}}</label>
                         <div class="col-sm-2">
                             <input type="number" step="1" class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="cooldown_import_anti_injection" placeholder="15" />
@@ -482,6 +575,31 @@ $eqLogics = eqLogic::byType($plugin->getId());
                         <label class="col-sm-3 control-label">{{Retour HC le soir (modèle kWh)}}</label>
                         <div class="col-sm-2">
                             <input type="time" class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="heure_debut_hc_soir" placeholder="22:00" />
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="col-sm-3 control-label">{{Heure de montée du solaire (modèle kWh)}}</label>
+                        <div class="col-sm-2">
+                            <input type="number" min="0" max="23" step="1" class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="heure_fin_montee_solaire" placeholder="9" />
+                        </div>
+                        <div class="col-sm-7">
+                            <span class="help-block" style="margin-top:8px;">{{La prévision solaire est un total journalier -- ne garantit rien avant cette heure. La cible de charge est relevée si besoin pour couvrir seule la conso habituelle entre le réveil HP et cette heure, indépendamment de la prévision du jour.}}</span>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="col-sm-3 control-label">{{Équipement Solcast (optionnel)}}</label>
+                        <div class="col-sm-4">
+                            <select class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="solcast_eqlogic_id">
+                                <option value="0">{{Aucun -- suppose 0W avant l'heure ci-dessus}}</option>
+                                <?php
+                                foreach (eqLogic::byType('solcast', true) as $solcastEq) {
+                                    echo '<option value="' . $solcastEq->getId() . '">' . $solcastEq->getName() . '</option>';
+                                }
+                                ?>
+                            </select>
+                        </div>
+                        <div class="col-sm-5">
+                            <span class="help-block" style="margin-top:8px;">{{Si renseigné, la réserve avant montée solaire ci-dessus utilise la vraie prévision horaire Solcast (d0h...) au lieu de supposer 0W -- plus précis, sensible à la météo réelle du jour.}}</span>
                         </div>
                     </div>
                 </fieldset>
@@ -816,6 +934,7 @@ $(function () {
     $('#sel_mode_connexion').on('change', function () {
         var mode = $(this).val();
         $('#bloc_cloud').toggle(mode == 'cloud');
+        $('#bloc_local').toggle(mode == 'local');
     }).trigger('change');
 
     $('#sel_type_contrat').on('change', function () {
@@ -882,6 +1001,76 @@ $(function () {
                     return;
                 }
                 $('#div_alert').showAlert({ message: '{{Commande envoyée : mode intelligent désactivé}}', level: 'success' });
+            }
+        });
+    });
+
+    // Bouton "Récupérer via Token" : onboarding sans Home Assistant, cf.
+    // zendure::fetchCloudCredentialsFromToken(). Pas de eqLogic_id requis --
+    // ne touche que les champs du formulaire, encore rien de sauvegardé tant
+    // que l'utilisateur ne clique pas sur "Sauvegarder" comme d'habitude.
+    var zendureTokenDevices = [];
+    $('.eqLogic').off('click', '#bt_fetchViaToken').on('click', '#bt_fetchViaToken', function () {
+        var token = $('#input_zendure_token').val();
+        if (!token) {
+            $('#div_alert').showAlert({ message: '{{Collez d\'abord un token}}', level: 'warning' });
+            return;
+        }
+        var $bt = $(this);
+        $bt.prop('disabled', true);
+        $.ajax({
+            type: 'POST',
+            url: 'plugins/zendure/core/ajax/zendure.ajax.php',
+            data: { action: 'fetchViaToken', token: token },
+            dataType: 'json',
+            error: function (request, status, error) {
+                $bt.prop('disabled', false);
+                handleAjaxError(request, status, error);
+            },
+            success: function (data) {
+                $bt.prop('disabled', false);
+                if (data.state != 'ok') {
+                    $('#div_alert').showAlert({ message: data.result, level: 'danger' });
+                    return;
+                }
+                zendureTokenDevices = data.result.devices;
+                var applyCloudFields = function (device) {
+                    $('.eqLogicAttr[data-l2key="device_id"]').value(device.device_id);
+                    $('.eqLogicAttr[data-l2key="product_key"]').value(device.product_key);
+                    if (device.model_key) {
+                        $('.eqLogicAttr[data-l2key="device_model"]').value(device.model_key);
+                    }
+                    $('.eqLogicAttr[data-l2key="mode_connexion"]').value('cloud').trigger('change');
+                    $('.eqLogicAttr[data-l2key="cloud_host"]').value(data.result.cloud_host);
+                    if (data.result.cloud_port) {
+                        $('.eqLogicAttr[data-l2key="cloud_port"]').value(data.result.cloud_port);
+                    }
+                    $('.eqLogicAttr[data-l2key="cloud_username"]').value(data.result.cloud_username);
+                    $('.eqLogicAttr[data-l2key="cloud_auth_key"]').value(data.result.cloud_auth_key);
+                    $('.eqLogicAttr[data-l2key="cloud_client_id"]').value(data.result.cloud_client_id);
+                };
+
+                if (zendureTokenDevices.length == 1) {
+                    applyCloudFields(zendureTokenDevices[0]);
+                    $('#bloc_choix_appareil').hide();
+                    $('#div_alert').showAlert({ message: '{{Champs remplis depuis le token. Vérifiez puis sauvegardez.}}', level: 'success' });
+                } else {
+                    var $sel = $('#sel_zendure_device').empty();
+                    zendureTokenDevices.forEach(function (device, idx) {
+                        $sel.append($('<option>').val(idx).text(device.name + ' (' + device.model + ')'));
+                    });
+                    $('#bloc_choix_appareil').show();
+                    $('#div_alert').showAlert({ message: '{{Plusieurs appareils trouvés sur ce compte -- choisissez lequel appliquer à cet équipement.}}', level: 'info' });
+                }
+
+                $('.eqLogic').off('click', '#bt_applyZendureDevice').on('click', '#bt_applyZendureDevice', function () {
+                    var idx = parseInt($('#sel_zendure_device').val(), 10);
+                    if (isNaN(idx) || !zendureTokenDevices[idx]) {
+                        return;
+                    }
+                    applyCloudFields(zendureTokenDevices[idx]);
+                    $('#div_alert').showAlert({ message: '{{Champs remplis depuis le token. Vérifiez puis sauvegardez.}}', level: 'success' });
+                });
             }
         });
     });

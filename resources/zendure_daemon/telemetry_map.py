@@ -32,6 +32,15 @@ CURATED_ALIASES = {
     # toute télémétrie non aliasée) si besoin de la consulter à part.
     "inputLimit": "input_limit",
     "acMode": "mode",
+    # socStatus : 0=normal, 1=auto-calibration en cours (confirmé dans les
+    # traductions de Zendure/Zendure-HA : "SoC Calibration State" / "Auto-
+    # Calibration") -- pur affichage informatif, aucune action ne s'y
+    # raccroche. Suivi demandé par l'utilisateur le 16/08 après avoir noté
+    # que la stratégie nuit vise des cibles basses qui pourraient ne jamais
+    # remonter la batterie à 100%, or c'est ce qui déclenche la calibration
+    # côté firmware (cf. zendure_ha device.py : nextCalibration relancé
+    # uniquement quand electricLevel==100 ou socStatus repasse à 0).
+    "socStatus": "calibration_status",
 }
 
 # Clés de plomberie protocole (pas des mesures) : jamais transformées en commande.
