@@ -63,17 +63,18 @@ fichier reste correct si on le replace un jour en `type=cmd`.
 
 .zendure-flux .zf-header {
     display: flex;
-    justify-content: space-between;
+    justify-content: flex-end;
     align-items: center;
     margin-bottom: 0;
-    gap: 8px;
 }
 /* Indicateur "dernière télémétrie / dernière action" (demande explicite du
    16/08) : très discret par construction -- petit, atténué, pas de fond ni
    de bordure comme les badges. Simple texte d'horodatage, avec le détail
    complet (date + heure) en title (tooltip natif) pour ne pas encombrer
-   l'espace en permanence. */
-.zendure-flux .zf-lastseen { font-size: 9.5px; color: var(--zf-text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+   l'espace en permanence. Déplacé le 18/08 sous le losange (dans le même
+   cadre, cf. .zf-diagram-card) -- demande explicite, l'en-tête était jugé
+   trop chargé avec les badges. */
+.zendure-flux .zf-lastseen { font-size: 9.5px; color: var(--zf-text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: center; padding: 2px 8px 5px; }
 .zendure-flux .zf-lastseen-sep { margin: 0 5px; opacity: 0.5; }
 .zendure-flux .zf-badges { display: flex; gap: 6px; flex-shrink: 0; }
 .zendure-flux .zf-badge {
@@ -88,29 +89,38 @@ fichier reste correct si on le replace un jour en `type=cmd`.
 .zendure-flux .zf-badge-tarif .fa-sun { color: #FBC02D; }
 .zendure-flux .zf-badge-tarif .fa-moon { color: #90A4AE; }
 
-.zendure-flux .zf-diagram {
-    position: relative;
+/* Cadre englobant losange + indicateur télémétrie/action (cf. .zf-lastseen,
+   déplacé ici le 18/08) : porte le fond/la bordure, .zf-diagram ne garde que
+   ce qui est nécessaire au calcul de géométrie SVG (cf. computeGeom(), qui
+   lit .zf-diagram spécifiquement -- ne pas fusionner les deux niveaux). */
+.zendure-flux .zf-diagram-card {
     width: 100%;
     max-width: 400px;
-    /* height fixe en repli (navigateur sans aspect-ratio) : ne vaut que pour la
-       largeur max 400px. aspect-ratio (ci-dessous) la remplace partout où c'est
-       supporté, pour que le ratio 400:320 reste vrai à toute largeur < 400px —
-       condition nécessaire pour que le viewBox SVG en pixels réels (cf. <svg>
-       plus bas) reste aligné 1:1 avec les noeuds positionnés en %, sans jamais
-       recourir à un étirement non uniforme (preserveAspectRatio="none") qui
-       faussait l'épaisseur des traits sous vector-effect="non-scaling-stroke"
-       (signalé : traits trop épais, ne s'arrêtant pas net à l'entrée des cercles —
-       comportement non uniforme non garanti par la spec SVG). 400:320 (plutôt que
-       l'ancien 460:250, trop plat) : signalé que les 4 cercles doivent être
-       équidistants du hub -- avec le hub centré (50%,50%), une même distance R en
-       pixels dans les 4 directions a besoin d'un espace vertical comparable à
-       l'horizontal, ce qu'un ratio trop large-et-plat ne permet pas. */
-    height: 320px;
-    aspect-ratio: 400 / 320;
     margin: 0 auto;
     background: var(--zf-surface-1);
     border-radius: 14px;
     border: 0.5px solid var(--zf-border);
+    overflow: visible;
+}
+.zendure-flux .zf-diagram {
+    position: relative;
+    width: 100%;
+    /* height fixe en repli (navigateur sans aspect-ratio) : ne vaut que pour la
+       largeur max 400px (cf. .zf-diagram-card). aspect-ratio (ci-dessous) la
+       remplace partout où c'est supporté, pour que le ratio 400:320 reste vrai
+       à toute largeur < 400px — condition nécessaire pour que le viewBox SVG en
+       pixels réels (cf. <svg> plus bas) reste aligné 1:1 avec les noeuds
+       positionnés en %, sans jamais recourir à un étirement non uniforme
+       (preserveAspectRatio="none") qui faussait l'épaisseur des traits sous
+       vector-effect="non-scaling-stroke" (signalé : traits trop épais, ne
+       s'arrêtant pas net à l'entrée des cercles — comportement non uniforme non
+       garanti par la spec SVG). 400:320 (plutôt que l'ancien 460:250, trop
+       plat) : signalé que les 4 cercles doivent être équidistants du hub --
+       avec le hub centré (50%,50%), une même distance R en pixels dans les 4
+       directions a besoin d'un espace vertical comparable à l'horizontal, ce
+       qu'un ratio trop large-et-plat ne permet pas. */
+    height: 320px;
+    aspect-ratio: 400 / 320;
     overflow: visible;
 }
 /* z-index explicite plutôt que de compter sur l'ordre du DOM (svg avant les
@@ -250,23 +260,22 @@ fichier reste correct si on le replace un jour en `type=cmd`.
    <script>, classe zf-design-context posée sur la racine si elle est logée
    dans .div_displayObject, conteneur propre aux pages Design) : fiable car
    c'est le même widget/script qui gère déjà tout le reste (losange, jauge...). */
-.zendure-flux.zf-design-context .zf-diagram,
+.zendure-flux.zf-design-context .zf-diagram-card,
 .zendure-flux.zf-design-context .zf-card { background: transparent !important; }
 .zendure-flux.zf-design-context .zf-row3 .zf-money:nth-child(2),
 .zendure-flux.zf-design-context .zf-row3 .zf-money:nth-child(3) { display: none !important; }
 </style>
     <div class="zf-header">
-        <div class="zf-lastseen" id="zf-lastseen-#id#">
-            <span id="zf-lastseen-telemetry-wrap-#id#" title="Dernière télémétrie Zendure reçue">Télé <span id="zf-lastseen-telemetry-#id#">—</span></span><span class="zf-lastseen-sep">·</span><span id="zf-lastseen-action-wrap-#id#" title="Dernière commande réellement envoyée">Cmd <span id="zf-lastseen-action-#id#">—</span></span>
-        </div>
         <div class="zf-badges">
             <span class="zf-badge zf-badge-offline" id="zf-offlineBadge-#id#"><i class="fas fa-exclamation-triangle"></i> Hors ligne</span>
             <span class="zf-badge zf-badge-tarif" id="zf-periodebadge-#id#"><i class="fas fa-sun" id="zf-periodeicon-#id#"></i></span>
         </div>
     </div>
 
+    <div class="zf-diagram-card">
     <div class="zf-diagram">
-        <!-- viewBox en pixels réels (400x320, cf. .zf-diagram { aspect-ratio: 400/320 }),
+        <!-- viewBox en pixels réels (400x320, cf. .zf-diagram { aspect-ratio: 400/320 },
+             le cadre visuel [fond/bordure] est porté par le parent .zf-diagram-card),
              PAS en unités abstraites 0-100 étirées via preserveAspectRatio="none" comme
              avant : cet étirement non uniforme faussait l'épaisseur de vector-effect=
              "non-scaling-stroke" et déformait les particules circulaires en ellipses
@@ -351,6 +360,10 @@ fichier reste correct si on le replace un jour en `type=cmd`.
             <i class="fas fa-battery-three-quarters" style="color:#ED93B1"></i>
             <span class="zf-value-sm" style="color:#D4537E"><span id="zf-batteryArrow-#id#">↓</span> <span id="zf-batteryW-#id#">0 W</span></span>
         </div>
+    </div>
+    <div class="zf-lastseen" id="zf-lastseen-#id#">
+        <span id="zf-lastseen-telemetry-wrap-#id#" title="Dernière télémétrie Zendure reçue">Télé <span id="zf-lastseen-telemetry-#id#">—</span></span><span class="zf-lastseen-sep">·</span><span id="zf-lastseen-action-wrap-#id#" title="Dernière commande réellement envoyée">Cmd <span id="zf-lastseen-action-#id#">—</span></span>
+    </div>
     </div>
 
     <div class="zf-row2">
@@ -894,13 +907,24 @@ fichier reste correct si on le replace un jour en `type=cmd`.
         if (Date.now() - lastSeenTs > offlineThresholdMs) setOfflineState(true);
     }, 15000);
 
-    // Corrige la base de temps du watchdog juste après le chargement (cf.
-    // commentaire d'initApplyValue()) : un seul aller-retour réseau, pas un
-    // polling -- la détection continue reste ensuite 100% locale (pushes live).
-    // Best-effort : en cas d'échec (réseau, session), lastSeenTs reste à
-    // Date.now() (valeur posée à l'init) -- le watchdog continue de fonctionner
-    // pour toute coupure future, juste sans correction rétroactive de l'état
-    // au chargement.
+    // Corrige la base de temps du watchdog après le chargement (cf. commentaire
+    // d'initApplyValue()) ET à chaque retour de visibilité de l'onglet (cf.
+    // listener visibilitychange plus bas) -- pas un polling continu, la
+    // détection reste 100% locale (pushes live) entre ces deux déclencheurs.
+    // Rappel ajouté le 18/08 (signalé : widget resté bloqué sur "Hors ligne"
+    // après une perte de focus prolongée, correction uniquement par F5) --
+    // deux causes cumulées : (a) le navigateur suspend/dégrade le canal de
+    // pushes live d'un onglet en arrière-plan, donc plus aucune valeur
+    // ZENDURE_ONLY_KEYS ne remonte pour relancer lastSeenTs pendant ce temps,
+    // et (b) cette fonction elle-même ne savait QUE déclencher "hors ligne"
+    // (if stale -> setOfflineState(true)), jamais le lever -- un
+    // Date.now()-lastSeenTs redevenu correct au retour ne faisait donc jamais
+    // revenir l'affichage à la normale, y compris en rappelant cette fonction.
+    // setOfflineState() ci-dessous est maintenant symétrique (no-op déjà géré
+    // en interne si l'état ne change pas, cf. sa définition plus haut).
+    // Best-effort : en cas d'échec (réseau, session), lastSeenTs n'est pas
+    // touché -- le watchdog local continue de fonctionner pour toute coupure
+    // future, juste sans correction ponctuelle cette fois-ci.
     function fetchLastSeen() {
         if (!cfg.eqLogicId) return;
         var body = 'action=lastSeen&eqLogic_id=' + encodeURIComponent(cfg.eqLogicId);
@@ -912,7 +936,7 @@ fichier reste correct si on le replace un jour en `type=cmd`.
             if (data.state !== 'ok' || !data.result) return;
             if (data.result.lastSeenMs) {
                 lastSeenTs = data.result.lastSeenMs;
-                if (Date.now() - lastSeenTs > offlineThresholdMs) setOfflineState(true);
+                setOfflineState(Date.now() - lastSeenTs > offlineThresholdMs);
             }
             // lastActionMs peut légitimement être absent/0 (aucune commande encore
             // envoyée depuis le démarrage du plugin) -- laisse lastActionTs à null
@@ -924,6 +948,16 @@ fichier reste correct si on le replace un jour en `type=cmd`.
         }).catch(function () { /* best-effort, cf. commentaire ci-dessus */ });
     }
     fetchLastSeen();
+
+    // Retour de focus sur l'onglet (cf. commentaire de fetchLastSeen() ci-dessus
+    // pour le bug corrigé) : revérifie l'état réel côté serveur immédiatement,
+    // sans attendre qu'un push live arrive (canal potentiellement encore en
+    // train de se rétablir juste après un onglet resté longtemps en arrière-plan).
+    document.addEventListener('visibilitychange', function () {
+        if (document.visibilityState === 'visible') {
+            fetchLastSeen();
+        }
+    });
 
     // Panneau debug (cf. desktop/php/zendure.php, onglet IHM -> debug_widget_actif) :
     // aucune requête réseau tant que l'option est décochée (root.classList sans
