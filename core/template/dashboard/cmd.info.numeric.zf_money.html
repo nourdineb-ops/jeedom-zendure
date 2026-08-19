@@ -37,13 +37,16 @@ racine du widget et rend tout le contenu réel invisible en placement
 <script>
 (function () {
     var id = '#id#';
-    var prefix = #IsGain# ? '+ ' : '';
+    var isGain = #IsGain#;
     var el = document.getElementById('zf-money-val-' + id);
 
     function apply(value) {
         if (!el) return;
         var n = parseFloat(value);
         if (isNaN(n)) n = 0;
+        // Préfixe "+ " seulement si positif/nul -- un gain négatif porte déjà
+        // son signe via toFixed(2) (bug 2026-08-19 : "+ -0.04 €").
+        var prefix = (isGain && n >= 0) ? '+ ' : '';
         el.textContent = prefix + n.toFixed(2);
     }
 

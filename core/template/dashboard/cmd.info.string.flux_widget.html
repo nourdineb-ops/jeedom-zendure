@@ -396,7 +396,7 @@ fichier reste correct si on le replace un jour en `type=cmd`.
     <div class="zf-row3">
         <div class="zf-card zf-money zf-money-gain">
             <div class="zf-money-label"><i class="fas fa-coins"></i> Gain Zendure · jour</div>
-            <div class="zf-money-value">+ <span id="zf-gainJour-#id#">0.00</span> €</div>
+            <div class="zf-money-value"><span id="zf-gainJour-#id#">0.00</span> €</div>
         </div>
         <div class="zf-card zf-money">
             <div class="zf-money-label"><i class="fas fa-calendar-minus"></i> Dépense veille</div>
@@ -608,6 +608,15 @@ fichier reste correct si on le replace un jour en `type=cmd`.
         return n.toFixed(2);
     }
 
+    // Comme fmtEuro, mais préfixe "+ " seulement si positif/nul -- un gain
+    // négatif porte déjà son signe via toFixed(2), pas besoin (et pas question)
+    // de lui coller un "+" devant (bug 2026-08-19 : "+ -0.04 €").
+    function fmtEuroSigned(v) {
+        var n = parseFloat(v);
+        if (isNaN(n)) n = 0;
+        return (n >= 0 ? '+ ' : '') + n.toFixed(2);
+    }
+
     function recompute() {
         var solar = parseFloat(state.solar) || 0;
         var grid = parseFloat(state.grid) || 0;
@@ -724,7 +733,7 @@ fichier reste correct si on le replace un jour en `type=cmd`.
         var pillTomorrow = el('tempoTomorrow');
         if (pillTomorrow) { pillTomorrow.style.color = tm[0]; pillTomorrow.style.background = tm[1]; pillTomorrow.textContent = tm[2]; }
 
-        setText('gainJour', fmtEuro(state.gainJour));
+        setText('gainJour', fmtEuroSigned(state.gainJour));
         setText('depenseVeille', fmtEuro(state.depenseVeille));
         setText('depenseJour', fmtEuro(state.depenseJour));
     }
