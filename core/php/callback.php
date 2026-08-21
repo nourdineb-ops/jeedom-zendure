@@ -25,15 +25,34 @@ try {
     }
 
     if (isset($payload['alert_id'])) {
-        // Alerte utilisateur (centre de notifications Jeedom), pas seulement un log
-        // -- ex. reconnexions MQTT en rafale (cf. transport/mqtt_transport.py). Le
-        // logicalId (préfixé par eq_id) sert de clé de dédoublonnage : une même
-        // alerte qui se répète incrémente son compteur d'occurrences au lieu de
-        // spammer une nouvelle notification à chaque appel.
+        // Alerte utilisateur (centre de notifications Jeedom + actionOnMessage,
+        // ex. mail -- pas seulement un log) -- ex. reconnexions MQTT en rafale
+        // (cf. transport/mqtt_transport.py).
+        //
+        // Horodatage dans le logicalId (bug 2026-08-21, signalé par l'utilisateur
+        // "j'aurais dû recevoir un mail") : message::add() ne déclenche
+        // actionOnMessage (mail/push/scenario) qu'à la toute PREMIÈRE création
+        // d'un logicalId donné -- toute répétition ultérieure du même logicalId
+        // se contente d'incrémenter son compteur d'occurrences EN SILENCE, sans
+        // jamais renvoyer de notification. Or les alertes envoyées ici
+        // (telemetry_stale/resolu, mqtt_flapping/resolu, cf. device.py) sont
+        // déjà "edge-triggered" côté démon -- appelées une seule fois par vraie
+        // transition d'état, jamais en boucle -- donc pas besoin d'un
+        // dédoublonnage "pour toujours" ici : au contraire, il rendait muette
+        // toute réapparition du problème après la toute première fois (constaté
+        // le 2026-08-21 : alerte de mi-juillet jamais retombée en mail malgré
+        // l'épisode de la nuit du 20 au 21 août). L'horodatage à la seconde
+        // suffit à garantir un logicalId neuf par transition réelle, sans
+        // risquer de doublon (callback_client.py::send_alert() ne retry pas).
+        //
+        // Ne PAS appliquer ce même horodatage à l'alerte "démon injoignable"
+        // (cf. zendure.class.php::sendToDaemon(), autre point d'appel, pas
+        // celui-ci) : elle est vérifiée en continu tant que le démon est down
+        // et DOIT rester dédoublonnée pour ne pas spammer.
         $message = $payload['message'] ?? '';
         $eqId = $payload['eq_id'] ?? null;
         log::add('zendure', 'error', $message);
-        message::add('zendure', $message, '', 'zendure_alert_' . $eqId . '_' . $payload['alert_id']);
+        message::add('zendure', $message, '', 'zendure_alert_' . $eqId . '_' . $payload['alert_id'] . '_' . date('YmdHis'));
         echo json_encode(array('state' => 'ok'));
         die();
     }
