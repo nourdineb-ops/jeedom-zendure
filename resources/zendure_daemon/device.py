@@ -13,6 +13,7 @@ from typing import Optional
 from regulation.anti_injection import AntiInjectionConfig, AntiInjectionRegulator
 from telemetry_map import translate_properties
 from telemetry_throttle import TelemetryThrottle
+from lan_ping import ping_once, kill_zombie_connection
 from transport.ble_fallback import fetch_ble_snapshot
 from transport.base import TelemetryFrame, Transport
 from transport.factory import build_transport
@@ -28,6 +29,21 @@ DEBUG_CAPTURE_DURATION_S = 3600.0
 # (cf. mqtt_transport.py) : la connexion peut très bien être stable pendant que
 # l'appareil, lui, est injoignable.
 TELEMETRY_STALE_S = 300.0
+
+# Seuil distinct, plus court, pour la tentative d'auto-heal (ss -K sur une
+# connexion zombie, cf. lan_ping.py::kill_zombie_connection, incident
+# 2026-08-24) -- volontairement PAS le même seuil que TELEMETRY_STALE_S : ce
+# dernier gate une alerte humaine (mail/push), qui doit rester prudente pour
+# ne pas spammer sur un simple accroc, alors qu'un ss -K sur une connexion qui
+# n'était pas réellement zombie ne coûte presque rien (une reconnexion propre
+# de plus, ~1-2s, testé en réel). Le plancher à respecter est plutôt le cycle
+# de sollicitation actif du démon (TELEMETRY_POLL_S = 60s côté
+# zendure_daemon.py, le `getAll` périodique) : en dessous d'environ 1.5-2x ce
+# cycle, un silence peut juste être une réponse un peu lente au poll normal,
+# pas une vraie panne. Effet de bord recherché : si l'auto-heal marche, la
+# télémétrie reprend avant même TELEMETRY_STALE_S -- l'alerte humaine ne se
+# déclenche alors plus du tout dans le cas nominal.
+AUTO_HEAL_STALE_S = 120.0
 
 # Durée max d'une session de secours BLE (connexion + handshake + lecture),
 # cf. transport/ble_fallback.py -- bornée volontairement courte pour limiter la
@@ -73,8 +89,18 @@ class Device:
         self._injected_stale_after_s: float = 2 * float(eq_config.get("telemetry_min_interval_s", 300))
         self._last_telemetry_at: float = time.monotonic()
         self._telemetry_stale: bool = False
+        # Distinct de _telemetry_stale : s'arme à AUTO_HEAL_STALE_S (plus court),
+        # une seule tentative de ss -K par épisode de silence -- cf. son usage
+        # dans check_telemetry_staleness().
+        self._auto_heal_attempted: bool = False
         self._ble_failover_active: bool = bool(eq_config.get("ble_failover_active", False))
         self._ble_address: str = str(eq_config.get("ble_address") or "")
+        self._lan_ping_active: bool = bool(eq_config.get("lan_ping_active", False))
+        self._device_ip: str = str(eq_config.get("device_ip") or "")
+        self._auto_heal_active: bool = bool(eq_config.get("auto_heal_active", False))
+        # None au démarrage : première mesure jamais "en transition" (pas d'alerte
+        # de retour en ligne avant même d'avoir vu l'appareil hors ligne une fois).
+        self._lan_reachable: Optional[bool] = None
         self._transport.on_telemetry(self._on_telemetry)
         self._transport.on_connection_change(self._on_connection_change)
         self._transport.on_connection_issue(self._on_connection_issue)
@@ -113,17 +139,77 @@ class Device:
         2026-07-22) alors que NOTRE connexion MQTT au broker est propre -- un cas
         que le flapping détecté côté transport (mqtt_transport.py) ne couvre pas,
         puisque la connexion peut très bien rester stable pendant que l'appareil
-        lui-même ne pousse plus rien."""
+        lui-même ne pousse plus rien.
+
+        Appelée APRÈS check_lan_reachability() dans la boucle (cf. zendure_daemon.py)
+        pour que self._lan_reachable soit frais du même cycle : sert à affiner le
+        diagnostic du message -- incident réel du 2026-08-24 où ce message
+        générique a fait conclure à tort à un WiFi instable côté boîtier, alors que
+        l'appareil répondait très bien au ping (cause réelle : listener TLS local
+        disparu après un redémarrage du VM, cf. project_local_mqtt_chemin_b). Avec
+        le ping actif, on peut désormais distinguer les deux cas au lieu de
+        toujours supposer le même coupable.
+
+        Deux seuils distincts, volontairement pas le même délai (cf.
+        AUTO_HEAL_STALE_S) : l'auto-heal (ss -K, sans risque réel) s'arme bien
+        avant l'alerte humaine (mail/push, qui doit rester prudente)."""
         elapsed = time.monotonic() - self._last_telemetry_at
+        minutes = elapsed // 60
+
+        # -- Auto-heal (seuil court) ------------------------------------------
+        if elapsed >= AUTO_HEAL_STALE_S and not self._auto_heal_attempted:
+            self._auto_heal_attempted = True
+            # Ping OK + télémétrie muette = signature du zombie TCP découvert le
+            # 2026-08-24 (connexion ESTABLISHED côté noyau, jamais nettoyée avant
+            # ~15 min faute d'erreur détectée par personne -- ni le boîtier, ni
+            # Mosquitto, ni notre transport). Une seule tentative par épisode de
+            # silence (edge-triggered, comme _telemetry_stale plus bas). Si
+            # l'appareil n'a en fait aucun souci réel, tuer une connexion déjà
+            # morte/absente ne fait rien de nuisible.
+            if (
+                self._auto_heal_active
+                and self._lan_ping_active
+                and self._device_ip
+                and self._lan_reachable is True
+            ):
+                log.warning(
+                    "eq_id=%s aucune télémétrie depuis %ds, ping OK -- tentative auto-heal",
+                    self.eq_id, int(elapsed),
+                )
+                kill_zombie_connection(self._device_ip)
+        elif elapsed < AUTO_HEAL_STALE_S and self._auto_heal_attempted:
+            self._auto_heal_attempted = False
+
+        # -- Alerte humaine (seuil long) ---------------------------------------
         if elapsed >= TELEMETRY_STALE_S and not self._telemetry_stale:
             self._telemetry_stale = True
             log.warning("eq_id=%s aucune télémétrie depuis %ds", self.eq_id, int(elapsed))
-            self._callback.send_alert(
-                self.eq_id,
-                "telemetry_stale",
-                "Aucune télémétrie Zendure reçue depuis %d minutes (connexion MQTT pourtant stable) -- "
-                "probable WiFi instable côté boîtier." % (elapsed // 60),
-            )
+            if self._lan_ping_active and self._device_ip and self._lan_reachable is True:
+                message = (
+                    "Aucune télémétrie Zendure reçue depuis %d minutes, mais le boîtier "
+                    "répond bien au ping (%s) -- la coupure ne vient donc probablement PAS "
+                    "de son WiFi. Vérifier la chaîne MQTT locale (listener TLS 8883 sur le "
+                    "broker local, override DNS, transport_connected)." % (minutes, self._device_ip)
+                )
+                if self._auto_heal_active:
+                    message += (
+                        " Une tentative de reconnexion forcée automatique (auto-heal) a déjà "
+                        "eu lieu à %ds sans suffire -- investigation manuelle nécessaire."
+                        % int(AUTO_HEAL_STALE_S)
+                    )
+            elif self._lan_ping_active and self._device_ip and self._lan_reachable is False:
+                message = (
+                    "Aucune télémétrie Zendure reçue depuis %d minutes -- le boîtier ne répond "
+                    "plus non plus au ping (%s), cohérent avec une coupure WiFi/alimentation "
+                    "côté appareil." % (minutes, self._device_ip)
+                )
+            else:
+                message = (
+                    "Aucune télémétrie Zendure reçue depuis %d minutes (connexion MQTT pourtant "
+                    "stable) -- probable WiFi instable côté boîtier (ping réseau local non "
+                    "configuré, diagnostic non confirmable -- cf. onglet Config avancée)." % minutes
+                )
+            self._callback.send_alert(self.eq_id, "telemetry_stale", message)
         elif elapsed < TELEMETRY_STALE_S and self._telemetry_stale:
             self._telemetry_stale = False
             log.info("eq_id=%s télémétrie de retour après %ds de silence", self.eq_id, int(elapsed))
@@ -164,6 +250,52 @@ class Device:
         # utilisateur du 2026-07-22).
         self._push_values(translate_properties({"properties": properties, "packData": pack_data}))
 
+    def check_lan_reachability(self) -> None:
+        """Appelé depuis la boucle périodique du démon, même cadence que
+        request_telemetry() (cf. zendure_daemon.py). Signal indépendant de
+        transport_connected (connexion MQTT DU DÉMON au broker) et de
+        check_telemetry_staleness() (silence télémétrie côté MQTT) : teste si le
+        BOÎTIER lui-même répond encore sur le réseau local (ICMP), que la liaison
+        MQTT/cloud fonctionne ou non. Permet de distinguer en un coup d'oeil une
+        coupure WiFi totale de l'appareil (ni ping, ni MQTT, ni BLE) d'un appareil
+        bien présent sur le LAN mais dont seul le cloud Zendure est injoignable
+        (ping OK, silence MQTT persistant) -- jusqu'ici indiscernable l'un de
+        l'autre depuis le silence télémétrie seul. Désactivé par défaut, nécessite
+        device_ip (onglet Config avancée) : pas d'IP fixe garantie sans réservation
+        DHCP côté routeur, mieux vaut que l'utilisateur l'active explicitement une
+        fois cette réservation faite plutôt qu'un ping silencieusement dans le vide."""
+        if not self._lan_ping_active or not self._device_ip:
+            return
+        reachable, rtt_ms = ping_once(self._device_ip)
+        self._callback.send_event(
+            self.eq_id,
+            {"lan_ping_online": reachable, "lan_ping_ms": rtt_ms if rtt_ms is not None else 0},
+        )
+        if reachable == self._lan_reachable:
+            return
+        was_known = self._lan_reachable is not None
+        self._lan_reachable = reachable
+        if not was_known:
+            # Première mesure au démarrage : pas de transition à signaler, juste
+            # l'état initial (utile en log, pas en alerte utilisateur).
+            log.info("eq_id=%s ping local (%s) : état initial %s", self.eq_id, self._device_ip, "joignable" if reachable else "injoignable")
+            return
+        if reachable:
+            log.info("eq_id=%s ping local (%s) : appareil de nouveau joignable", self.eq_id, self._device_ip)
+            self._callback.send_alert(
+                self.eq_id,
+                "lan_ping_resolu",
+                "Le boîtier Zendure répond de nouveau sur le réseau local.",
+            )
+        else:
+            log.warning("eq_id=%s ping local (%s) : appareil injoignable", self.eq_id, self._device_ip)
+            self._callback.send_alert(
+                self.eq_id,
+                "lan_ping_offline",
+                "Le boîtier Zendure ne répond plus sur le réseau local (ping) -- "
+                "probable coupure WiFi ou d'alimentation côté appareil.",
+            )
+
     # Clés qui déterminent la connexion transport : si l'une change (mode, host,
     # credentials...), il faut reconnecter, pas juste mettre à jour le régulateur.
     _TRANSPORT_KEYS = (
@@ -194,6 +326,9 @@ class Device:
         self._throttle.noise_threshold = float(eq_config.get("telemetry_noise_threshold", 3))
         self._ble_failover_active = bool(eq_config.get("ble_failover_active", False))
         self._ble_address = str(eq_config.get("ble_address") or "")
+        self._lan_ping_active = bool(eq_config.get("lan_ping_active", False))
+        self._device_ip = str(eq_config.get("device_ip") or "")
+        self._auto_heal_active = bool(eq_config.get("auto_heal_active", False))
 
         if transport_changed:
             log.info("eq_id=%s configuration transport modifiée, reconnexion", self.eq_id)

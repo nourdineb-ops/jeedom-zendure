@@ -23,6 +23,14 @@ class zendure extends eqLogic
         'mode' => array('Mode de fonctionnement', 'string', ''),
         'forecast_today_kwh' => array('Prévision solaire du jour', 'numeric', 'kWh'),
         'transport_connected' => array('Transport connecté', 'binary', ''),
+        // Ping réseau local (cf. device.py::check_lan_reachability) : contrairement à
+        // transport_connected (connexion MQTT du démon au broker), ceci teste si le
+        // BOÎTIER lui-même répond encore sur le LAN (ICMP) -- signal complémentaire
+        // pour distinguer "coupure WiFi totale de l'appareil" (ni ping ni MQTT/BLE) de
+        // "appareil présent sur le réseau mais MQTT/cloud en rade" (ping OK, silence
+        // MQTT). Nécessite que l'utilisateur renseigne device_ip (onglet Config avancée).
+        'lan_ping_online' => array('Appareil joignable en local (ping)', 'binary', ''),
+        'lan_ping_ms' => array('Latence ping local', 'numeric', 'ms'),
         // Alias curé de la propriété brute socStatus (cf. telemetry_map.py) -- 0=normal,
         // 1=auto-calibration en cours (confirmé dans les traductions de Zendure/Zendure-HA).
         // Suivi purement informatif : aucune action ne se déclenche là-dessus.
@@ -425,6 +433,18 @@ class zendure extends eqLogic
             // TheengsGateway sur le même adaptateur Bluetooth).
             'ble_failover_active' => (bool) $this->getConfiguration('ble_failover_active', 0),
             'ble_address' => $this->getConfiguration('ble_address', ''),
+            // Ping réseau local (cf. INFO_COMMANDS ci-dessus, device.py::check_lan_reachability) :
+            // diagnostic passif (ICMP), jamais utilisé pour piloter quoi que ce soit --
+            // désactivé par défaut, nécessite une IP LAN stable (réservation DHCP conseillée
+            // côté box/routeur, l'appareil se réattribue une IP DHCP sinon).
+            'lan_ping_active' => (bool) $this->getConfiguration('lan_ping_active', 0),
+            'device_ip' => $this->getConfiguration('device_ip', ''),
+            // Auto-heal (cf. lan_ping.py::kill_zombie_connection, incident 2026-08-24) :
+            // désactivé par défaut, nécessite un provisionnement root fait à la main sur
+            // CE VM (script + règle sudoers, hors du présent dépôt/déploiement) -- une
+            // installation neuve du plugin n'a pas ce script, ss -K échouera simplement
+            // (loggé, sans casser quoi que ce soit) tant que ce n'est pas fait.
+            'auto_heal_active' => (bool) $this->getConfiguration('auto_heal_active', 0),
         );
 
         if ($mode == 'cloud') {
