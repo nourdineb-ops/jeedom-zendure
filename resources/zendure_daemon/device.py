@@ -45,6 +45,12 @@ TELEMETRY_STALE_S = 300.0
 # déclenche alors plus du tout dans le cas nominal.
 AUTO_HEAL_STALE_S = 120.0
 
+# Seuil avant d'ALERTER (mail/push) sur une coupure ping -- même principe que
+# TELEMETRY_STALE_S, cf. check_lan_reachability(). Le ping lui-même reste
+# vérifié/loggé/consommé (auto-heal, message de check_telemetry_staleness)
+# sans attendre ce délai -- seule la notification humaine est différée.
+LAN_PING_ALERT_STALE_S = 300.0
+
 # Durée max d'une session de secours BLE (connexion + handshake + lecture),
 # cf. transport/ble_fallback.py -- bornée volontairement courte pour limiter la
 # contention avec le scan passif d'un autre consommateur du même adaptateur
@@ -101,6 +107,10 @@ class Device:
         # None au démarrage : première mesure jamais "en transition" (pas d'alerte
         # de retour en ligne avant même d'avoir vu l'appareil hors ligne une fois).
         self._lan_reachable: Optional[bool] = None
+        # Horodatage du DÉBUT de la coupure ping en cours (None si joignable) et
+        # si on a déjà alerté DESSUS -- cf. LAN_PING_ALERT_STALE_S.
+        self._lan_unreachable_since: Optional[float] = None
+        self._lan_ping_alerted: bool = False
         self._transport.on_telemetry(self._on_telemetry)
         self._transport.on_connection_change(self._on_connection_change)
         self._transport.on_connection_issue(self._on_connection_issue)
@@ -263,7 +273,17 @@ class Device:
         l'autre depuis le silence télémétrie seul. Désactivé par défaut, nécessite
         device_ip (onglet Config avancée) : pas d'IP fixe garantie sans réservation
         DHCP côté routeur, mieux vaut que l'utilisateur l'active explicitement une
-        fois cette réservation faite plutôt qu'un ping silencieusement dans le vide."""
+        fois cette réservation faite plutôt qu'un ping silencieusement dans le vide.
+
+        L'état (self._lan_reachable, cmd lan_ping_online/lan_ping_ms) est mis à
+        jour à CHAQUE cycle (60s), sans délai -- consommé immédiatement par
+        check_telemetry_staleness()/l'auto-heal. Seule l'ALERTE humaine
+        (mail/push) est différée jusqu'à LAN_PING_ALERT_STALE_S : signalé par
+        l'utilisateur le 2026-08-24 après 3 coupures WiFi courtes (~1 min,
+        connues/attendues, cf. project_device_wifi_instability) ayant chacune
+        généré un mail immédiat -- même principe que TELEMETRY_STALE_S, une
+        coupure qui se résout d'elle-même sous ce délai ne mérite pas de
+        déranger l'utilisateur."""
         if not self._lan_ping_active or not self._device_ip:
             return
         reachable, rtt_ms = ping_once(self._device_ip)
@@ -271,29 +291,41 @@ class Device:
             self.eq_id,
             {"lan_ping_online": reachable, "lan_ping_ms": rtt_ms if rtt_ms is not None else 0},
         )
-        if reachable == self._lan_reachable:
-            return
+        now = time.monotonic()
         was_known = self._lan_reachable is not None
-        self._lan_reachable = reachable
-        if not was_known:
-            # Première mesure au démarrage : pas de transition à signaler, juste
-            # l'état initial (utile en log, pas en alerte utilisateur).
-            log.info("eq_id=%s ping local (%s) : état initial %s", self.eq_id, self._device_ip, "joignable" if reachable else "injoignable")
-            return
+
         if reachable:
-            log.info("eq_id=%s ping local (%s) : appareil de nouveau joignable", self.eq_id, self._device_ip)
-            self._callback.send_alert(
-                self.eq_id,
-                "lan_ping_resolu",
-                "Le boîtier Zendure répond de nouveau sur le réseau local.",
-            )
-        else:
-            log.warning("eq_id=%s ping local (%s) : appareil injoignable", self.eq_id, self._device_ip)
+            if self._lan_ping_alerted:
+                # On n'avait alerté que parce que la coupure avait dépassé le
+                # seuil -- symétrique, on informe donc du retour.
+                log.info("eq_id=%s ping local (%s) : appareil de nouveau joignable", self.eq_id, self._device_ip)
+                self._callback.send_alert(
+                    self.eq_id,
+                    "lan_ping_resolu",
+                    "Le boîtier Zendure répond de nouveau sur le réseau local.",
+                )
+            elif not was_known:
+                log.info("eq_id=%s ping local (%s) : état initial joignable", self.eq_id, self._device_ip)
+            self._lan_reachable = True
+            self._lan_unreachable_since = None
+            self._lan_ping_alerted = False
+            return
+
+        # Injoignable : démarre (ou poursuit) le chrono de cette coupure.
+        if self._lan_reachable is not False:
+            self._lan_unreachable_since = now
+            if not was_known:
+                log.info("eq_id=%s ping local (%s) : état initial injoignable", self.eq_id, self._device_ip)
+        self._lan_reachable = False
+        elapsed_down = now - (self._lan_unreachable_since or now)
+        if elapsed_down >= LAN_PING_ALERT_STALE_S and not self._lan_ping_alerted:
+            self._lan_ping_alerted = True
+            log.warning("eq_id=%s ping local (%s) : injoignable depuis %ds", self.eq_id, self._device_ip, int(elapsed_down))
             self._callback.send_alert(
                 self.eq_id,
                 "lan_ping_offline",
-                "Le boîtier Zendure ne répond plus sur le réseau local (ping) -- "
-                "probable coupure WiFi ou d'alimentation côté appareil.",
+                "Le boîtier Zendure ne répond plus sur le réseau local (ping) depuis %d minutes -- "
+                "probable coupure WiFi ou d'alimentation côté appareil." % (elapsed_down // 60),
             )
 
     # Clés qui déterminent la connexion transport : si l'une change (mode, host,
