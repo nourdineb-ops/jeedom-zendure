@@ -144,6 +144,10 @@ class ZendureDaemon:
                 log.debug("Ping télémétrie périodique (%d équipement(s))", len(self._devices))
                 for device in self._devices.values():
                     device.request_telemetry()
+                    # check_lan_reachability() avant check_telemetry_staleness() :
+                    # cette dernière lit self._lan_reachable pour affiner son message
+                    # d'alerte (cf. son docstring) -- le veut frais du même cycle.
+                    device.check_lan_reachability()
                     device.check_telemetry_staleness()
             if now - last_ble_failover >= BLE_FAILOVER_POLL_S:
                 last_ble_failover = now

@@ -546,6 +546,35 @@ $eqLogics = eqLogic::byType($plugin->getId());
                     </div>
                 </fieldset>
                 <fieldset>
+                    <legend><i class="fas fa-satellite-dish"></i> {{Ping réseau local}}</legend>
+                    <div class="form-group">
+                        <label class="col-sm-3 control-label">{{Ping local actif}}</label>
+                        <div class="col-sm-2">
+                            <input type="checkbox" class="eqLogicAttr" data-l1key="configuration" data-l2key="lan_ping_active" />
+                        </div>
+                        <label class="col-sm-3 control-label">{{Adresse IP de l'appareil}}</label>
+                        <div class="col-sm-3">
+                            <input type="text" class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="device_ip" placeholder="192.168.1.50" />
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <div class="col-sm-9 col-sm-offset-3">
+                            <span class="help-block">{{Vérifie si le boîtier répond encore sur le réseau local (ICMP), indépendamment du MQTT/cloud -- utile pour distinguer une coupure WiFi totale d'un simple problème côté cloud. Réservation DHCP conseillée pour que l'IP ne change pas.}}</span>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="col-sm-3 control-label">{{Auto-guérison connexion zombie}}</label>
+                        <div class="col-sm-2">
+                            <input type="checkbox" class="eqLogicAttr" data-l1key="configuration" data-l2key="auto_heal_active" />
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <div class="col-sm-9 col-sm-offset-3">
+                            <span class="help-block">{{Si ping OK mais télémétrie muette (5 min), force la coupure de la connexion TCP bloquée pour provoquer une reconnexion immédiate. Nécessite un script + une règle sudo provisionnés à la main sur ce serveur (pas fait automatiquement) -- sans ça, cette option n'a aucun effet.}}</span>
+                        </div>
+                    </div>
+                </fieldset>
+                <fieldset>
                     <legend><i class="fas fa-moon"></i> {{Stratégie nuit}}</legend>
                     <div class="form-group">
                         <label class="col-sm-3 control-label">{{Stratégie nuit active}}</label>

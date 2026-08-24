@@ -15,6 +15,8 @@ Format attendu (un objet par eqLogic Zendure configuré) :
       "mode_connexion": "local",
       "local_host": "192.168.1.50",
       "local_port": 1883,
+      "lan_ping_active": true,
+      "device_ip": "192.168.1.50",
       "anti_injection": {"marge_w": 30, "cooldown_s": 2, "hysteresis_w": 15, ...},
       "loop_period_s": 1.0
     }
