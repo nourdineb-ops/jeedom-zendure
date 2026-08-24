@@ -587,6 +587,18 @@ $eqLogics = eqLogic::byType($plugin->getId());
                         </div>
                     </div>
                     <div class="form-group">
+                        <label class="col-sm-3 control-label">{{Marge de sécurité (modèle kWh)}}</label>
+                        <div class="col-sm-2">
+                            <div class="input-group">
+                                <input type="number" min="0" max="100" step="1" class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="strategie_nuit_marge_pct" placeholder="15" />
+                                <span class="input-group-addon">%</span>
+                            </div>
+                        </div>
+                        <div class="col-sm-7">
+                            <span class="help-block" style="margin-top:8px;">{{La cible visait pile le besoin médian estimé, sans coussin -- une conso un peu au-dessus de d'habitude suffisait à vider la batterie avant le relais solaire (constaté le 15/08 et le 24/08). Ce pourcentage majore le besoin en kWh avant conversion en % de charge.}}</span>
+                        </div>
+                    </div>
+                    <div class="form-group">
                         <label class="col-sm-3 control-label">{{Équipement Solcast (optionnel)}}</label>
                         <div class="col-sm-4">
                             <select class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="solcast_eqlogic_id">

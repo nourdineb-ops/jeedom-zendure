@@ -1381,6 +1381,21 @@ class zendure extends eqLogic
      * - Retombe sur legacySocTarget() si l'historique est encore insuffisant
      *   (installation trop récente, sources pas encore configurées) : jamais de
      *   cible calculée sur une médiane à zéro échantillon.
+     * - Marge de sécurité (strategie_nuit_marge_pct, cf. 2026-08-24) : le besoin
+     *   net (principal ET réserve avant montée du solaire) est majoré de ce
+     *   pourcentage avant conversion en %. Sans elle, "besoin net, jamais
+     *   négative" visait le strict minimum sans aucun coussin -- une conso à
+     *   peine au-dessus de la médiane suffisait à vider la batterie avant le
+     *   relais solaire (constaté le 15/08 puis reproduit le 24/08 malgré une
+     *   estimation de besoin par ailleurs juste : 1.1kWh estimés contre
+     *   1.18kWh réels, mais 0% de marge encaissée).
+     * - Plancher batterie dynamique (télémétrie brute 'socLimit', cf. 2026-08-24) :
+     *   le device remonte lui-même sa limite basse réelle, pilotée par son BMS
+     *   (p. ex. relevée par temps froid). Le besoin est compté à partir de ce
+     *   plancher (cible = plancher + besoin en %), pas depuis 0% -- sinon une
+     *   cible calculée "dans l'absolu" peut tomber sous ce que la batterie
+     *   acceptera réellement de restituer, laissant une partie du besoin non
+     *   couverte sans que rien ne le signale.
      */
     /**
      * Somme les commandes horaires Solcast d0h{N} ("Jour 0 entre {N-1}h et {N}h",
@@ -1426,19 +1441,48 @@ class zendure extends eqLogic
             return array($legacyTarget, 'historique encore insuffisant pour le modèle kWh (' . $days . 'j visés) -> repli ancienne logique : ' . $legacyReason);
         }
 
+        // Marge de sécurité (retour utilisateur 2026-08-24) : jusqu'ici la cible
+        // visait pile le besoin net médian, "jamais négative" mais sans aucun
+        // coussin au-dessus -- toute conso un peu supérieure à la médiane (ex.
+        // matin plus chargé que d'habitude) finissait de vider la batterie
+        // avant le relais solaire (déjà observé le 15/08, reproduit le 24/08 :
+        // besoin net estimé 1.1kWh, réalisé ~1.18kWh -- l'estimation était
+        // pourtant juste, c'est l'absence de marge qui a mené à un SOC quasi nul).
+        // Appliquée en multiplicatif sur le besoin en kWh (pas en points de %
+        // fixes ajoutés après coup) pour que la marge grossisse avec la taille
+        // du besoin plutôt que d'être un forfait arbitraire.
+        $margePct = (float) $this->getConfiguration('strategie_nuit_marge_pct', 15);
+        $margeFactor = 1 + max(0, $margePct) / 100;
+
+        // Plancher batterie dynamique (retour utilisateur 2026-08-24) : le device
+        // remonte lui-même sa limite basse réelle (télémétrie brute 'socLimit',
+        // pilotée par son propre BMS -- p. ex. relevée par temps froid pour
+        // protéger les cellules). Jusqu'ici le modèle convertissait le besoin en
+        // % à partir de 0%, comme si toute la capacité nominale était utilisable
+        // -- une cible de X% calculée ainsi peut en réalité tomber SOUS ce
+        // plancher au premier passage, la batterie ne descendant alors jamais
+        // aussi bas et le "besoin net" restant non couvert sans qu'on le sache.
+        // Le besoin est donc désormais compté À PARTIR du plancher (cible =
+        // plancher + besoin converti en %), pas depuis 0. Pas de commande (ex.
+        // installation où cette télémétrie n'est jamais remontée) -> plancher
+        // 0%, comportement inchangé.
+        $batteryFloorPct = max(0.0, (float) $this->getCmdValue('socLimit'));
+
         $forecastKwhSafe = $forecastKwh !== null ? $forecastKwh : 0.0;
-        $netNeedKwh = max(0, $hpConsumptionKwh - $forecastKwhSafe);
-        $socTarget = (int) ceil(($netNeedKwh / $capacityKwh) * 100);
+        $netNeedKwh = max(0, $hpConsumptionKwh - $forecastKwhSafe) * $margeFactor;
+        $socTarget = (int) ceil($batteryFloorPct) + (int) ceil(($netNeedKwh / $capacityKwh) * 100);
 
         $reason = sprintf(
-            'modèle kWh : conso HP %02dh-%02dh ~%.1fkWh (médiane %dj) - prévision solaire %s -> besoin net %.1fkWh / capacité %.1fkWh -> cible %d%%',
+            'modèle kWh : conso HP %02dh-%02dh ~%.1fkWh (médiane %dj) - prévision solaire %s -> besoin net %.1fkWh (marge +%d%% incluse) / capacité %.1fkWh + plancher batterie %d%% -> cible %d%%',
             $startH,
             $endH,
             $hpConsumptionKwh,
             $days,
             $forecastKwh !== null ? number_format($forecastKwh, 1) . 'kWh' : '?kWh (aucune)',
             $netNeedKwh,
+            (int) $margePct,
             $capacityKwh,
+            (int) ceil($batteryFloorPct),
             $socTarget
         );
 
@@ -1470,24 +1514,35 @@ class zendure extends eqLogic
                 // silencieux sur l'hypothèse solaire=0 -- comportement identique
                 // à avant cet ajout.
                 $earlySolarKwh = $this->resolveSolcastMorningForecastKwh($startH, $heureFinMonteeSolaire);
-                $earlyNeedKwh = max(0, $earlyConsumptionKwh - $earlySolarKwh);
-                $socTargetReserveMatin = (int) ceil(($earlyNeedKwh / $capacityKwh) * 100);
+                // Même marge que ci-dessus (strategie_nuit_marge_pct) : c'est
+                // précisément cette réserve matin qui s'est vidée à 5% le 24/08,
+                // elle a donc au moins autant besoin du coussin que le calcul
+                // principal.
+                $earlyNeedKwh = max(0, $earlyConsumptionKwh - $earlySolarKwh) * $margeFactor;
+                $socTargetReserveMatin = (int) ceil($batteryFloorPct) + (int) ceil(($earlyNeedKwh / $capacityKwh) * 100);
                 if ($socTargetReserveMatin > $socTarget) {
                     $reason .= sprintf(
-                        ' [relevée à %d%% : réserve avant %02dh (montée solaire), conso ~%.1fkWh%s sur %02dh-%02dh]',
+                        ' [relevée à %d%% : réserve avant %02dh (montée solaire), conso ~%.1fkWh%s sur %02dh-%02dh, marge +%d%% incluse, plancher batterie %d%%]',
                         $socTargetReserveMatin,
                         $heureFinMonteeSolaire,
                         $earlyConsumptionKwh,
                         $earlySolarKwh > 0 ? sprintf(' - solaire Solcast %.1fkWh', $earlySolarKwh) : '',
                         $startH,
-                        $heureFinMonteeSolaire
+                        $heureFinMonteeSolaire,
+                        (int) $margePct,
+                        (int) ceil($batteryFloorPct)
                     );
                     $socTarget = $socTargetReserveMatin;
                 }
             }
         }
 
-        $socTarget = max(20, min(100, $socTarget));
+        // max(20, plancher batterie) : le plancher est déjà intégré au calcul
+        // ci-dessus (cible = plancher + besoin), mais un besoin net à 0kWh
+        // donnerait sinon une cible = plancher pile, sans aucune réserve
+        // utilisable -- le minimum de 20% reste une garde-fou séparée, à relever
+        // au besoin si le plancher dépasse lui-même 20% (froid extrême).
+        $socTarget = max(20, (int) ceil($batteryFloorPct), min(100, $socTarget));
         return array($socTarget, $reason);
     }
 

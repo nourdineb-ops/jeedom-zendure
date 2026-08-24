@@ -82,7 +82,13 @@ try {
             // de clés à un rythme élevé (cf. échange sur la fréquence MQTT), on ne
             // veut pas gonfler `history` pour des champs jamais réellement utilisés.
             // L'utilisateur peut l'activer au cas par cas depuis la commande.
-            $cmd->setIsHistorized(0);
+            //
+            // Exception 'socLimit' (cf. 2026-08-24) : plancher batterie dynamique
+            // du BMS, désormais lu par zendure::kwhSocTarget() pour la stratégie
+            // nuit -- ce n'est plus un champ brut jamais utilisé, sa variation
+            // (ex. avec la température) est justement ce qu'on veut pouvoir
+            // suivre dans le temps.
+            $cmd->setIsHistorized($logicalId === 'socLimit' ? 1 : 0);
             // Masquée par défaut : ce sont des lectures brutes destinées à être
             // choisies comme source (onglet Sources) ou recomposées par le widget
             // Flux (cf. zendure::createOrUpdateFluxWidget()), pas à s'afficher en
