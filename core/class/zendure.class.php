@@ -445,6 +445,15 @@ class zendure extends eqLogic
             // installation neuve du plugin n'a pas ce script, ss -K échouera simplement
             // (loggé, sans casser quoi que ce soit) tant que ce n'est pas fait.
             'auto_heal_active' => (bool) $this->getConfiguration('auto_heal_active', 0),
+            // Alerte humaine (mail/push) : interrupteur + délai réglés par
+            // l'utilisateur (trop de mails malgré le délai fixe de 5 min déjà en
+            // place, échange du 2026-09-03) -- cf. device.py::_maybe_send_alert().
+            // Le délai s'applique à toutes les alertes "temporelles" (télémétrie
+            // muette, ping local hors ligne) ; couper l'interrupteur coupe TOUTES
+            // les alertes zendure (mail/push), les événements restent visibles
+            // dans les logs Jeedom quoi qu'il arrive.
+            'alert_mail_active' => (bool) $this->getConfiguration('alert_mail_active', 1),
+            'alert_delay_s' => (int) $this->getConfiguration('alert_delay_s', 300),
         );
 
         if ($mode == 'cloud') {
