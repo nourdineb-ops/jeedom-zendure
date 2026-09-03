@@ -28,28 +28,28 @@ DEBUG_CAPTURE_DURATION_S = 3600.0
 # rapporté), pas un problème du démon/transport. Alerte distincte du flapping MQTT
 # (cf. mqtt_transport.py) : la connexion peut très bien être stable pendant que
 # l'appareil, lui, est injoignable.
-TELEMETRY_STALE_S = 300.0
+#
+# Valeur par défaut seulement : l'utilisateur trouvait ça encore trop bavard en
+# mail malgré ce délai (échange du 2026-09-03) -- ce seuil est donc désormais
+# piloté par la config (alert_delay_s, onglet Comportement), self._alert_delay_s
+# ci-dessous. Sert aussi de délai pour l'alerte ping (cf. check_lan_reachability),
+# un seul réglage utilisateur pour les deux plutôt que deux seuils à régler
+# séparément pour un même besoin ("moins de mails").
+DEFAULT_ALERT_DELAY_S = 300.0
 
 # Seuil distinct, plus court, pour la tentative d'auto-heal (ss -K sur une
 # connexion zombie, cf. lan_ping.py::kill_zombie_connection, incident
-# 2026-08-24) -- volontairement PAS le même seuil que TELEMETRY_STALE_S : ce
-# dernier gate une alerte humaine (mail/push), qui doit rester prudente pour
-# ne pas spammer sur un simple accroc, alors qu'un ss -K sur une connexion qui
-# n'était pas réellement zombie ne coûte presque rien (une reconnexion propre
-# de plus, ~1-2s, testé en réel). Le plancher à respecter est plutôt le cycle
-# de sollicitation actif du démon (TELEMETRY_POLL_S = 60s côté
-# zendure_daemon.py, le `getAll` périodique) : en dessous d'environ 1.5-2x ce
-# cycle, un silence peut juste être une réponse un peu lente au poll normal,
-# pas une vraie panne. Effet de bord recherché : si l'auto-heal marche, la
-# télémétrie reprend avant même TELEMETRY_STALE_S -- l'alerte humaine ne se
-# déclenche alors plus du tout dans le cas nominal.
+# 2026-08-24) -- volontairement PAS le même seuil que l'alerte humaine
+# (self._alert_delay_s) : cette dernière doit rester prudente pour ne pas
+# spammer sur un simple accroc, alors qu'un ss -K sur une connexion qui n'était
+# pas réellement zombie ne coûte presque rien (une reconnexion propre de plus,
+# ~1-2s, testé en réel). Pas rendu configurable comme alert_delay_s : ce n'est
+# pas un canal de notification (rien n'est envoyé à l'utilisateur), juste un
+# détail de plomberie interne. Le plancher à respecter est plutôt le cycle de
+# sollicitation actif du démon (TELEMETRY_POLL_S = 60s côté zendure_daemon.py,
+# le `getAll` périodique) : en dessous d'environ 1.5-2x ce cycle, un silence
+# peut juste être une réponse un peu lente au poll normal, pas une vraie panne.
 AUTO_HEAL_STALE_S = 120.0
-
-# Seuil avant d'ALERTER (mail/push) sur une coupure ping -- même principe que
-# TELEMETRY_STALE_S, cf. check_lan_reachability(). Le ping lui-même reste
-# vérifié/loggé/consommé (auto-heal, message de check_telemetry_staleness)
-# sans attendre ce délai -- seule la notification humaine est différée.
-LAN_PING_ALERT_STALE_S = 300.0
 
 # Durée max d'une session de secours BLE (connexion + handshake + lecture),
 # cf. transport/ble_fallback.py -- bornée volontairement courte pour limiter la
@@ -104,11 +104,18 @@ class Device:
         self._lan_ping_active: bool = bool(eq_config.get("lan_ping_active", False))
         self._device_ip: str = str(eq_config.get("device_ip") or "")
         self._auto_heal_active: bool = bool(eq_config.get("auto_heal_active", False))
+        # Interrupteur + délai des alertes humaines (mail/push), demande utilisateur
+        # du 2026-09-03 ("trop d'alerte mail") -- cf. _maybe_send_alert(). Coupe
+        # tout (y compris les *_resolu) quand désactivé ; les événements restent
+        # visibles dans les logs Jeedom (log::add(), cf. callback.php) quoi qu'il
+        # arrive, seule la notification humaine est concernée.
+        self._alert_mail_active: bool = bool(eq_config.get("alert_mail_active", True))
+        self._alert_delay_s: float = float(eq_config.get("alert_delay_s", DEFAULT_ALERT_DELAY_S))
         # None au démarrage : première mesure jamais "en transition" (pas d'alerte
         # de retour en ligne avant même d'avoir vu l'appareil hors ligne une fois).
         self._lan_reachable: Optional[bool] = None
         # Horodatage du DÉBUT de la coupure ping en cours (None si joignable) et
-        # si on a déjà alerté DESSUS -- cf. LAN_PING_ALERT_STALE_S.
+        # si on a déjà alerté DESSUS -- cf. self._alert_delay_s.
         self._lan_unreachable_since: Optional[float] = None
         self._lan_ping_alerted: bool = False
         self._transport.on_telemetry(self._on_telemetry)
@@ -142,6 +149,19 @@ class Device:
     def request_telemetry(self) -> None:
         self._transport.request_telemetry()
 
+    def _maybe_send_alert(self, alert_id: str, message: str) -> None:
+        """Point de passage unique pour toute alerte humaine (mail/push, cf.
+        callback_client.py::send_alert) -- respecte l'interrupteur
+        alert_mail_active (config, onglet Comportement). Couvre aussi les
+        résolutions (*_resolu) : si les alertes sont coupées, inutile de
+        notifier le retour à la normale de quelque chose qui n'a jamais été
+        signalé. L'événement reste tout de même loggé côté démon (log.warning/
+        log.info juste avant chaque appel) et côté Jeedom (log::add(), cf.
+        callback.php) -- seule la notification humaine est supprimée."""
+        if not self._alert_mail_active:
+            return
+        self._callback.send_alert(self.eq_id, alert_id, message)
+
     def check_telemetry_staleness(self) -> None:
         """Appelé depuis la boucle périodique du démon (cf. zendure_daemon.py,
         même cadence que le ping request_telemetry()) : détecte un appareil qui ne
@@ -162,7 +182,8 @@ class Device:
 
         Deux seuils distincts, volontairement pas le même délai (cf.
         AUTO_HEAL_STALE_S) : l'auto-heal (ss -K, sans risque réel) s'arme bien
-        avant l'alerte humaine (mail/push, qui doit rester prudente)."""
+        avant l'alerte humaine (mail/push, qui doit rester prudente -- délai
+        réglable par l'utilisateur, self._alert_delay_s)."""
         elapsed = time.monotonic() - self._last_telemetry_at
         minutes = elapsed // 60
 
@@ -190,8 +211,8 @@ class Device:
         elif elapsed < AUTO_HEAL_STALE_S and self._auto_heal_attempted:
             self._auto_heal_attempted = False
 
-        # -- Alerte humaine (seuil long) ---------------------------------------
-        if elapsed >= TELEMETRY_STALE_S and not self._telemetry_stale:
+        # -- Alerte humaine (seuil long, réglable) ------------------------------
+        if elapsed >= self._alert_delay_s and not self._telemetry_stale:
             self._telemetry_stale = True
             log.warning("eq_id=%s aucune télémétrie depuis %ds", self.eq_id, int(elapsed))
             if self._lan_ping_active and self._device_ip and self._lan_reachable is True:
@@ -219,15 +240,11 @@ class Device:
                     "stable) -- probable WiFi instable côté boîtier (ping réseau local non "
                     "configuré, diagnostic non confirmable -- cf. onglet Config avancée)." % minutes
                 )
-            self._callback.send_alert(self.eq_id, "telemetry_stale", message)
-        elif elapsed < TELEMETRY_STALE_S and self._telemetry_stale:
+            self._maybe_send_alert("telemetry_stale", message)
+        elif elapsed < self._alert_delay_s and self._telemetry_stale:
             self._telemetry_stale = False
             log.info("eq_id=%s télémétrie de retour après %ds de silence", self.eq_id, int(elapsed))
-            self._callback.send_alert(
-                self.eq_id,
-                "telemetry_stale_resolu",
-                "Télémétrie Zendure de retour.",
-            )
+            self._maybe_send_alert("telemetry_stale_resolu", "Télémétrie Zendure de retour.")
 
     def maybe_ble_failover(self) -> None:
         """Appelé depuis la boucle périodique du démon, à la cadence du cron HP
@@ -278,12 +295,13 @@ class Device:
         L'état (self._lan_reachable, cmd lan_ping_online/lan_ping_ms) est mis à
         jour à CHAQUE cycle (60s), sans délai -- consommé immédiatement par
         check_telemetry_staleness()/l'auto-heal. Seule l'ALERTE humaine
-        (mail/push) est différée jusqu'à LAN_PING_ALERT_STALE_S : signalé par
+        (mail/push) est différée jusqu'à self._alert_delay_s : signalé par
         l'utilisateur le 2026-08-24 après 3 coupures WiFi courtes (~1 min,
         connues/attendues, cf. project_device_wifi_instability) ayant chacune
-        généré un mail immédiat -- même principe que TELEMETRY_STALE_S, une
-        coupure qui se résout d'elle-même sous ce délai ne mérite pas de
-        déranger l'utilisateur."""
+        généré un mail immédiat -- même délai réglable, et même interrupteur
+        (_maybe_send_alert), que check_telemetry_staleness() : une coupure qui
+        se résout d'elle-même sous ce délai ne mérite pas de déranger
+        l'utilisateur."""
         if not self._lan_ping_active or not self._device_ip:
             return
         reachable, rtt_ms = ping_once(self._device_ip)
@@ -299,8 +317,7 @@ class Device:
                 # On n'avait alerté que parce que la coupure avait dépassé le
                 # seuil -- symétrique, on informe donc du retour.
                 log.info("eq_id=%s ping local (%s) : appareil de nouveau joignable", self.eq_id, self._device_ip)
-                self._callback.send_alert(
-                    self.eq_id,
+                self._maybe_send_alert(
                     "lan_ping_resolu",
                     "Le boîtier Zendure répond de nouveau sur le réseau local.",
                 )
@@ -318,11 +335,10 @@ class Device:
                 log.info("eq_id=%s ping local (%s) : état initial injoignable", self.eq_id, self._device_ip)
         self._lan_reachable = False
         elapsed_down = now - (self._lan_unreachable_since or now)
-        if elapsed_down >= LAN_PING_ALERT_STALE_S and not self._lan_ping_alerted:
+        if elapsed_down >= self._alert_delay_s and not self._lan_ping_alerted:
             self._lan_ping_alerted = True
             log.warning("eq_id=%s ping local (%s) : injoignable depuis %ds", self.eq_id, self._device_ip, int(elapsed_down))
-            self._callback.send_alert(
-                self.eq_id,
+            self._maybe_send_alert(
                 "lan_ping_offline",
                 "Le boîtier Zendure ne répond plus sur le réseau local (ping) depuis %d minutes -- "
                 "probable coupure WiFi ou d'alimentation côté appareil." % (elapsed_down // 60),
@@ -361,6 +377,8 @@ class Device:
         self._lan_ping_active = bool(eq_config.get("lan_ping_active", False))
         self._device_ip = str(eq_config.get("device_ip") or "")
         self._auto_heal_active = bool(eq_config.get("auto_heal_active", False))
+        self._alert_mail_active = bool(eq_config.get("alert_mail_active", True))
+        self._alert_delay_s = float(eq_config.get("alert_delay_s", DEFAULT_ALERT_DELAY_S))
 
         if transport_changed:
             log.info("eq_id=%s configuration transport modifiée, reconnexion", self.eq_id)
@@ -467,4 +485,4 @@ class Device:
         self._callback.send_event(self.eq_id, {"transport_connected": connected})
 
     def _on_connection_issue(self, issue_id: str, message: str) -> None:
-        self._callback.send_alert(self.eq_id, issue_id, message)
+        self._maybe_send_alert(issue_id, message)

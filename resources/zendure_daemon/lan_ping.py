@@ -4,7 +4,7 @@ Diagnostic passif, jamais utilisé pour piloter quoi que ce soit : distingue une
 coupure WiFi totale de l'appareil (ni ping, ni MQTT, ni BLE) d'un appareil bien
 présent sur le LAN mais dont seule la liaison MQTT/cloud est en rade (ping OK,
 silence MQTT) -- cas jusqu'ici indiscernable l'un de l'autre depuis le seul
-silence télémétrie (cf. TELEMETRY_STALE_S dans device.py).
+silence télémétrie (cf. device.py::check_telemetry_staleness).
 
 Passe par le binaire `ping` système (setuid, pas besoin de root ni de socket
 raw ICMP côté process Python) plutôt qu'une lib comme icmplib -- une dépendance

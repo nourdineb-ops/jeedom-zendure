@@ -1,7 +1,7 @@
 """Secours BLE local, optionnel (config `ble_failover_active` + `ble_address`,
 cf. desktop/php/zendure.php) : quand la télémétrie MQTT/cloud devient muette
 (WiFi du boîtier instable, cf. échange utilisateur 2026-07-22 -- voir aussi
-device.py::TELEMETRY_STALE_S), on tente une lecture ponctuelle en direct par
+device.py::check_telemetry_staleness), on tente une lecture ponctuelle en direct par
 Bluetooth plutôt que de rester aveugle.
 
 Volontairement PAS une connexion permanente : un second consommateur de

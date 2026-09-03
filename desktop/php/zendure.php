@@ -575,6 +575,24 @@ $eqLogics = eqLogic::byType($plugin->getId());
                     </div>
                 </fieldset>
                 <fieldset>
+                    <legend><i class="fas fa-bell"></i> {{Alertes}}</legend>
+                    <div class="form-group">
+                        <label class="col-sm-3 control-label">{{Alerte mail/push active}}</label>
+                        <div class="col-sm-2">
+                            <input type="checkbox" class="eqLogicAttr" data-l1key="configuration" data-l2key="alert_mail_active" checked />
+                        </div>
+                        <label class="col-sm-3 control-label">{{Délai avant alerte (s)}}</label>
+                        <div class="col-sm-2">
+                            <input type="number" step="1" min="0" class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="alert_delay_s" placeholder="300" />
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <div class="col-sm-9 col-sm-offset-3">
+                            <span class="help-block">{{S'applique aux alertes "temporelles" (télémétrie muette, ping local hors ligne) : une coupure qui se résout avant ce délai ne génère aucun mail/push. Décocher la case ci-dessus coupe TOUTES les alertes mail/push de ce plugin pour cet équipement (les événements restent visibles dans les logs Jeedom).}}</span>
+                        </div>
+                    </div>
+                </fieldset>
+                <fieldset>
                     <legend><i class="fas fa-moon"></i> {{Stratégie nuit}}</legend>
                     <div class="form-group">
                         <label class="col-sm-3 control-label">{{Stratégie nuit active}}</label>
