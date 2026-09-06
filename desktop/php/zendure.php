@@ -607,11 +607,11 @@ $eqLogics = eqLogic::byType($plugin->getId());
                     <div class="form-group">
                         <label class="col-sm-3 control-label">{{Coupure avant relance (s)}}</label>
                         <div class="col-sm-2">
-                            <input type="number" step="1" min="5" class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="power_cycle_off_duration_s" placeholder="20" />
+                            <input type="number" step="1" min="3" class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="power_cycle_off_duration_s" placeholder="5" />
                         </div>
                         <label class="col-sm-3 control-label">{{Délai avant déclenchement (s)}}</label>
                         <div class="col-sm-2">
-                            <input type="number" step="1" min="0" class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="power_cycle_stale_s" placeholder="1800" />
+                            <input type="number" step="1" min="0" class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="power_cycle_stale_s" placeholder="600" />
                         </div>
                     </div>
                     <div class="form-group">
@@ -622,7 +622,7 @@ $eqLogics = eqLogic::byType($plugin->getId());
                     </div>
                     <div class="form-group">
                         <div class="col-sm-9 col-sm-offset-3">
-                            <span class="help-block">{{Dernier recours quand l'auto-guérison ci-dessus (et le secours BLE) ne suffisent pas : coupe puis rallume l'appareil via une prise pilotée (ex. Zigbee) après ce délai de télémétrie muette, pour sortir d'un blocage (freeze) que rien d'autre ne résout. Le délai est automatiquement remonté si besoin pour rester après l'auto-guérison et l'alerte -- ne se déclenche jamais avant elles. Une seule tentative par épisode, espacées d'au moins le délai anti-répétition. Chaque déclenchement est tracé dans les logs Jeedom, le centre de notifications, et l'horodatage "Dernier redémarrage forcé" (onglet Commandes).}}</span>
+                            <span class="help-block">{{Dernier recours quand l'auto-guérison ci-dessus (et le secours BLE) ne suffisent pas : coupe puis rallume l'appareil via une prise pilotée (ex. Zigbee) après ce délai de télémétrie muette, pour sortir d'un blocage (freeze) que rien d'autre ne résout. Le délai est automatiquement remonté si besoin pour rester après l'auto-guérison et l'alerte -- ne se déclenche jamais avant elles, mais peut rester assez court pour réagir sur un vrai freeze sans attendre trop longtemps (au prix, assumé, d'un déclenchement occasionnel sur un simple accroc réseau prolongé -- l'anti-répétition ci-dessous est le vrai garde-fou contre l'acharnement, pas ce délai). Une seule tentative par épisode, espacées d'au moins le délai anti-répétition. Chaque déclenchement est tracé dans les logs Jeedom, le centre de notifications, et l'horodatage "Dernier redémarrage forcé" (onglet Commandes).}}</span>
                         </div>
                     </div>
                 </fieldset>

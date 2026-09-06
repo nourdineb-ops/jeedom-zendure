@@ -469,8 +469,8 @@ class zendure extends eqLogic
             // volontairement clampés côté démon (device.py) pour ne jamais pouvoir
             // déclencher avant l'auto-heal/l'alerte, quelle que soit cette config.
             'power_cycle_active' => (bool) $this->getConfiguration('power_cycle_active', 0),
-            'power_cycle_stale_s' => (int) $this->getConfiguration('power_cycle_stale_s', 1800),
-            'power_cycle_off_duration_s' => (int) $this->getConfiguration('power_cycle_off_duration_s', 20),
+            'power_cycle_stale_s' => (int) $this->getConfiguration('power_cycle_stale_s', 600),
+            'power_cycle_off_duration_s' => (int) $this->getConfiguration('power_cycle_off_duration_s', 5),
             'power_cycle_cooldown_s' => (int) $this->getConfiguration('power_cycle_cooldown_s', 3600),
         );
 

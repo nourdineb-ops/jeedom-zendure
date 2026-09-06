@@ -64,22 +64,28 @@ BLE_FAILOVER_TIMEOUT_S = 20.0
 # laissé à l'alerte humaine n'ont suffi à faire revenir la télémétrie -- signature
 # d'un vrai blocage (freeze) de l'appareil, pas d'un simple accroc réseau.
 #
-# Valeur par défaut nettement au-delà de AUTO_HEAL_STALE_S (120s) ET du délai
-# d'alerte par défaut (300s) : le pire épisode de WiFi instable confirmé à ce jour a
-# duré 23+ minutes sans être un vrai freeze (cf. project_device_wifi_instability) --
-# rester largement au-dessus évite de couper l'alimentation de la batterie pour une
-# coupure WiFi qui se serait résolue seule. Reste configurable (power_cycle_stale_s),
-# mais toujours CLAMPÉ au-dessus de l'auto-heal et de l'alerte dans reload_config()/
+# Choix explicite de l'utilisateur (2026-09-06) : privilégier la réactivité plutôt
+# qu'un délai très prudent, quitte à ce que ça se déclenche parfois sur un simple
+# accroc réseau plutôt qu'un vrai freeze -- l'anti-répétition (cf.
+# DEFAULT_POWER_CYCLE_COOLDOWN_S) est le vrai garde-fou contre l'acharnement, pas ce
+# délai. Reste nettement au-dessus de AUTO_HEAL_STALE_S (120s) et du délai d'alerte
+# par défaut (300s) : à noter que le pire épisode de WiFi instable confirmé à ce jour
+# a duré 23+ minutes sans être un vrai freeze (cf. project_device_wifi_instability) --
+# avec ce seuil, un épisode de cette ampleur DÉCLENCHERAIT le redémarrage forcé
+# (accepté sciemment : la coupure elle-même est courte, cf.
+# DEFAULT_POWER_CYCLE_OFF_DURATION_S). Reste configurable (power_cycle_stale_s), mais
+# toujours CLAMPÉ au-dessus de l'auto-heal et de l'alerte dans reload_config()/
 # __init__ ci-dessous, quelle que soit la valeur saisie par l'utilisateur : le principe
 # "dernier recours, après échec des autres stratégies" ne doit jamais dépendre d'une
 # config cohérente pour rester vrai.
-DEFAULT_POWER_CYCLE_STALE_S = 1800.0
+DEFAULT_POWER_CYCLE_STALE_S = 600.0
 
-# Durée de coupure secteur avant relance : généreuse, pour laisser le temps à
-# l'alimentation/aux condensateurs internes de se décharger complètement -- un cycle
-# WiFi seul (déjà tenté ailleurs, cf. auto-heal) ne suffit pas forcément à sortir
-# d'un vrai blocage logiciel, l'objectif ici est une remise à zéro plus dure.
-DEFAULT_POWER_CYCLE_OFF_DURATION_S = 20.0
+# Durée de coupure secteur avant relance : choix explicite de l'utilisateur
+# (2026-09-06, "20 sec c'est long aussi, 5 sec suffisent") -- suffisant pour une
+# vraie coupure secteur (contrairement à un simple cycle WiFi, déjà tenté par
+# l'auto-heal), sans prolonger l'interruption de puissance vers la maison plus que
+# nécessaire.
+DEFAULT_POWER_CYCLE_OFF_DURATION_S = 5.0
 
 # Anti-répétition entre deux tentatives : si la télémétrie ne revient toujours pas
 # après une première coupure/relance (panne matérielle réelle, pas juste un freeze
