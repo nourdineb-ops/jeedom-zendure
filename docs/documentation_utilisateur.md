@@ -64,9 +64,14 @@ réseau public (anti-injection).
     utilisée par le scénario reprend le champ "Capacité batterie" (onglet
     Comportement, section Stratégie nuit) ; 5 kWh par défaut si ce champ est vide.
   - Le mode **Local** (Chemin B, broker MQTT sur site) n'apparaît plus dans ce
-    menu — abandonné après plusieurs tentatives sans succès, voir
-    `docs/brief_chemin_b_local.md`. Le code transport reste en place si une
-    nouvelle piste le rend viable un jour.
+    menu — la bascule de l'appareil vers un broker local n'a jamais pu être
+    obtenue par les moyens du plugin lui-même (voir `docs/brief_chemin_b_local.md`
+    pour les tentatives). Le code transport reste en place si une nouvelle
+    piste le rend viable un jour. *(Un fonctionnement local existe en pratique
+    sur cette installation précise, via un montage réseau propre au site —
+    pas une fonctionnalité du plugin, non reproductible sans accès admin au
+    routeur ; hors périmètre de cette doc publique, voir le brief pour le
+    détail.)*
 - **Identifiant appareil (device_id) / Product key** : voir "Compatibilité" ci-dessus.
 - **Modèle d'appareil** : Hyper 2000 (validé), Hub 1200/2000, AIO 2400, SuperBase
   V4600/V6400 (profils dérivés du code source Home Assistant, jamais testés

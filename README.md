@@ -91,9 +91,12 @@ pince (Zigbee/Zwave) --> listener PHP --> socket local --> démon Python
   - **Simulation** : aucun réseau, un scénario synthétique conso/PV pilote la
     même boucle anti-injection/dashboard/calcul de gain.
   - **Local** (mode local via un broker Mosquitto sur site) : code présent mais
-    **non fonctionnel actuellement** — voir
-    [`docs/brief_chemin_b_local.md`](docs/brief_chemin_b_local.md) pour l'historique
-    complet des tentatives avant d'y retoucher.
+    **jamais utilisé en pratique** — sur cette installation, le pilotage local
+    tourne bel et bien depuis le 16/08, mais via un détournement DNS du
+    hostname cloud (l'eqLogic reste en mode `Cloud`), pas via ce mode
+    `local` dédié. Voir [`docs/brief_chemin_b_local.md`](docs/brief_chemin_b_local.md)
+    pour l'historique complet et le détail du montage réellement utilisé
+    avant d'y retoucher.
 
 ## Configuration (« configuration over code »)
 
@@ -127,8 +130,13 @@ docs/brief_*.md                 notes de conception techniques (historique)
 
 ## Limitations connues
 
-- Mode de connexion local (broker MQTT sur site) non fonctionnel — voir
-  [`docs/brief_chemin_b_local.md`](docs/brief_chemin_b_local.md).
+- Le mode de connexion `Local` du plugin (broker MQTT sur site, sélectionnable
+  par équipement) n'a jamais été rendu fonctionnel — code présent, jamais
+  emprunté par un appareil réel. Sur cette installation, le pilotage local
+  fonctionne quand même en pratique depuis le 16/08, mais par un montage
+  d'infrastructure hors plugin (détournement DNS du hostname cloud vers un
+  broker local, eqLogic laissé en mode `Cloud`), pas via ce mode dédié —
+  détail complet dans [`docs/brief_chemin_b_local.md`](docs/brief_chemin_b_local.md).
 - Seul le Hyper 2000 est validé contre un appareil réel — les autres profils
   (Hub 1200/2000, AIO 2400, SuperBase V4600/V6400) n'ont jamais été testés.
   ACE1500 et la famille SolarFlow ne sont pas supportés du tout.
