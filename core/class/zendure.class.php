@@ -35,6 +35,13 @@ class zendure extends eqLogic
         // 1=auto-calibration en cours (confirmé dans les traductions de Zendure/Zendure-HA).
         // Suivi purement informatif : aucune action ne se déclenche là-dessus.
         'calibration_status' => array('État calibration SOC (0=normal, 1=en cours)', 'numeric', ''),
+        // Traçabilité du redémarrage forcé (cf. onglet Config avancée "Redémarrage
+        // forcé", device.py::check_telemetry_staleness / zendure::executePowerCycle())
+        // -- dernier recours (coupure/relance via une prise pilotée) quand l'auto-heal
+        // et l'alerte n'ont pas suffi face à un vrai blocage (freeze) de l'appareil.
+        // Historisé comme le reste d'INFO_COMMANDS : permet de voir dans le temps si ça
+        // se reproduit, sans avoir à fouiller les logs à chaque fois.
+        'power_cycle_last_at' => array('Dernier redémarrage forcé (prise)', 'string', ''),
     );
 
     /*
@@ -454,6 +461,17 @@ class zendure extends eqLogic
             // dans les logs Jeedom quoi qu'il arrive.
             'alert_mail_active' => (bool) $this->getConfiguration('alert_mail_active', 1),
             'alert_delay_s' => (int) $this->getConfiguration('alert_delay_s', 300),
+            // Redémarrage forcé (dernier recours, cf. onglet Config avancée) : désactivé
+            // par défaut, nécessite les deux commandes "prise" configurées (résolues côté
+            // PHP via resolveSourceCmd(), cf. executePowerCycle()) sans quoi le démon
+            // demandera quand même le redémarrage et callback.php loggera l'échec plutôt
+            // que de tenter quoi que ce soit à l'aveugle. Les seuils/anti-répétition sont
+            // volontairement clampés côté démon (device.py) pour ne jamais pouvoir
+            // déclencher avant l'auto-heal/l'alerte, quelle que soit cette config.
+            'power_cycle_active' => (bool) $this->getConfiguration('power_cycle_active', 0),
+            'power_cycle_stale_s' => (int) $this->getConfiguration('power_cycle_stale_s', 1800),
+            'power_cycle_off_duration_s' => (int) $this->getConfiguration('power_cycle_off_duration_s', 20),
+            'power_cycle_cooldown_s' => (int) $this->getConfiguration('power_cycle_cooldown_s', 3600),
         );
 
         if ($mode == 'cloud') {
@@ -763,6 +781,57 @@ class zendure extends eqLogic
     private static function cmdIdOrZero($cmd)
     {
         return is_object($cmd) ? $cmd->getId() : 0;
+    }
+
+    /**
+     * Dernier recours contre un blocage (freeze) de l'appareil : coupe puis rallume
+     * son alimentation via une prise pilotée (ex. Zigbee/Z2M, cf. onglet Config
+     * avancée "Redémarrage forcé"), au lieu des commandes MQTT habituelles --
+     * appelé depuis callback.php quand le démon (device.py::check_telemetry_staleness)
+     * a déjà épuisé l'auto-heal (ss -K) et déjà alerté l'utilisateur sans que la
+     * télémétrie ne revienne. Public (contrairement à resolveSourceCmd) : appelé
+     * depuis callback.php, hors du contexte objet habituel (listener core statique).
+     *
+     * Bloquant le temps de la coupure (sleep()) : ce plugin n'a pas de file d'attente
+     * asynchrone, et c'est un événement rare (dernier recours, pas un chemin chaud) --
+     * pas justifié d'en construire une pour ce seul cas. callback.php protège l'appel
+     * avec ignore_user_abort()/set_time_limit() pour ne jamais risquer de couper le
+     * script EN PLEIN MILIEU de la coupure (pire scénario : l'appareil resterait
+     * éteint sans jamais être rallumé si la requête HTTP du démon était interrompue).
+     *
+     * Vérifie power_cycle_active ET la présence des deux commandes ici (pas seulement
+     * côté démon) : garde-fou contre une course où l'utilisateur désactiverait
+     * l'option entre la décision du démon et la livraison de cette requête, et contre
+     * un eq_config potentiellement périmé côté démon (rechargé seulement au polling).
+     */
+    public function executePowerCycle($reason, $offDurationS)
+    {
+        $tag = 'zendure_power_cycle_' . $this->getId() . '_' . date('YmdHis');
+
+        if (!$this->getConfiguration('power_cycle_active', 0)) {
+            log::add('zendure', 'warning', '[Redémarrage forcé] ignoré : option désactivée entre-temps (eq_id=' . $this->getId() . ')');
+            return false;
+        }
+
+        $offCmd = $this->resolveSourceCmd('power_cycle_cmd_off');
+        $onCmd = $this->resolveSourceCmd('power_cycle_cmd_on');
+        if (!is_object($offCmd) || !is_object($onCmd)) {
+            log::add('zendure', 'error', '[Redémarrage forcé] commande(s) prise non configurée(s) ou introuvable(s) (eq_id=' . $this->getId() . ')');
+            message::add('zendure', '{{Redémarrage forcé Zendure demandé mais la prise pilotée n\'est pas configurée (onglet Config avancée, "Redémarrage forcé").}}', '', $tag);
+            return false;
+        }
+
+        log::add('zendure', 'error', '[Redémarrage forcé] déclenché (eq_id=' . $this->getId() . ') : ' . $reason);
+        message::add('zendure', $reason . ' -- redémarrage forcé de l\'appareil en cours (coupure ' . $offDurationS . 's).', '', $tag);
+
+        $offCmd->execCmd();
+        log::add('zendure', 'info', '[Redémarrage forcé] coupure envoyée (eq_id=' . $this->getId() . ', cmd_id=' . $offCmd->getId() . '), attente ' . $offDurationS . 's avant relance');
+        sleep(max(1, (int) $offDurationS));
+        $onCmd->execCmd();
+        log::add('zendure', 'info', '[Redémarrage forcé] relance envoyée (eq_id=' . $this->getId() . ', cmd_id=' . $onCmd->getId() . ')');
+        message::add('zendure', 'Redémarrage forcé du Zendure terminé (coupure ' . $offDurationS . 's) -- en attente du retour de télémétrie.', '', $tag . '_fin');
+
+        return true;
     }
 
     public function preInsert()

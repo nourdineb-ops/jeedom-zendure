@@ -57,6 +57,29 @@ try {
         die();
     }
 
+    if (isset($payload['power_cycle_reason'])) {
+        // Dernier recours (cf. device.py::check_telemetry_staleness et
+        // zendure::executePowerCycle()) : coupe/rallume l'appareil via une prise
+        // pilotée. ignore_user_abort()+set_time_limit() ICI, avant d'entrer dans
+        // executePowerCycle() qui bloque (sleep) le temps de la coupure -- sans ça,
+        // une requête HTTP interrompue (démon redémarré, réseau local perturbé --
+        // le genre même d'instabilité que ce mécanisme existe pour contourner)
+        // pourrait couper le script Apache/PHP-FPM EN PLEIN MILIEU, laissant
+        // l'appareil éteint sans jamais le rallumer.
+        ignore_user_abort(true);
+        set_time_limit(120);
+
+        $eqId = $payload['eq_id'] ?? null;
+        $eqLogic = eqLogic::byId($eqId);
+        if (!is_object($eqLogic) || $eqLogic->getEqType_name() != 'zendure') {
+            throw new Exception('eqLogic zendure introuvable : ' . $eqId);
+        }
+        $offDuration = max(1, (int) ($payload['power_cycle_off_duration_s'] ?? 20));
+        $ok = $eqLogic->executePowerCycle((string) $payload['power_cycle_reason'], $offDuration);
+        echo json_encode(array('state' => $ok ? 'ok' : 'error'));
+        die();
+    }
+
     $eqId = $payload['eq_id'] ?? null;
     $values = $payload['values'] ?? array();
     $eqLogic = eqLogic::byId($eqId);

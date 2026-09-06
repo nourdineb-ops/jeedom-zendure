@@ -58,6 +58,39 @@ AUTO_HEAL_STALE_S = 120.0
 # 2026-07-22).
 BLE_FAILOVER_TIMEOUT_S = 20.0
 
+# Dernier recours : redémarrage forcé de l'appareil (coupure/relance secteur via une
+# prise pilotée, ex. Zigbee/Z2M -- cf. onglet Config avancée "Redémarrage forcé",
+# zendure.class.php::executePowerCycle()) quand ni l'auto-heal (ss -K) ni le temps
+# laissé à l'alerte humaine n'ont suffi à faire revenir la télémétrie -- signature
+# d'un vrai blocage (freeze) de l'appareil, pas d'un simple accroc réseau.
+#
+# Valeur par défaut nettement au-delà de AUTO_HEAL_STALE_S (120s) ET du délai
+# d'alerte par défaut (300s) : le pire épisode de WiFi instable confirmé à ce jour a
+# duré 23+ minutes sans être un vrai freeze (cf. project_device_wifi_instability) --
+# rester largement au-dessus évite de couper l'alimentation de la batterie pour une
+# coupure WiFi qui se serait résolue seule. Reste configurable (power_cycle_stale_s),
+# mais toujours CLAMPÉ au-dessus de l'auto-heal et de l'alerte dans reload_config()/
+# __init__ ci-dessous, quelle que soit la valeur saisie par l'utilisateur : le principe
+# "dernier recours, après échec des autres stratégies" ne doit jamais dépendre d'une
+# config cohérente pour rester vrai.
+DEFAULT_POWER_CYCLE_STALE_S = 1800.0
+
+# Durée de coupure secteur avant relance : généreuse, pour laisser le temps à
+# l'alimentation/aux condensateurs internes de se décharger complètement -- un cycle
+# WiFi seul (déjà tenté ailleurs, cf. auto-heal) ne suffit pas forcément à sortir
+# d'un vrai blocage logiciel, l'objectif ici est une remise à zéro plus dure.
+DEFAULT_POWER_CYCLE_OFF_DURATION_S = 20.0
+
+# Anti-répétition entre deux tentatives : si la télémétrie ne revient toujours pas
+# après une première coupure/relance (panne matérielle réelle, pas juste un freeze
+# logiciel), inutile de s'acharner à recouper/rallumer la prise en boucle à chaque
+# nouveau franchissement du seuil -- ça n'aiderait pas et userait la prise/l'appareil
+# pour rien. Compteur en mémoire (self._power_cycle_last_attempt_at, monotonic) :
+# remis à zéro à un redémarrage du démon, comme le reste de l'état d'escalade
+# (_auto_heal_attempted, _telemetry_stale) -- acceptable, un redémarrage du démon
+# est lui-même un signal que quelqu'un est déjà en train d'intervenir.
+DEFAULT_POWER_CYCLE_COOLDOWN_S = 3600.0
+
 log = logging.getLogger("zendure.device")
 
 
@@ -111,6 +144,27 @@ class Device:
         # arrive, seule la notification humaine est concernée.
         self._alert_mail_active: bool = bool(eq_config.get("alert_mail_active", True))
         self._alert_delay_s: float = float(eq_config.get("alert_delay_s", DEFAULT_ALERT_DELAY_S))
+        # Dernier recours (redémarrage forcé, cf. AUTO_HEAL_STALE_S/DEFAULT_POWER_CYCLE_STALE_S
+        # ci-dessus) : self._power_cycle_stale_s est calculé (pas juste lu) via
+        # _clamp_power_cycle_stale_s() -- garantit qu'il reste toujours au-dessus de
+        # l'auto-heal ET de l'alerte, même si l'utilisateur configure une valeur plus
+        # courte par erreur (cf. commentaire de DEFAULT_POWER_CYCLE_STALE_S).
+        self._power_cycle_active: bool = bool(eq_config.get("power_cycle_active", False))
+        self._power_cycle_stale_s: float = self._clamp_power_cycle_stale_s(eq_config)
+        self._power_cycle_off_duration_s: float = float(
+            eq_config.get("power_cycle_off_duration_s", DEFAULT_POWER_CYCLE_OFF_DURATION_S)
+        )
+        self._power_cycle_cooldown_s: float = float(
+            eq_config.get("power_cycle_cooldown_s", DEFAULT_POWER_CYCLE_COOLDOWN_S)
+        )
+        # Distinct de _telemetry_stale/_auto_heal_attempted : s'arme au seuil le plus
+        # long, une seule tentative par épisode de silence (edge-triggered, même
+        # convention que les deux autres tiers de check_telemetry_staleness()).
+        self._power_cycle_attempted: bool = False
+        # Monotonic, None tant qu'aucune tentative n'a jamais eu lieu -- cf.
+        # DEFAULT_POWER_CYCLE_COOLDOWN_S pour pourquoi cet état n'a pas besoin de
+        # survivre à un redémarrage du démon.
+        self._power_cycle_last_attempt_at: Optional[float] = None
         # None au démarrage : première mesure jamais "en transition" (pas d'alerte
         # de retour en ligne avant même d'avoir vu l'appareil hors ligne une fois).
         self._lan_reachable: Optional[bool] = None
@@ -180,10 +234,13 @@ class Device:
         le ping actif, on peut désormais distinguer les deux cas au lieu de
         toujours supposer le même coupable.
 
-        Deux seuils distincts, volontairement pas le même délai (cf.
-        AUTO_HEAL_STALE_S) : l'auto-heal (ss -K, sans risque réel) s'arme bien
-        avant l'alerte humaine (mail/push, qui doit rester prudente -- délai
-        réglable par l'utilisateur, self._alert_delay_s)."""
+        Trois seuils distincts, volontairement pas le même délai (cf.
+        AUTO_HEAL_STALE_S, DEFAULT_POWER_CYCLE_STALE_S) : l'auto-heal (ss -K, sans
+        risque réel) s'arme bien avant l'alerte humaine (mail/push, qui doit rester
+        prudente -- délai réglable par l'utilisateur, self._alert_delay_s), elle-même
+        bien avant le redémarrage forcé (coupure physique via une prise pilotée,
+        dernier recours -- self._power_cycle_stale_s, toujours clampé au-dessus des
+        deux autres)."""
         elapsed = time.monotonic() - self._last_telemetry_at
         minutes = elapsed // 60
 
@@ -245,6 +302,50 @@ class Device:
             self._telemetry_stale = False
             log.info("eq_id=%s télémétrie de retour après %ds de silence", self.eq_id, int(elapsed))
             self._maybe_send_alert("telemetry_stale_resolu", "Télémétrie Zendure de retour.")
+
+        # -- Redémarrage forcé (dernier recours, seuil le plus long) ------------
+        # Toujours > AUTO_HEAL_STALE_S et > self._alert_delay_s par construction
+        # (cf. _clamp_power_cycle_stale_s()) : à ce stade, l'auto-heal a déjà eu sa
+        # chance ET l'utilisateur a déjà été alerté -- ne reste que la coupure
+        # physique comme prochaine étape possible.
+        if elapsed >= self._power_cycle_stale_s and not self._power_cycle_attempted:
+            self._power_cycle_attempted = True
+            cooldown_ok = (
+                self._power_cycle_last_attempt_at is None
+                or (time.monotonic() - self._power_cycle_last_attempt_at) >= self._power_cycle_cooldown_s
+            )
+            if not self._power_cycle_active:
+                pass  # option désactivée : rien à faire, pas la peine de logger à chaque cycle
+            elif not cooldown_ok:
+                log.warning(
+                    "eq_id=%s seuil de redémarrage forcé atteint (%ds) mais anti-répétition actif "
+                    "(dernière tentative il y a moins de %ds) -- ignoré",
+                    self.eq_id, int(elapsed), int(self._power_cycle_cooldown_s),
+                )
+            else:
+                self._power_cycle_last_attempt_at = time.monotonic()
+                reason = (
+                    "Aucune télémétrie Zendure reçue depuis %d minutes malgré l'auto-heal et "
+                    "l'alerte déjà déclenchés" % minutes
+                )
+                log.warning("eq_id=%s %s -- déclenchement du redémarrage forcé", self.eq_id, reason)
+                ok = self._callback.send_power_cycle_request(
+                    self.eq_id, reason, self._power_cycle_off_duration_s
+                )
+                if ok:
+                    # Horodatage humain (pas monotonic) : affiché tel quel côté Jeedom
+                    # (power_cycle_last_at, cf. zendure::INFO_COMMANDS) pour voir dans le
+                    # temps si ça se reproduit, sans avoir à rouvrir les logs à chaque fois.
+                    self._callback.send_event(
+                        self.eq_id, {"power_cycle_last_at": time.strftime("%Y-%m-%d %H:%M:%S")}
+                    )
+                else:
+                    log.warning(
+                        "eq_id=%s échec de la demande de redémarrage forcé (cf. log Jeedom pour la cause)",
+                        self.eq_id,
+                    )
+        elif elapsed < self._power_cycle_stale_s and self._power_cycle_attempted:
+            self._power_cycle_attempted = False
 
     def maybe_ble_failover(self) -> None:
         """Appelé depuis la boucle périodique du démon, à la cadence du cron HP
@@ -379,6 +480,14 @@ class Device:
         self._auto_heal_active = bool(eq_config.get("auto_heal_active", False))
         self._alert_mail_active = bool(eq_config.get("alert_mail_active", True))
         self._alert_delay_s = float(eq_config.get("alert_delay_s", DEFAULT_ALERT_DELAY_S))
+        self._power_cycle_active = bool(eq_config.get("power_cycle_active", False))
+        self._power_cycle_stale_s = self._clamp_power_cycle_stale_s(eq_config)
+        self._power_cycle_off_duration_s = float(
+            eq_config.get("power_cycle_off_duration_s", DEFAULT_POWER_CYCLE_OFF_DURATION_S)
+        )
+        self._power_cycle_cooldown_s = float(
+            eq_config.get("power_cycle_cooldown_s", DEFAULT_POWER_CYCLE_COOLDOWN_S)
+        )
 
         if transport_changed:
             log.info("eq_id=%s configuration transport modifiée, reconnexion", self.eq_id)
@@ -389,6 +498,21 @@ class Device:
             self._transport.on_connection_issue(self._on_connection_issue)
             self._wire_simulated_grid_power()
             self._transport.connect()
+
+    def _clamp_power_cycle_stale_s(self, eq_config: dict) -> float:
+        """Lit power_cycle_stale_s en le remontant si besoin au-dessus de l'auto-heal
+        ET du délai d'alerte (self._alert_delay_s, déjà à jour à l'appel -- lu APRÈS
+        dans __init__/reload_config) : le redémarrage forcé est un DERNIER recours,
+        censé n'intervenir qu'après que l'auto-heal a eu sa chance et que l'utilisateur
+        a déjà été prévenu. Sans ce clamp, une config incohérente (ex. valeur par
+        erreur plus courte que le délai d'alerte) romprait cette garantie silencieusement
+        -- ici elle reste vraie par construction, quoi que l'utilisateur saisisse.
+        Marge de 60s (pas juste `>`) : laisse le temps aux deux autres tiers de
+        réellement s'exécuter sur un cycle du démon avant que celui-ci n'entre en jeu,
+        plutôt qu'un simple ex-aequo d'arrondi."""
+        configured = float(eq_config.get("power_cycle_stale_s", DEFAULT_POWER_CYCLE_STALE_S))
+        floor = max(AUTO_HEAL_STALE_S, self._alert_delay_s) + 60.0
+        return max(configured, floor)
 
     # logicalId (cf. zendure::ACTION_COMMANDS côté PHP) -> méthode Transport.
     _ACTION_DISPATCH = {

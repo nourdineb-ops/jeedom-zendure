@@ -575,6 +575,58 @@ $eqLogics = eqLogic::byType($plugin->getId());
                     </div>
                 </fieldset>
                 <fieldset>
+                    <legend><i class="fas fa-plug"></i> {{Redémarrage forcé (dernier recours)}}</legend>
+                    <div class="form-group">
+                        <label class="col-sm-3 control-label">{{Redémarrage forcé actif}}</label>
+                        <div class="col-sm-2">
+                            <input type="checkbox" class="eqLogicAttr" data-l1key="configuration" data-l2key="power_cycle_active" />
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="col-sm-3 control-label">{{Commande "Éteindre" (prise)}}</label>
+                        <div class="col-sm-6">
+                            <div class="input-group">
+                                <input type="text" class="eqLogicAttr form-control roundedLeft" data-l1key="configuration" data-l2key="power_cycle_cmd_off" placeholder="{{Aucune commande sélectionnée}}" />
+                                <span class="input-group-btn">
+                                    <a class="btn btn-default listCmdAction roundedRight" title="{{Choisir une commande}}"><i class="fas fa-list-alt"></i></a>
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="col-sm-3 control-label">{{Commande "Allumer" (prise)}}</label>
+                        <div class="col-sm-6">
+                            <div class="input-group">
+                                <input type="text" class="eqLogicAttr form-control roundedLeft" data-l1key="configuration" data-l2key="power_cycle_cmd_on" placeholder="{{Aucune commande sélectionnée}}" />
+                                <span class="input-group-btn">
+                                    <a class="btn btn-default listCmdAction roundedRight" title="{{Choisir une commande}}"><i class="fas fa-list-alt"></i></a>
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="col-sm-3 control-label">{{Coupure avant relance (s)}}</label>
+                        <div class="col-sm-2">
+                            <input type="number" step="1" min="5" class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="power_cycle_off_duration_s" placeholder="20" />
+                        </div>
+                        <label class="col-sm-3 control-label">{{Délai avant déclenchement (s)}}</label>
+                        <div class="col-sm-2">
+                            <input type="number" step="1" min="0" class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="power_cycle_stale_s" placeholder="1800" />
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="col-sm-3 control-label">{{Anti-répétition (s)}}</label>
+                        <div class="col-sm-2">
+                            <input type="number" step="1" min="0" class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="power_cycle_cooldown_s" placeholder="3600" />
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <div class="col-sm-9 col-sm-offset-3">
+                            <span class="help-block">{{Dernier recours quand l'auto-guérison ci-dessus (et le secours BLE) ne suffisent pas : coupe puis rallume l'appareil via une prise pilotée (ex. Zigbee) après ce délai de télémétrie muette, pour sortir d'un blocage (freeze) que rien d'autre ne résout. Le délai est automatiquement remonté si besoin pour rester après l'auto-guérison et l'alerte -- ne se déclenche jamais avant elles. Une seule tentative par épisode, espacées d'au moins le délai anti-répétition. Chaque déclenchement est tracé dans les logs Jeedom, le centre de notifications, et l'horodatage "Dernier redémarrage forcé" (onglet Commandes).}}</span>
+                        </div>
+                    </div>
+                </fieldset>
+                <fieldset>
                     <legend><i class="fas fa-bell"></i> {{Alertes}}</legend>
                     <div class="form-group">
                         <label class="col-sm-3 control-label">{{Alerte mail/push active}}</label>
@@ -1009,6 +1061,18 @@ $(function () {
     $('.eqLogic').off('click', '.listCmdInfo').on('click', '.listCmdInfo', function () {
         var el = $(this).closest('.form-group').find('.eqLogicAttr');
         jeedom.cmd.getSelectModal({ cmd: { type: 'info' } }, function (result) {
+            el.value(result.human);
+        });
+    });
+
+    // Même pattern que .listCmdInfo ci-dessus, mais pour les commandes ACTION de la
+    // prise pilotée (onglet Config avancée, "Redémarrage forcé") -- resolveSourceCmd()
+    // côté PHP est de toute façon agnostique du type (cmd::byString()), seul ce
+    // sélecteur a besoin de filtrer sur type:'action' pour ne proposer que les
+    // commandes pertinentes (ex. "Éteindre"/"Allumer" d'une prise Zigbee/Z2M).
+    $('.eqLogic').off('click', '.listCmdAction').on('click', '.listCmdAction', function () {
+        var el = $(this).closest('.form-group').find('.eqLogicAttr');
+        jeedom.cmd.getSelectModal({ cmd: { type: 'action' } }, function (result) {
             el.value(result.human);
         });
     });
