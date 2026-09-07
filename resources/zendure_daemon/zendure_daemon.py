@@ -18,6 +18,7 @@ import logging
 import signal
 import sys
 import time
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 from config.loader import load_config
@@ -26,6 +27,12 @@ from jeedom.callback_client import JeedomCallbackClient
 from jeedom.socket_server import JeedomSocketServer
 
 log = logging.getLogger("zendure.daemon")
+
+# Rétention des événements significatifs (WARNING+), indépendante du log principal
+# (cf. _setup_incident_log()) -- volontairement modeste : ce sont des événements
+# rares (staleness, retries abandonnés, redémarrage forcé...), pas le flot DEBUG.
+INCIDENT_LOG_MAX_BYTES = 2 * 1024 * 1024
+INCIDENT_LOG_BACKUP_COUNT = 5
 
 # Cadence de ping télémétrie (properties/read getAll) : l'appareil ne pousse pas
 # spontanément en continu, il faut le solliciter périodiquement (même ordre de
@@ -166,12 +173,51 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def _setup_incident_log(config_path: str) -> None:
+    """Ajoute un 2e handler (WARNING+ seulement) vers un fichier séparé, avec SA
+    PROPRE rotation (backups gardés) -- ajouté 2026-09-07 après une analyse
+    d'incident (2 blocages de l'appareil le 06/09) rendue difficile par la
+    découverte que le log principal (`--loglevel debug`, `log::getPathToLog(
+    'zendure_daemon')` côté PHP, cf. deamon_start()) est VIDÉ SANS AUCUNE
+    SAUVEGARDE par le cœur Jeedom dès qu'il dépasse `maxSizeLog` (5 Mo par
+    défaut, cf. log.class.php::checkLogSize(), `truncate -s 0`) -- comportement
+    du cœur, commun à tous les plugins, PAS à modifier ici. Vu le volume DEBUG
+    de ce démon (plusieurs lignes/s), ce plafond est atteint en quelques
+    heures : un incident découvert le lendemain n'a souvent déjà plus aucune
+    trace exploitable.
+
+    Écrit donc EN PLUS, pas à la place, un flux réduit (WARNING+ : staleness,
+    retries de commande abandonnés, redémarrage forcé, flapping MQTT...) vers
+    un fichier HORS de `log/` (donc hors de portée de checkLogSize()/clearAll()
+    du cœur), avec une rotation Python (RotatingFileHandler, 5 x 2 Mo) qui,
+    elle, garde ses anciennes versions (`.1` à `.5`) au lieu de les détruire --
+    largement suffisant pour ce volume, une vraie fenêtre d'analyse de
+    plusieurs jours/semaines au lieu de quelques heures.
+
+    Rangé à côté de daemon_config.json (même dossier que --config, cf.
+    jeedom::getTmpFolder('zendure') côté PHP) : déjà writable par www-data,
+    déjà confirmé persistant entre redémarrages sur ce VM (pas un tmpfs) --
+    pas de nouveau provisionnement root à faire."""
+    incident_path = Path(config_path).resolve().parent / "incidents.log"
+    handler = RotatingFileHandler(
+        str(incident_path),
+        maxBytes=INCIDENT_LOG_MAX_BYTES,
+        backupCount=INCIDENT_LOG_BACKUP_COUNT,
+        encoding="utf-8",
+    )
+    handler.setLevel(logging.WARNING)
+    handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s [%(name)s] %(message)s"))
+    logging.getLogger().addHandler(handler)
+    log.info("Journal d'incidents (WARNING+, rotation propre) : %s", incident_path)
+
+
 def main() -> None:
     args = parse_args()
     logging.basicConfig(
         level=getattr(logging, args.loglevel.upper(), logging.INFO),
         format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
     )
+    _setup_incident_log(args.config)
     daemon = ZendureDaemon(args)
     daemon.run_forever()
 

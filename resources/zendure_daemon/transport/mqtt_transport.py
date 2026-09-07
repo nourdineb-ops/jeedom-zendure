@@ -117,6 +117,10 @@ class MqttTransport(Transport):
         # valeur a été remplacée entre-temps par une commande plus récente
         # (boucle anti-injection) est abandonnée plutôt que ré-émise en retard.
         self._latest_message_id_for_property: dict = {}
+        # name -> (value, ram) : valeur la plus récente désirée pour une propriété
+        # dont l'écriture précédente n'a pas encore d'accusé -- cf. _publish_property
+        # (anti-saturation, 2026-09-07) et _fire_queued_write().
+        self._queued_latest: dict = {}
         self._pending_lock = threading.Lock()
         self._retry_stop = threading.Event()
         self._retry_thread = threading.Thread(target=self._retry_loop, daemon=True)
@@ -281,6 +285,42 @@ class MqttTransport(Transport):
         # par cohérence (retour utilisateur), pas seulement celles à haute fréquence
         # -- set_smart_mode() lui-même reste séparé, c'est SA valeur qui est pilotée,
         # pas un effet de bord à ajouter.
+        #
+        # Anti-saturation (ajouté 2026-09-07, cf. analyse des logs après 2 blocages
+        # complets de l'appareil le 06/09) : au plus UNE écriture en vol par
+        # propriété. Le régulateur anti-injection peut décider d'une nouvelle valeur
+        # toutes les 2s (voire sans cooldown du tout en régime "urgent", cf.
+        # anti_injection.py) -- nettement plus vite que le cycle relance/abandon
+        # d'une écriture sans accusé (jusqu'à WRITE_ACK_TIMEOUT_S * (WRITE_MAX_RETRIES+1)
+        # = 15s). Sans garde-fou, une commande en attente d'accusé pouvait donc se
+        # faire doubler par une commande plus récente AVANT même d'avoir eu la
+        # moindre chance d'être acquittée -- correspond exactement à la rafale de
+        # commandes jamais acquittées observée juste avant les 2 blocages du 06/09
+        # (~1/20s pendant 12 min). Rien ne prouve que ce soit LA cause (l'appareil a
+        # déjà eu des coupures de plusieurs dizaines de minutes sans écriture en jeu,
+        # cf. project_device_wifi_instability) mais rien n'empêchait non plus cet
+        # empilement -- corrigé par prudence : si une écriture pour `name` est déjà
+        # en attente, on mémorise juste la valeur la plus récente désirée
+        # (self._queued_latest) au lieu d'en publier une deuxième par-dessus ; elle
+        # part dès que l'écriture en cours se résout (accusé reçu, cf.
+        # _handle_write_reply, ou abandon après WRITE_MAX_RETRIES, cf.
+        # _check_pending_writes/_fire_queued_write). Coûte au plus un delta de
+        # WRITE_ACK_TIMEOUT_S de latence en régime normal (accusé en 150-300ms,
+        # cf. constantes WRITE_* -- négligeable), en échange de ne jamais empiler
+        # plusieurs commandes concurrentes sur la même propriété.
+        with self._pending_lock:
+            pending_id = self._latest_message_id_for_property.get(name)
+            if pending_id is not None and pending_id in self._pending_writes:
+                self._queued_latest[name] = (value, ram)
+                log.debug(
+                    "Écriture %s=%s mise en file (accusé encore attendu pour la précédente, messageId=%s)",
+                    name, value, pending_id,
+                )
+                return
+            self._queued_latest.pop(name, None)
+        self._send_property_write(name, value, ram)
+
+    def _send_property_write(self, name: str, value, ram: bool) -> None:
         properties = {name: value}
         if ram:
             properties["smartMode"] = 1
@@ -305,6 +345,17 @@ class MqttTransport(Transport):
             self._latest_message_id_for_property[name] = message_id
         self._publish_write(topic, payload_dict)
 
+    def _fire_queued_write(self, name: str) -> None:
+        """Appelé quand l'écriture en vol pour `name` vient de se résoudre (accusé
+        reçu ou abandon définitif) -- envoie la valeur la plus récente mise en
+        attente entre-temps par _publish_property(), s'il y en a une. Toujours
+        appelé HORS de _pending_lock (déadlock sinon, _publish_property le reprend)."""
+        with self._pending_lock:
+            queued = self._queued_latest.pop(name, None)
+        if queued is not None:
+            value, ram = queued
+            self._publish_property(name, value, ram)
+
     def _publish_write(self, topic: str, payload_dict: dict) -> None:
         payload = json.dumps(payload_dict)
         log.debug("Publish %s -> %s", topic, payload)
@@ -318,6 +369,11 @@ class MqttTransport(Transport):
         now = time.monotonic()
         to_retry = []
         to_drop = []
+        # Propriétés dont l'abandon définitif (ci-dessous) libère le "slot" en vol
+        # -- cf. _publish_property/_fire_queued_write (anti-saturation, 2026-09-07).
+        # PAS les entrées droppées pour cause de "déjà remplacée" juste en dessous :
+        # dans ce cas une autre écriture est déjà active pour ce nom, rien à libérer.
+        freed_names = []
         with self._pending_lock:
             for message_id, entry in list(self._pending_writes.items()):
                 if now - entry["sent_at"] < WRITE_ACK_TIMEOUT_S:
@@ -326,10 +382,14 @@ class MqttTransport(Transport):
                     # Une commande plus récente a déjà remplacé celle-ci pour
                     # la même propriété -- relancer une valeur périmée serait
                     # contre-productif (pourrait écraser la commande à jour).
+                    # Ne devrait plus arriver depuis l'anti-saturation ci-dessus
+                    # (une seule écriture en vol par propriété à la fois), gardé
+                    # par prudence en cas d'entrée orpheline.
                     to_drop.append(message_id)
                     continue
                 if entry["attempts"] > WRITE_MAX_RETRIES:
                     to_drop.append(message_id)
+                    freed_names.append(entry["name"])
                     log.warning(
                         "Commande messageId=%s (%s) abandonnée après %d tentative(s) sans accusé de réception",
                         message_id, entry["payload"].get("properties"), entry["attempts"],
@@ -346,6 +406,8 @@ class MqttTransport(Transport):
                 message_id, attempt, WRITE_MAX_RETRIES + 1, WRITE_ACK_TIMEOUT_S, payload_dict.get("properties"),
             )
             self._publish_write(topic, payload_dict)
+        for name in freed_names:
+            self._fire_queued_write(name)
 
     def _handle_write_reply(self, msg) -> None:
         log.debug("Reçu %s -> %s", msg.topic, msg.payload)
@@ -365,6 +427,10 @@ class MqttTransport(Transport):
                 "tentative (valeur probablement invalide plutôt que perdue)",
                 message_id, entry["payload"].get("properties"), success,
             )
+        # Accusé reçu (succès ou refus explicite) : le "slot" en vol pour cette
+        # propriété est libre -- envoie la valeur la plus récente mise en file
+        # entre-temps, s'il y en a une (cf. anti-saturation, 2026-09-07).
+        self._fire_queued_write(entry["name"])
 
     def _on_connect(self, client, userdata, flags, rc):
         with self._lock:
