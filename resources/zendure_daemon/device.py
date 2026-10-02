@@ -209,6 +209,24 @@ class Device:
     def request_telemetry(self) -> None:
         self._transport.request_telemetry()
 
+    def refresh_transport_status(self) -> None:
+        """Republie l'état de connexion (cf. _on_connection_change) à chaque tour de
+        boucle périodique, plutôt que seulement sur un changement détecté par
+        mqtt_transport.py (_on_connect/_on_disconnect). Corrige un cas réel constaté
+        le 2026-09-10 : la commande Jeedom transport_connected est restée bloquée à
+        vide (donc affichée "Hors ligne" en permanence, cf. zendure.class.php --
+        '' == 1 vaut false en PHP) après un unique événement de déconnexion tombé
+        dans un angle mort de logging (fenêtre trop tôt pour incidents.log), sans
+        qu'aucun _on_connect ultérieur n'ait eu de raison de se redéclencher côté
+        transport puisque la session MQTT du démon, elle, était restée valide tout
+        du long -- un affichage figé/faux qui ne se corrigeait donc jamais tout
+        seul. Avec cet appel toutes les TELEMETRY_POLL_S (60s), une valeur
+        incorrecte ou manquante s'auto-corrige au prochain tour au lieu de rester
+        bloquée indéfiniment ; en fonctionnement normal ça ne fait que republier la
+        même valeur True à l'identique, sans effet de bord (pas d'appel MQTT, juste
+        un send_event Jeedom)."""
+        self._on_connection_change(self._transport.is_connected)
+
     def _maybe_send_alert(self, alert_id: str, message: str) -> None:
         """Point de passage unique pour toute alerte humaine (mail/push, cf.
         callback_client.py::send_alert) -- respecte l'interrupteur

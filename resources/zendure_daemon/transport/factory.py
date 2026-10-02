@@ -32,6 +32,12 @@ def build_transport(eq_config: dict) -> Transport:
             "host": eq_config.get("cloud_host", "mqtteu.zen-iot.com"),
             "port": eq_config.get("cloud_port", 1883),
             "tls": eq_config.get("cloud_tls", False),
+            # Certificat auto-signé générique EMQX confirmé sur le port 8883 du cloud
+            # Zendure (2026-09-07) -- même situation que le certificat local de Chemin
+            # B, cette option existe donc aussi côté cloud (pas seulement local comme
+            # avant cette date). Sans effet tant que cloud_tls est faux (la config
+            # d'origine, 1883 sans TLS, reste le défaut qui a toujours fonctionné).
+            "tls_insecure": eq_config.get("cloud_tls_insecure", False),
             "username": eq_config.get("cloud_username"),
             "password": eq_config.get("cloud_auth_key"),  # Clé Cloud d'Autorisation
         }
@@ -40,9 +46,10 @@ def build_transport(eq_config: dict) -> Transport:
             "host": eq_config["local_host"],
             "port": eq_config.get("local_port", 1883),
             "tls": eq_config.get("local_tls", False),
-            # Certificat non vérifié : jamais posé côté cloud (cf. bloc ci-dessus,
-            # cette clé n'existe pas là), pensé pour un broker local avec un
-            # certificat auto-signé (Chemin B, cf. brief_chemin_b_local.md).
+            # Certificat non vérifié : pensé à l'origine pour un broker local avec un
+            # certificat auto-signé (Chemin B, cf. brief_chemin_b_local.md) -- le cloud
+            # a sa propre clé équivalente (cloud_tls_insecure) depuis le 2026-09-07,
+            # ce n'est donc plus "jamais côté cloud" comme précédemment documenté ici.
             "tls_insecure": eq_config.get("local_tls_insecure", False),
             "username": eq_config.get("local_username") or None,
             "password": eq_config.get("local_password") or None,

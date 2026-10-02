@@ -234,6 +234,23 @@ $eqLogics = eqLogic::byType($plugin->getId());
                                     </div>
                                 </div>
                                 <div class="form-group">
+                                    <label class="col-sm-4 control-label">{{TLS}}</label>
+                                    <div class="col-sm-8">
+                                        <input type="checkbox" class="eqLogicAttr" data-l1key="configuration" data-l2key="cloud_tls" />
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label class="col-sm-4 control-label">{{TLS sans vérification du certificat}}</label>
+                                    <div class="col-sm-8">
+                                        <input type="checkbox" class="eqLogicAttr" data-l1key="configuration" data-l2key="cloud_tls_insecure" />
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <div class="col-sm-8 col-sm-offset-4">
+                                        <span class="help-block">{{Le port 8883 du cloud Zendure répond en TLS mais avec un certificat auto-signé générique (EMQX) -- cocher aussi "sans vérification" pour s'y connecter, sinon la poignée de main TLS échoue. Par défaut (1883, sans TLS) : c'est ce qui a toujours fonctionné, ne changer que pour un test/diagnostic précis.}}</span>
+                                    </div>
+                                </div>
+                                <div class="form-group">
                                     <label class="col-sm-4 control-label">{{Nom d'utilisateur MQTT}}</label>
                                     <div class="col-sm-8">
                                         <input class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="cloud_username" />
@@ -328,8 +345,31 @@ $eqLogics = eqLogic::byType($plugin->getId());
 
                     <legend style="font-size:14px;"><i class="fas fa-bolt"></i> {{Pilotage}}</legend>
                     <?php
-                    $renderSourceRow('src_grid_papp', '{{Puissance prélevée sur le réseau (W)}}', '{{Pince/compteur dédié recommandé — plus fiable qu\'un Téléinfo pour l\'injection}}');
+                    // Champ formule (pas juste un pointeur vers UNE commande, contrairement
+                    // aux autres lignes de cet onglet, cf. renderSourceRow) : nécessaire pour
+                    // les pinces bipince non-directionnelles (magnitude seule, ex. power_b)
+                    // qu'il faut signer avec un champ "sens" séparé (ex. energy_flow_b ==
+                    // "producing") -- incident du 30/09, cf. getConfiguredSourceValue() côté
+                    // PHP. Même bouton d'aide à la saisie que les autres lignes (garde le
+                    // sélecteur "Choisir une commande"), mais il INSÈRE la référence au
+                    // curseur (classe dédiée listCmdInfoInsert, cf. script plus bas) au lieu
+                    // de remplacer tout le champ -- sinon impossible de construire une formule
+                    // à plusieurs commandes avec.
                     ?>
+                    <div class="form-group">
+                        <label class="col-sm-3 control-label">{{Puissance prélevée sur le réseau (W)}}
+                            <br><small class="text-muted" style="font-weight:normal;">{{Pince/compteur dédié recommandé — plus fiable qu'un Téléinfo pour l'injection. Accepte aussi une formule (ex. pince non-directionnelle à signer avec un champ "sens" séparé) : insérer une 1re commande, taper l'opérateur, insérer la 2e.}}</small>
+                            <br><small class="text-muted" style="font-weight:normal;">{{Exemple : #123# == "producing" ? -1 * #456# : #456#}} — {{123 et 456 sont les commandes insérées via le bouton (jamais à taper à la main)}}</small>
+                        </label>
+                        <div class="col-sm-6">
+                            <div class="input-group">
+                                <input type="text" class="eqLogicAttr form-control roundedLeft" data-l1key="configuration" data-l2key="src_grid_papp" placeholder="{{Aucune commande sélectionnée}}" />
+                                <span class="input-group-btn">
+                                    <a class="btn btn-default listCmdInfoInsert roundedRight" title="{{Insérer une commande au curseur}}"><i class="fas fa-list-alt"></i></a>
+                                </span>
+                            </div>
+                        </div>
+                    </div>
                     <p class="text-muted" style="margin:0 0 4px 15px;font-size:11px;">{{Avancé — laisser vide sauf besoin spécifique, le Zendure connaît déjà sa propre injection/production}}</p>
                     <?php
                     $renderSourceRow('src_injection', '{{Injection maison (Zendure)}}', '{{Vide = repli sur la télémétrie Zendure}}');
@@ -1062,6 +1102,19 @@ $(function () {
         var el = $(this).closest('.form-group').find('.eqLogicAttr');
         jeedom.cmd.getSelectModal({ cmd: { type: 'info' } }, function (result) {
             el.value(result.human);
+        });
+    });
+
+    // Même sélecteur que .listCmdInfo ci-dessus, mais pour le champ formule
+    // src_grid_papp (onglet Sources) : INSÈRE la référence au curseur au lieu de
+    // remplacer tout le champ (atCaret, même pattern que plugins/jMQTT et
+    // plugins/klf200 pour leurs champs "calcul") -- indispensable pour combiner
+    // plusieurs commandes dans une formule. Classe séparée de .listCmdInfo pour
+    // ne rien changer aux autres champs Source (pointeur simple, remplacement).
+    $('.eqLogic').off('click', '.listCmdInfoInsert').on('click', '.listCmdInfoInsert', function () {
+        var el = $(this).closest('.form-group').find('.eqLogicAttr');
+        jeedom.cmd.getSelectModal({ cmd: { type: 'info' } }, function (result) {
+            el.atCaret('insert', result.human);
         });
     });
 

@@ -156,6 +156,11 @@ class ZendureDaemon:
                     # d'alerte (cf. son docstring) -- le veut frais du même cycle.
                     device.check_lan_reachability()
                     device.check_telemetry_staleness()
+                    # Republie transport_connected à chaque tour (cf. son docstring,
+                    # bug du 2026-09-10) : auto-corrige une valeur Jeedom restée
+                    # figée/vide suite à un événement de (dé)connexion jamais
+                    # correctement repoussé.
+                    device.refresh_transport_status()
             if now - last_ble_failover >= BLE_FAILOVER_POLL_S:
                 last_ble_failover = now
                 for device in self._devices.values():
@@ -169,11 +174,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--apikey", required=True)
     parser.add_argument("--socketport", type=int, required=True)
     parser.add_argument("--pid", required=True)
+    # Optionnel : absent = à côté de --config (ancien comportement, cf.
+    # _setup_incident_log()).
+    parser.add_argument("--incidentlog")
     parser.add_argument("--loglevel", default="info")
     return parser.parse_args()
 
 
-def _setup_incident_log(config_path: str) -> None:
+def _setup_incident_log(config_path: str, incident_log: str | None = None) -> None:
     """Ajoute un 2e handler (WARNING+ seulement) vers un fichier séparé, avec SA
     PROPRE rotation (backups gardés) -- ajouté 2026-09-07 après une analyse
     d'incident (2 blocages de l'appareil le 06/09) rendue difficile par la
@@ -194,11 +202,15 @@ def _setup_incident_log(config_path: str) -> None:
     largement suffisant pour ce volume, une vraie fenêtre d'analyse de
     plusieurs jours/semaines au lieu de quelques heures.
 
-    Rangé à côté de daemon_config.json (même dossier que --config, cf.
-    jeedom::getTmpFolder('zendure') côté PHP) : déjà writable par www-data,
-    déjà confirmé persistant entre redémarrages sur ce VM (pas un tmpfs) --
-    pas de nouveau provisionnement root à faire."""
-    incident_path = Path(config_path).resolve().parent / "incidents.log"
+    Chemin fourni par PHP (--incidentlog, data/zendure/ du cœur, cf.
+    zendure::incidentLogPath()). Repli à côté de daemon_config.json sinon --
+    mais ce dossier (jeedom::getTmpFolder) est VIDÉ à chaque redémarrage de la
+    VM, contrairement à ce qui avait été supposé ici à l'origine (historique
+    perdu au reboot du 2026-10-02)."""
+    if incident_log:
+        incident_path = Path(incident_log)
+    else:
+        incident_path = Path(config_path).resolve().parent / "incidents.log"
     handler = RotatingFileHandler(
         str(incident_path),
         maxBytes=INCIDENT_LOG_MAX_BYTES,
@@ -217,7 +229,7 @@ def main() -> None:
         level=getattr(logging, args.loglevel.upper(), logging.INFO),
         format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
     )
-    _setup_incident_log(args.config)
+    _setup_incident_log(args.config, args.incidentlog)
     daemon = ZendureDaemon(args)
     daemon.run_forever()
 
