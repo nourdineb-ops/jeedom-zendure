@@ -203,6 +203,23 @@ class zendure extends eqLogic
         return $return;
     }
 
+    /**
+     * Journal d'incidents du démon (cf. _setup_incident_log() côté Python) :
+     * dans data/zendure/ du cœur Jeedom, PAS dans getTmpFolder() -- /tmp/jeedom
+     * est vidé à chaque redémarrage de la VM (constaté le 2026-10-02 : tout
+     * l'historique d'incidents perdu au reboot de 07:42). Hors du dossier du
+     * plugin aussi (scripts/deploy.sh fait un rsync --delete), et inclus dans les
+     * sauvegardes Jeedom.
+     */
+    public static function incidentLogPath()
+    {
+        $dir = __DIR__ . '/../../../../data/zendure';
+        if (!is_dir($dir)) {
+            mkdir($dir, 0775, true);
+        }
+        return realpath($dir) . '/incidents.log';
+    }
+
     public static function deamon_start()
     {
         self::deamon_stop();
@@ -226,6 +243,7 @@ class zendure extends eqLogic
         $cmd .= ' --socketport ' . self::socketport();
         $cmd .= ' --pid ' . self::daemonPidFile();
         $cmd .= ' --loglevel ' . log::convertLogLevel(log::getLogLevel('zendure'));
+        $cmd .= ' --incidentlog ' . self::incidentLogPath();
         log::add('zendure', 'info', 'Démarrage du démon Zendure : ' . $cmd);
         exec($cmd . ' >> ' . log::getPathToLog('zendure_daemon') . ' 2>&1 &');
 
