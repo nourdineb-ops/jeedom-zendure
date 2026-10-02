@@ -112,6 +112,13 @@ class zendure extends eqLogic
         'total_output_kwh_veille' => array('Délivré par la batterie (veille)', 'numeric', 'kWh'),
         'total_from_edf_kwh' => array('Prélevé au réseau (jour)', 'numeric', 'kWh'),
         'total_from_edf_kwh_veille' => array('Prélevé au réseau (veille)', 'numeric', 'kWh'),
+        // Résultat matérialisé de src_grid_papp quand c'est une formule (cf.
+        // getConfiguredSourceValue()), écrit par onGridPowerEvent() : une formule
+        // ne désigne pas UNE commande, donc sans ce relais le widget Flux
+        // (GridId) et estimateWindowConsumptionKwh() (historique) n'avaient plus
+        // rien à lire -- constaté 2026-10-02, cercle Réseau vide sur le dashboard.
+        // Convention de signe de src_grid_papp : > 0 import, < 0 injection.
+        'grid_power_source' => array('Puissance réseau (source)', 'numeric', 'W'),
         // Jamais alimentée par valeur (cf. createOrUpdateCompactWidgets()) : sert
         // uniquement de support au widget jauge (zf_gauge), dont l'affichage live
         // vient des paramètres IntensiteId/ImaxA, pas de la valeur de cette
@@ -705,14 +712,28 @@ class zendure extends eqLogic
      * #[Objet][Eq][Cmd]# stockée dans la config via le sélecteur natif
      * jeedom.cmd.getSelectModal, ex. src_intensite / src_grid_papp) — jamais
      * d'ID en dur, cf. addendum §11.
+     *
+     * Cas particulier : si la config contient plus qu'une seule référence
+     * (ex. une formule combinant une pince bipince non-directionnelle avec un
+     * champ "sens" séparé, cf. src_grid_papp et energy_flow_b/producing --
+     * incident du 30/09 : la pince ne remonte qu'une magnitude, jamais de
+     * signe), on passe par l'évaluateur d'expression générique de Jeedom
+     * (même moteur que les commandes "calcul" du plugin virtual) plutôt que
+     * la résolution simple vers UNE commande. Décidé plutôt qu'un équipement
+     * virtuel séparé : l'utilisateur veut la formule directement dans ce
+     * champ, pas un objet Jeedom supplémentaire à maintenir.
      */
     private function getConfiguredSourceValue($configKey)
     {
-        $cmd = $this->resolveSourceCmd($configKey);
-        if (!is_object($cmd)) {
+        $human = trim((string) $this->getConfiguration($configKey));
+        if ($human === '') {
             return 0;
         }
-        return $cmd->execCmd();
+        if (preg_match('/^#[^#]+#$/', $human)) {
+            $cmd = $this->resolveSourceCmd($configKey);
+            return is_object($cmd) ? $cmd->execCmd() : 0;
+        }
+        return jeedom::evaluateExpression($human);
     }
 
     /**
@@ -758,6 +779,16 @@ class zendure extends eqLogic
      */
     private function resolveSourceCmd($configKey)
     {
+        // getConfiguration('') renvoie tout le tableau de configuration (pas une
+        // chaîne) -- appelé ainsi par resolveSourceCmdOrDefault('', ...) pour
+        // packInputPower/gridInputPower (aucune source externe possible pour ces
+        // deux-là, cf. postSave()). Sans ce garde-fou, cmd::byString() reçoit ce
+        // tableau et déclenche des "Array to string conversion" en cascade
+        // (rattrapées plus loin, mais bruyantes à chaque sauvegarde) avant de
+        // retomber sur null de toute façon -- autant court-circuiter ici.
+        if ($configKey === '') {
+            return null;
+        }
         $human = $this->getConfiguration($configKey);
         if (empty($human)) {
             return null;
@@ -775,9 +806,27 @@ class zendure extends eqLogic
      * plugin (par logicalId) si rien n'est configuré — pendant PHP de
      * getSourceOrDefault(), mais renvoie l'objet cmd (pour en extraire l'id
      * côté widget Flux, cf. createOrUpdateFluxWidget()) plutôt que sa valeur.
+     *
+     * Une config "formule" (cf. getConfiguredSourceValue()) ne désigne PAS une
+     * commande unique -- pas de repli sur le défaut interne dans ce cas : ce
+     * défaut (ex. grid_power, alimenté par la télémétrie Zendure elle-même)
+     * mesure autre chose que la pince externe visée par la formule, cf.
+     * onGridPowerEvent(). Renvoyer quand même cet objet romprait silencieusement
+     * estimateWindowConsumptionKwh() (moyenne historique sur la mauvaise
+     * source). Exception : src_grid_papp renvoie grid_power_source, le
+     * résultat de sa formule recopié par onGridPowerEvent() -- les autres
+     * renvoient null (repli sur legacySocTarget(), chemin existant).
      */
     private function resolveSourceCmdOrDefault($configKey, $defaultLogicalId)
     {
+        // cf. le même garde-fou dans registerTelemetryListener() : getConfiguration('')
+        // renvoie tout le tableau de configuration, pas une chaîne.
+        $human = $configKey === '' ? '' : trim((string) $this->getConfiguration($configKey));
+        if ($human !== '' && !preg_match('/^#[^#]+#$/', $human)) {
+            // Seule src_grid_papp a un relais matérialisé (grid_power_source,
+            // alimenté par onGridPowerEvent()) -- pour les autres, pas de repli.
+            return $configKey === 'src_grid_papp' ? $this->getCmd(null, 'grid_power_source') : null;
+        }
         $cmd = $this->resolveSourceCmd($configKey);
         if (is_object($cmd)) {
             return $cmd;
@@ -2501,8 +2550,30 @@ class zendure extends eqLogic
      */
     private function registerTelemetryListener($configKey, $defaultLogicalId, $eventFunction)
     {
-        $cmd = $this->resolveSourceCmdOrDefault($configKey, $defaultLogicalId);
-        if (!is_object($cmd)) {
+        // Config "formule" (cf. getConfiguredSourceValue()) : pas UNE commande à
+        // écouter mais potentiellement plusieurs (ex. la pince ET le champ "sens")
+        // -- n'importe laquelle peut faire changer le résultat, donc on écoute
+        // toutes les références numériques trouvées dans la formule plutôt que de
+        // passer par resolveSourceCmdOrDefault() (qui ne résout qu'une commande
+        // unique et renvoie null pour une formule, cf. son commentaire).
+        //
+        // $configKey == '' (packInputPower/gridInputPower, pas de source externe
+        // possible pour ces deux-là) : jamais de formule par construction, cf.
+        // ses deux appelants dans postSave() -- éviter getConfiguration(''), qui
+        // renvoie tout le tableau de configuration (pas une chaîne : cassait la
+        // détection de formule ci-dessous, Array to string conversion).
+        $cmdIds = array();
+        $human = $configKey === '' ? '' : trim((string) $this->getConfiguration($configKey));
+        if ($human !== '' && !preg_match('/^#[^#]+#$/', $human)) {
+            preg_match_all('/#([0-9]+)#/', $human, $matches);
+            $cmdIds = array_unique(array_map('intval', $matches[1]));
+        } else {
+            $cmd = $this->resolveSourceCmdOrDefault($configKey, $defaultLogicalId);
+            if (is_object($cmd)) {
+                $cmdIds[] = $cmd->getId();
+            }
+        }
+        if (empty($cmdIds)) {
             $this->removeTelemetryListener($eventFunction);
             return;
         }
@@ -2516,9 +2587,11 @@ class zendure extends eqLogic
         $listener->setFunction($eventFunction);
         $listener->setOption($option);
         $listener->emptyEvent();
-        $listener->addEvent($cmd->getId());
+        foreach ($cmdIds as $cmdId) {
+            $listener->addEvent($cmdId);
+        }
         $listener->save();
-        log::add('zendure', 'debug', 'registerTelemetryListener(' . $eventFunction . ') eq_id=' . $this->getId() . ' -> cmd_id=' . $cmd->getId());
+        log::add('zendure', 'debug', 'registerTelemetryListener(' . $eventFunction . ') eq_id=' . $this->getId() . ' -> cmd_id(s)=' . implode(',', $cmdIds));
     }
 
     private function removeTelemetryListener($eventFunction)
@@ -2538,21 +2611,32 @@ class zendure extends eqLogic
     public static function onGridPowerEvent($_options)
     {
         $eqId = $_options['eq_id'] ?? null;
-        $value = $_options['value'] ?? null;
-        if ($eqId === null || $value === null) {
+        if ($eqId === null) {
             return;
         }
-        log::add('zendure', 'debug', 'onGridPowerEvent eq_id=' . $eqId . ' value=' . $value . 'W');
-        self::sendToDaemon(array(
-            'type' => 'grid_power',
-            'eq_id' => (int) $eqId,
-            'value_w' => (float) $value,
-        ));
-
         $eqLogic = eqLogic::byId((int) $eqId);
         if (!is_object($eqLogic)) {
             return;
         }
+        // PAS $_options['value'] tel quel : avec une formule sur src_grid_papp
+        // (cf. getConfiguredSourceValue()), le listener est abonné à PLUSIEURS
+        // commandes (registerTelemetryListener()) et peut se déclencher sur
+        // n'importe laquelle d'entre elles -- sa valeur brute individuelle n'est
+        // pas le résultat de la formule. On relit donc la même résolution que
+        // partout ailleurs (getSourceOrDefault) plutôt que de faire confiance à
+        // l'événement qui a déclenché l'appel.
+        $value = (float) $eqLogic->getSourceOrDefault('src_grid_papp', 'grid_power');
+        log::add('zendure', 'debug', 'onGridPowerEvent eq_id=' . $eqId . ' value=' . $value . 'W');
+        $sourceCmd = $eqLogic->getCmd(null, 'grid_power_source');
+        if (is_object($sourceCmd) && !preg_match('/^#[^#]+#$/', trim((string) $eqLogic->getConfiguration('src_grid_papp')))) {
+            $sourceCmd->event($value);
+        }
+        self::sendToDaemon(array(
+            'type' => 'grid_power',
+            'eq_id' => (int) $eqId,
+            'value_w' => $value,
+        ));
+
         // Convention grid_power > 0 = import réseau (normal), < 0 = injection (à
         // éviter) — cf. toHtmlCondense(). La dépense ne compte jamais l'export.
         // depense_jour : seulement si aucune source externe ne fait déjà ce calcul
