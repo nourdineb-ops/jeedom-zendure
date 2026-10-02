@@ -478,6 +478,13 @@ class zendure extends eqLogic
             $conf['cloud_host'] = $this->getConfiguration('cloud_host', config::byKey('default_cloud_host', 'zendure', 'mqtteu.zen-iot.com'));
             $conf['cloud_port'] = $this->getConfiguration('cloud_port', config::byKey('default_cloud_port', 'zendure', 1883));
             $conf['cloud_tls'] = (bool) $this->getConfiguration('cloud_tls', false);
+            // Certificat auto-signé générique EMQX confirmé sur le port 8883 du cloud
+            // Zendure (testé 2026-09-07, openssl s_client : issuer "EMQ RootCA",
+            // auto-signée) -- même situation que le certificat local de Chemin B.
+            // Option ajoutée pour permettre de tester le cloud en TLS malgré ça (pas
+            // utilisée par défaut : la config d'origine, 1883 sans TLS, a toujours
+            // fonctionné sans y toucher).
+            $conf['cloud_tls_insecure'] = (bool) $this->getConfiguration('cloud_tls_insecure', false);
             $conf['cloud_username'] = $this->getConfiguration('cloud_username');
             $conf['cloud_auth_key'] = $this->getConfiguration('cloud_auth_key');
             $conf['cloud_client_id'] = $this->getConfiguration('cloud_client_id');

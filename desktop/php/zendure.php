@@ -234,6 +234,23 @@ $eqLogics = eqLogic::byType($plugin->getId());
                                     </div>
                                 </div>
                                 <div class="form-group">
+                                    <label class="col-sm-4 control-label">{{TLS}}</label>
+                                    <div class="col-sm-8">
+                                        <input type="checkbox" class="eqLogicAttr" data-l1key="configuration" data-l2key="cloud_tls" />
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label class="col-sm-4 control-label">{{TLS sans vérification du certificat}}</label>
+                                    <div class="col-sm-8">
+                                        <input type="checkbox" class="eqLogicAttr" data-l1key="configuration" data-l2key="cloud_tls_insecure" />
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <div class="col-sm-8 col-sm-offset-4">
+                                        <span class="help-block">{{Le port 8883 du cloud Zendure répond en TLS mais avec un certificat auto-signé générique (EMQX) -- cocher aussi "sans vérification" pour s'y connecter, sinon la poignée de main TLS échoue. Par défaut (1883, sans TLS) : c'est ce qui a toujours fonctionné, ne changer que pour un test/diagnostic précis.}}</span>
+                                    </div>
+                                </div>
+                                <div class="form-group">
                                     <label class="col-sm-4 control-label">{{Nom d'utilisateur MQTT}}</label>
                                     <div class="col-sm-8">
                                         <input class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="cloud_username" />
