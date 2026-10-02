@@ -156,6 +156,11 @@ class ZendureDaemon:
                     # d'alerte (cf. son docstring) -- le veut frais du même cycle.
                     device.check_lan_reachability()
                     device.check_telemetry_staleness()
+                    # Republie transport_connected à chaque tour (cf. son docstring,
+                    # bug du 2026-09-10) : auto-corrige une valeur Jeedom restée
+                    # figée/vide suite à un événement de (dé)connexion jamais
+                    # correctement repoussé.
+                    device.refresh_transport_status()
             if now - last_ble_failover >= BLE_FAILOVER_POLL_S:
                 last_ble_failover = now
                 for device in self._devices.values():
