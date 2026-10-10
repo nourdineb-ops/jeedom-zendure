@@ -2981,11 +2981,23 @@ class zendureCmd extends cmd
     {
         /* @var zendure $eqLogic */
         $eqLogic = $this->getEqLogic();
+        $value = $_options['slider'] ?? $_options['select'] ?? null;
+        // Curseur/liste exécuté sans valeur : rien à envoyer (le démon ne peut
+        // qu'échouer, "valeur invalide ... None"). Constaté le 2026-10-02 à 11:08 :
+        // les 5 commandes de pilotage exécutées d'un coup sans valeur, origine non
+        // reproduite -- l'appelant est journalisé pour l'identifier si ça revient.
+        if (in_array($this->getSubType(), array('slider', 'select')) && ($value === null || $value === '')) {
+            $caller = array_map(function ($f) {
+                return ($f['class'] ?? '') . ($f['type'] ?? '') . $f['function'] . (isset($f['line']) ? ':' . $f['line'] : '');
+            }, array_slice(debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS, 6), 1));
+            log::add('zendure', 'warning', 'Action ' . $this->getLogicalId() . ' exécutée sans valeur, ignorée (appelant : ' . implode(' < ', $caller) . ', requête : ' . ($_SERVER['REQUEST_URI'] ?? 'cli') . ')');
+            return;
+        }
         zendure::sendToDaemon(array(
             'type' => 'action',
             'eq_id' => $eqLogic->getId(),
             'logical_id' => $this->getLogicalId(),
-            'value' => $_options['slider'] ?? $_options['select'] ?? null,
+            'value' => $value,
         ));
     }
 }
