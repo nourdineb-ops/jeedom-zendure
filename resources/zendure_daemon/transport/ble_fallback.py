@@ -12,15 +12,13 @@ occasionnelle et bornée dans le temps, calée sur la cadence du cron HP
 contention sur le radio -- pas de connexion permanente qui monopoliserait
 le temps d'écoute du scan passif.
 
-Protocole confirmé en direct contre un Hyper 2000 le 2026-07-22 (cf.
-ble_probe.py, qui réutilise ce module) et documenté par la communauté
+Protocole confirmé en direct contre un Hyper 2000 et documenté par la communauté
 (`epicRE/zendure_ble`) : mêmes UUID GATT et même format JSON que le
 protocole MQTT déjà géré par ce plugin (telemetry_map.translate_properties()
 sait donc directement interpréter ce qu'on récupère ici).
 
 Ne fait AUCUNE écriture : lecture seule tant que le mécanisme d'écriture
-sans flash n'est pas confirmé côté BLE (cf. commentaire ble_probe.py) --
-un secours qui rendrait la télémétrie visible pendant une panne WiFi n'a
+sans flash n'est pas confirmé côté BLE -- un secours qui rendrait la télémétrie visible pendant une panne WiFi n'a
 pas besoin d'écrire quoi que ce soit sur l'appareil.
 """
 

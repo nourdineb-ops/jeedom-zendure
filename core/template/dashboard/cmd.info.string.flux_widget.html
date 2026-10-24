@@ -656,9 +656,9 @@ fichier reste correct si on le replace un jour en `type=cmd`.
         // ce champ ne peut structurellement pas coder un sens de charge).
         // Deux champs bruts séparés donnent le vrai sens : outputPackPower
         // (puissance VERS le pack = charge, cf. packChargeId) et
-        // packInputPower (puissance DEPUIS le pack = décharge, cf.
+        // packInputPower (puissance DEPUIS le pack = décharge
         // packDischargeId) -- confirmé positif/décharge et négatif/charge
-        // dans ce sens via [[project_device_automatic_mode]] (memory) :
+        // dans ce sens :
         // "outputPackPower (power going INTO the pack, i.e. charging)".
         // "Maison" (ci-dessus) reste sur "injected" seul, volontairement
         // inchangé -- confirmé correct par l'utilisateur (outputHomePower
@@ -764,7 +764,7 @@ fichier reste correct si on le replace un jour en `type=cmd`.
     // les heartbeatS secondes même sans changement (heartbeat, cf. TelemetryThrottle
     // Python) -- si AUCUNE des commandes VRAIMENT issues de Zendure (cf.
     // ZENDURE_ONLY_KEYS ci-dessous) n'a poussé de valeur depuis plus de 2x ce
-    // délai, la coupure est réelle (pas juste un flux resté stable), cf.
+    // délai, la coupure est réelle (pas juste un flux resté stable)
     // commentaire de HeartbeatS côté PHP (createOrUpdateFluxWidget()). x2 plutôt que
     // x1 : marge contre la gigue réseau/démon normale, pour éviter les faux positifs
     // à chaque cycle un peu en retard. L'affichage (masquage "—" + arrêt des

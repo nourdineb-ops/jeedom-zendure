@@ -3,8 +3,8 @@
 /* This file is part of Jeedom.
  *
  * Plugin Zendure — pilotage direct d'un Zendure Hyper 2000 (sans Home Assistant).
- * Voir brief_cadrage_plugin_zendure_jeedom.md et l'addendum §11-§15 pour le contexte
- * de conception complet (config-over-code, transport Cloud/Local, anti-injection).
+ * Conception : configuration plutôt que code en dur, transport Cloud/Simulation,
+ * anti-injection en boucle rapide côté démon.
  */
 
 class zendure extends eqLogic
@@ -28,17 +28,17 @@ class zendure extends eqLogic
         // BOÎTIER lui-même répond encore sur le LAN (ICMP) -- signal complémentaire
         // pour distinguer "coupure WiFi totale de l'appareil" (ni ping ni MQTT/BLE) de
         // "appareil présent sur le réseau mais MQTT/cloud en rade" (ping OK, silence
-        // MQTT). Nécessite que l'utilisateur renseigne device_ip (onglet Config avancée).
+        // MQTT). Nécessite que l'utilisateur renseigne device_ip (section « Redémarrage forcé » de l'onglet Comportement).
         'lan_ping_online' => array('Appareil joignable en local (ping)', 'binary', ''),
         'lan_ping_ms' => array('Latence ping local', 'numeric', 'ms'),
         // Alias curé de la propriété brute socStatus (cf. telemetry_map.py) -- 0=normal,
         // 1=auto-calibration en cours (confirmé dans les traductions de Zendure/Zendure-HA).
         // Suivi purement informatif : aucune action ne se déclenche là-dessus.
         'calibration_status' => array('État calibration SOC (0=normal, 1=en cours)', 'numeric', ''),
-        // Traçabilité du redémarrage forcé (cf. onglet Config avancée "Redémarrage
+        // Traçabilité du redémarrage forcé (cf. section « Redémarrage forcé » de l'onglet Comportement "Redémarrage
         // forcé", device.py::check_telemetry_staleness / zendure::executePowerCycle())
-        // -- dernier recours (coupure/relance via une prise pilotée) quand l'auto-heal
-        // et l'alerte n'ont pas suffi face à un vrai blocage (freeze) de l'appareil.
+        // -- dernier recours (coupure/relance via une prise pilotée) quand l'alerte
+        // n'a pas suffi face à un vrai blocage (freeze) de l'appareil.
         // Historisé comme le reste d'INFO_COMMANDS : permet de voir dans le temps si ça
         // se reproduit, sans avoir à fouiller les logs à chaque fois.
         'power_cycle_last_at' => array('Dernier redémarrage forcé (prise)', 'string', ''),
@@ -159,7 +159,7 @@ class zendure extends eqLogic
     {
         log::remove('zendure_update');
         return array(
-            'script' => dirname(__FILE__) . '/../../resources/install.sh',
+            'script' => dirname(__FILE__) . '/../../resources/install.sh ' . jeedom::getTmpFolder('zendure') . '/dependancy',
             'log' => log::getPathToLog('zendure_update'),
         );
     }
@@ -373,7 +373,7 @@ class zendure extends eqLogic
         $equipments = array();
         foreach (self::byType('zendure', true) as $eqLogic) {
             /* @var zendure $eqLogic */
-            // Équipement absent de la liste -> le démon (reload_config(), cf.
+            // Équipement absent de la liste -> le démon (reload_config()
             // zendure_daemon.py) le détecte comme "disparu" et coupe proprement
             // sa connexion MQTT (Device.stop(), y compris le repli smartMode).
             // C'est le levier demandé pour cohabiter avec un autre pilote (Home
@@ -434,10 +434,12 @@ class zendure extends eqLogic
             'urgent_injection_w' => $this->getConfiguration('urgent_injection_w', -20),
         );
 
-        // Fallback 'cloud' (pas 'local', retiré de l'IHM, cf. ensureDefaultConfiguration()) :
-        // ne devrait jamais servir en pratique puisque preSave() persiste déjà la valeur dès
-        // la création, gardé pour les eqLogics existants créés avant ce correctif.
+        // Seuls 'cloud' et 'simulation' existent ; toute autre valeur (ex. un ancien
+        // mode 'local' d'une version précédente) retombe sur 'cloud'.
         $mode = $this->getConfiguration('mode_connexion', 'cloud');
+        if ($mode != 'simulation') {
+            $mode = 'cloud';
+        }
         $conf = array(
             'eq_id' => $this->getId(),
             'device_id' => $this->getConfiguration('device_id'),
@@ -459,7 +461,7 @@ class zendure extends eqLogic
             'telemetry_noise_threshold' => (float) $this->getConfiguration('telemetry_noise_threshold', config::byKey('default_telemetry_noise_threshold', 'zendure', 3)),
             // Secours BLE (cf. device.py::maybe_ble_failover) : désactivé par défaut,
             // ne se déclenche de toute façon que si la télémétrie MQTT est déjà
-            // muette -- ne concerne jamais l'écriture (lecture seule, cf.
+            // muette -- ne concerne jamais l'écriture (lecture seule
             // transport/ble_fallback.py), et cadencé sur le cron HP (5 min), pas une
             // connexion permanente (demande explicite : cohabitation avec
             // TheengsGateway sur le même adaptateur Bluetooth).
@@ -471,12 +473,6 @@ class zendure extends eqLogic
             // côté box/routeur, l'appareil se réattribue une IP DHCP sinon).
             'lan_ping_active' => (bool) $this->getConfiguration('lan_ping_active', 0),
             'device_ip' => $this->getConfiguration('device_ip', ''),
-            // Auto-heal (cf. lan_ping.py::kill_zombie_connection, incident 2026-08-24) :
-            // désactivé par défaut, nécessite un provisionnement root fait à la main sur
-            // CE VM (script + règle sudoers, hors du présent dépôt/déploiement) -- une
-            // installation neuve du plugin n'a pas ce script, ss -K échouera simplement
-            // (loggé, sans casser quoi que ce soit) tant que ce n'est pas fait.
-            'auto_heal_active' => (bool) $this->getConfiguration('auto_heal_active', 0),
             // Alerte humaine (mail/push) : interrupteur + délai réglés par
             // l'utilisateur (trop de mails malgré le délai fixe de 5 min déjà en
             // place, échange du 2026-09-03) -- cf. device.py::_maybe_send_alert().
@@ -486,13 +482,13 @@ class zendure extends eqLogic
             // dans les logs Jeedom quoi qu'il arrive.
             'alert_mail_active' => (bool) $this->getConfiguration('alert_mail_active', 1),
             'alert_delay_s' => (int) $this->getConfiguration('alert_delay_s', 300),
-            // Redémarrage forcé (dernier recours, cf. onglet Config avancée) : désactivé
+            // Redémarrage forcé (dernier recours, cf. section « Redémarrage forcé » de l'onglet Comportement) : désactivé
             // par défaut, nécessite les deux commandes "prise" configurées (résolues côté
             // PHP via resolveSourceCmd(), cf. executePowerCycle()) sans quoi le démon
             // demandera quand même le redémarrage et callback.php loggera l'échec plutôt
             // que de tenter quoi que ce soit à l'aveugle. Les seuils/anti-répétition sont
             // volontairement clampés côté démon (device.py) pour ne jamais pouvoir
-            // déclencher avant l'auto-heal/l'alerte, quelle que soit cette config.
+            // déclencher avant l'alerte, quelle que soit cette config.
             'power_cycle_active' => (bool) $this->getConfiguration('power_cycle_active', 0),
             'power_cycle_stale_s' => (int) $this->getConfiguration('power_cycle_stale_s', 600),
             'power_cycle_off_duration_s' => (int) $this->getConfiguration('power_cycle_off_duration_s', 5),
@@ -505,7 +501,7 @@ class zendure extends eqLogic
             $conf['cloud_tls'] = (bool) $this->getConfiguration('cloud_tls', false);
             // Certificat auto-signé générique EMQX confirmé sur le port 8883 du cloud
             // Zendure (testé 2026-09-07, openssl s_client : issuer "EMQ RootCA",
-            // auto-signée) -- même situation que le certificat local de Chemin B.
+            // auto-signée).
             // Option ajoutée pour permettre de tester le cloud en TLS malgré ça (pas
             // utilisée par défaut : la config d'origine, 1883 sans TLS, a toujours
             // fonctionné sans y toucher).
@@ -524,16 +520,6 @@ class zendure extends eqLogic
                 'cycle_period_s' => (int) $this->getConfiguration('simulation_cycle_period_s', 900),
                 'initial_soc' => (float) $this->getConfiguration('simulation_initial_soc', 50),
             );
-        } else {
-            $conf['local_host'] = $this->getConfiguration('local_host');
-            $conf['local_port'] = $this->getConfiguration('local_port', 1883);
-            $conf['local_tls'] = (bool) $this->getConfiguration('local_tls', false);
-            // Certificat non vérifié : UNIQUEMENT sous mode local (jamais posé côté
-            // cloud, cf. bloc if($mode=='cloud') ci-dessus qui n'a pas cette clé) --
-            // pensé pour un broker local avec certificat auto-signé (Chemin B).
-            $conf['local_tls_insecure'] = (bool) $this->getConfiguration('local_tls_insecure', false);
-            $conf['local_username'] = $this->getConfiguration('local_username');
-            $conf['local_password'] = $this->getConfiguration('local_password');
         }
         return $conf;
     }
@@ -828,7 +814,7 @@ class zendure extends eqLogic
      * Une config "formule" (cf. getConfiguredSourceValue()) ne désigne PAS une
      * commande unique -- pas de repli sur le défaut interne dans ce cas : ce
      * défaut (ex. grid_power, alimenté par la télémétrie Zendure elle-même)
-     * mesure autre chose que la pince externe visée par la formule, cf.
+     * mesure autre chose que la pince externe visée par la formule
      * onGridPowerEvent(). Renvoyer quand même cet objet romprait silencieusement
      * estimateWindowConsumptionKwh() (moyenne historique sur la mauvaise
      * source). Exception : src_grid_papp renvoie grid_power_source, le
@@ -862,7 +848,7 @@ class zendure extends eqLogic
      * son alimentation via une prise pilotée (ex. Zigbee/Z2M, cf. onglet Config
      * avancée "Redémarrage forcé"), au lieu des commandes MQTT habituelles --
      * appelé depuis callback.php quand le démon (device.py::check_telemetry_staleness)
-     * a déjà épuisé l'auto-heal (ss -K) et déjà alerté l'utilisateur sans que la
+     * a déjà alerté l'utilisateur sans que la
      * télémétrie ne revienne. Public (contrairement à resolveSourceCmd) : appelé
      * depuis callback.php, hors du contexte objet habituel (listener core statique).
      *
@@ -891,7 +877,7 @@ class zendure extends eqLogic
         $onCmd = $this->resolveSourceCmd('power_cycle_cmd_on');
         if (!is_object($offCmd) || !is_object($onCmd)) {
             log::add('zendure', 'error', '[Redémarrage forcé] commande(s) prise non configurée(s) ou introuvable(s) (eq_id=' . $this->getId() . ')');
-            message::add('zendure', '{{Redémarrage forcé Zendure demandé mais la prise pilotée n\'est pas configurée (onglet Config avancée, "Redémarrage forcé").}}', '', $tag);
+            message::add('zendure', '{{Redémarrage forcé Zendure demandé mais la prise pilotée n\'est pas configurée (section « Redémarrage forcé » de l\'onglet Comportement, "Redémarrage forcé").}}', '', $tag);
             return false;
         }
 
@@ -946,11 +932,7 @@ class zendure extends eqLogic
             $this->setConfiguration('animations_actives', 1);
         }
         if ($this->getConfiguration('mode_connexion', '') == '') {
-            // 'cloud' : seul mode encore proposé dans le menu de connexion avec
-            // 'simulation' (Chemin B/local retiré de l'IHM, cf. commit 552b440) --
-            // l'ancien défaut 'local' d'ailleurs codé dans toDaemonConfig() n'est
-            // plus jamais sélectionnable et ferait planter build_transport() côté
-            // démon (local_host requis, absent) si jamais atteint.
+            // 'cloud' ou 'simulation' : seuls modes proposés.
             $this->setConfiguration('mode_connexion', 'cloud');
         }
         if ($this->getConfiguration('type_contrat', '') == '') {
@@ -1153,7 +1135,7 @@ class zendure extends eqLogic
         $this->trackCalibration();
 
         if (!$this->getConfiguration('anti_injection_active', 1)) {
-            // Coupure complète (même flag que la boucle rapide côté démon, cf.
+            // Coupure complète (même flag que la boucle rapide côté démon
             // toDaemonConfig()) : pas même un log de simulation, pour ne pas
             // laisser croire que le plugin surveille encore quoi que ce soit
             // pendant qu'un autre pilote (Home Assistant) est aux commandes.
@@ -1345,9 +1327,9 @@ class zendure extends eqLogic
 
     /**
      * Décide le SOC cible de charge nocturne (00h-06h HC) selon Tempo demain +
-     * prévision solaire du jour à venir. Deux logiques disponibles, cf.
-     * kwhSocTarget()/legacySocTarget() : le modèle kWh (Phase 1 de
-     * docs/brief_strategie_charge.md) si batterie_capacite_kwh est renseignée et
+     * prévision solaire du jour à venir. Deux logiques disponibles
+     * kwhSocTarget()/legacySocTarget() : le modèle kWh (Phase 1) si
+     * batterie_capacite_kwh est renseignée et
      * l'historique assez profond, sinon repli sur le portage direct de l'ancien
      * scénario Jeedom de référence (seuils fixes 100/60/80%).
      *
@@ -1453,7 +1435,7 @@ class zendure extends eqLogic
     }
 
     /**
-     * Ancienne logique à seuils fixes (v1, cf. docs/brief_strategie_charge.md) --
+     * Ancienne logique à seuils fixes (v1, --
      * conservée comme repli quand la capacité batterie n'est pas renseignée
      * (batterie_capacite_kwh vide) ou que le modèle kWh n'a pas encore assez
      * d'historique exploitable (cf. kwhSocTarget()).
@@ -1473,8 +1455,7 @@ class zendure extends eqLogic
      * Heure de réveil HP (fin de la charge nuit) : réglage explicite
      * (strategie_nuit_fenetre_matin_h) si présent > heure_fin_charge_nuit
      * (même onglet, réutilisée comme proxy) > repli 6h (observé en conditions
-     * réelles le 2026-07-27 : réveil HP à 06h05 sur cette installation, cf.
-     * docs/brief_strategie_charge.md).
+     * réelles le 2026-07-27 : réveil HP à 06h05 sur l'installation de référence).
      */
     private function resolveMorningWindowEndH()
     {
@@ -1735,7 +1716,7 @@ class zendure extends eqLogic
      * comme 0, pour ne pas tirer la moyenne vers le bas artificiellement.
      *
      * Médiane des jours plutôt que moyenne arithmétique : constaté en conditions
-     * réelles le 2026-07-27 sur cette installation, une seule journée avec une
+     * réelles le 2026-07-27 sur l'installation de référence, une seule journée avec une
      * grosse conso ponctuelle (ex. charge VE) suffit à tirer la moyenne de
      * +30-40%, faussant la cible de tous les jours suivants alors que ce n'est
      * pas représentatif. La médiane isole ce genre de jour atypique sans avoir
@@ -2025,7 +2006,7 @@ class zendure extends eqLogic
      * pour du reporting unidirectionnel, pas du pilotage temps réel. Ce
      * chemin-ci (HA) est non documenté officiellement par Zendure mais
      * hébergé sous leur propre org GitHub, et c'est le seul des deux qui
-     * fonctionne réellement pour du pilotage (cf. docs/brief_zendure_addendum_11-15.md).
+     * fonctionne réellement pour du pilotage.
      *
      * Le header HTTP "clientid" DOIT rester "zenHa" -- corrigé après un test en
      * live le 14/08 avec un vrai token qui a révélé le contraire de ce qu'on
@@ -2035,7 +2016,7 @@ class zendure extends eqLogic
      * serveur -- "Jeedom" ou toute autre valeur renvoie "appKey not exist"
      * (code 1002) avec le MÊME appKey qui réussit avec "zenHa". Un mécanisme
      * de vérification qui ne passe pas par la signature, mais un mécanisme
-     * quand même. Cf. [[project_zendure_ha_coexistence]].
+     * quand même.
      *
      * @param string $token Token ZendureApp collé par l'utilisateur.
      * @return array{
@@ -2226,7 +2207,7 @@ class zendure extends eqLogic
         }
 
         // Toutes les commandes ci-dessus (info/action/calculées, + celles créées
-        // à la volée par callback.php pour la télémétrie brute non listée, cf.
+        // à la volée par callback.php pour la télémétrie brute non listée
         // son commentaire "capture désormais TOUTE la télémétrie") sont la
         // matière première du widget Flux, pas des lectures destinées à être
         // affichées telles quelles sur le dashboard (le losange les recompose).
@@ -2309,7 +2290,7 @@ class zendure extends eqLogic
         // isVisible reste à 0 (défaut) : test 2026-07-24 concluant sur le rendu
         // (templates OK), mais tant qu'aucun placement Design ne les utilise,
         // les rendre visibles duplique gain/dépense en haut du widget standard
-        // (parent::toHtml() affiche CHAQUE commande visible séparément, cf.
+        // (parent::toHtml() affiche CHAQUE commande visible séparément
         // template_dashboard='flux' -> zendure::toHtml() -> parent::toHtml())
         // -- constaté 2026-07-25 : "Dépense jour/veille" figées (commandes
         // internes jamais réalimentées depuis le 14/07) affichées EN DOUBLE
@@ -2380,7 +2361,7 @@ class zendure extends eqLogic
         $periodeBadgeCmd->save();
 
         // Les 3 cartes "argent" (widget Flux, ligne 3) : commandes déjà
-        // existantes et déjà alimentées (moteur gain/dépense, cf.
+        // existantes et déjà alimentées (moteur gain/dépense
         // accumulateValue()) -- on ne fait qu'y attacher le même habillage
         // visuel que le widget Flux, aucune nouvelle commande.
         foreach (array(
@@ -2576,7 +2557,7 @@ class zendure extends eqLogic
         // unique et renvoie null pour une formule, cf. son commentaire).
         //
         // $configKey == '' (packInputPower/gridInputPower, pas de source externe
-        // possible pour ces deux-là) : jamais de formule par construction, cf.
+        // possible pour ces deux-là) : jamais de formule par construction
         // ses deux appelants dans postSave() -- éviter getConfiguration(''), qui
         // renvoie tout le tableau de configuration (pas une chaîne : cassait la
         // détection de formule ci-dessous, Array to string conversion).
@@ -2848,7 +2829,7 @@ class zendure extends eqLogic
      * COMPUTED_COMMANDS) : gain_brut (ce que Zendure a fourni à la maison, quelle
      * que soit sa source) MOINS cout_charge (ce que Zendure a dû tirer du réseau
      * pour recharger la batterie) -- peut légitimement être négatif (ex. juste
-     * après une charge nuit HC, avant toute décharge le lendemain), cf.
+     * après une charge nuit HC, avant toute décharge le lendemain)
      * ##GAIN_JOUR_CLASS## déjà prévu pour ce cas dans toHtmlDigest()/digest.html.
      */
     private function recomputeGainTotal($suffix)
@@ -2920,7 +2901,7 @@ class zendure extends eqLogic
         }
 
         // tempo : src_tempo_now attendu au format historique "HCJB"/"HPJR"/... (2
-        // premiers caractères HP/HC, 2 suivants JB/JW/JR = Bleu/Blanc/Rouge), cf.
+        // premiers caractères HP/HC, 2 suivants JB/JW/JR = Bleu/Blanc/Rouge)
         // scénario Jeedom de référence (id 184 "Zendure_PTEC_Minuit").
         $now = strtoupper((string) $this->getConfiguredSourceValue('src_tempo_now'));
         $hpHc = substr($now, 0, 2);

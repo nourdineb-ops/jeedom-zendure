@@ -1,6 +1,6 @@
 """Implémentation MQTT commune aux deux modes de connexion (Cloud A / Local B).
 
-Rien de spécifique à "cloud" ou "local" ici : uniquement des paramètres de connexion
+Rien de spécifique au cloud ici : uniquement des paramètres de connexion
 (host, port, tls, credentials) et des templates de topic, tous fournis par la config
 (cf. factory.py). C'est la même classe qui tourne dans les deux cas — cf. brief §4 :
 "le cœur est identique ; seule la couche transport MQTT change".
@@ -59,9 +59,8 @@ FLAP_STABLE_AFTER_S = 30.0
 # .../properties/write/reply (success:1 + valeur appliquée, ~150-300ms en
 # temps normal) -- PAS du fire-and-forget comme supposé auparavant. Mais le
 # device se connecte en clean_session=true (confirmé dans les logs Mosquitto,
-# "c1"), donc tout ce qu'on publie pendant qu'il est déconnecté (flap TLS,
-# cf. project_local_mqtt_chemin_b) est perdu sans trace côté broker -- mesuré
-# en conditions réelles le 16/08 : ~5% des properties/write jamais acquittées
+# "c1"), donc tout ce qu'on publie pendant qu'il est déconnecté (flap TLS) est perdu sans trace côté broker -- mesuré
+# en conditions réelles : ~5% des properties/write jamais acquittées
 # (207 envoyées, 196 ack, 1 refus explicite, ~10 perdues). WRITE_ACK_TIMEOUT_S
 # nettement sous la cadence de la boucle anti-injection (~10s) pour réduire la
 # fenêtre où le device tourne sur un réglage périmé, sans pour autant spammer
@@ -130,11 +129,8 @@ class MqttTransport(Transport):
             self._client.username_pw_set(conn.get("username"), conn.get("password"))
         if conn.get("tls"):
             if conn.get("tls_insecure"):
-                # Certificat non vérifié -- pensé pour un broker LOCAL avec un
-                # certificat auto-signé (Chemin B, cf. docs/brief_chemin_b_local.md),
-                # jamais pour le cloud Zendure. La config PHP (writeDaemonConfig())
-                # ne pose ce flag que sous mode_connexion=local, jamais cloud --
-                # même filet de sécurité voulu ici, pas de check dupliqué.
+                # Certificat non vérifié (option cloud_tls_insecure) : le broker
+                # cloud Zendure présente un certificat auto-signé générique.
                 self._client.tls_set(cert_reqs=ssl.CERT_NONE)
                 self._client.tls_insecure_set(True)
             else:
@@ -274,7 +270,7 @@ class MqttTransport(Transport):
         self._client.publish(topic, payload, qos=1)
 
     def _publish_property(self, name: str, value, ram: bool = False) -> None:
-        # ram=True : ajoute smartMode=1 dans le MÊME message -- "Flash Guard", cf.
+        # ram=True : ajoute smartMode=1 dans le MÊME message -- "Flash Guard"
         # Utini2000/Zendure-Solarflow-Local-HomeAssistant (README, 15/08) : smartMode
         # sélectionnerait où le firmware écrit un réglage, RAM (volatile, écritures
         # illimitées) si 1, Flash (persiste au redémarrage, nombre d'écritures limité
@@ -289,7 +285,7 @@ class MqttTransport(Transport):
         # Anti-saturation (ajouté 2026-09-07, cf. analyse des logs après 2 blocages
         # complets de l'appareil le 06/09) : au plus UNE écriture en vol par
         # propriété. Le régulateur anti-injection peut décider d'une nouvelle valeur
-        # toutes les 2s (voire sans cooldown du tout en régime "urgent", cf.
+        # toutes les 2s (voire sans cooldown du tout en régime "urgent"
         # anti_injection.py) -- nettement plus vite que le cycle relance/abandon
         # d'une écriture sans accusé (jusqu'à WRITE_ACK_TIMEOUT_S * (WRITE_MAX_RETRIES+1)
         # = 15s). Sans garde-fou, une commande en attente d'accusé pouvait donc se
@@ -297,13 +293,13 @@ class MqttTransport(Transport):
         # moindre chance d'être acquittée -- correspond exactement à la rafale de
         # commandes jamais acquittées observée juste avant les 2 blocages du 06/09
         # (~1/20s pendant 12 min). Rien ne prouve que ce soit LA cause (l'appareil a
-        # déjà eu des coupures de plusieurs dizaines de minutes sans écriture en jeu,
-        # cf. project_device_wifi_instability) mais rien n'empêchait non plus cet
+        # déjà eu des coupures de plusieurs dizaines de minutes sans écriture en jeu),
+        # mais rien n'empêchait non plus cet
         # empilement -- corrigé par prudence : si une écriture pour `name` est déjà
         # en attente, on mémorise juste la valeur la plus récente désirée
         # (self._queued_latest) au lieu d'en publier une deuxième par-dessus ; elle
-        # part dès que l'écriture en cours se résout (accusé reçu, cf.
-        # _handle_write_reply, ou abandon après WRITE_MAX_RETRIES, cf.
+        # part dès que l'écriture en cours se résout (accusé reçu
+        # _handle_write_reply, ou abandon après WRITE_MAX_RETRIES
         # _check_pending_writes/_fire_queued_write). Coûte au plus un delta de
         # WRITE_ACK_TIMEOUT_S de latence en régime normal (accusé en 150-300ms,
         # cf. constantes WRITE_* -- négligeable), en échange de ne jamais empiler
