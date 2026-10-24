@@ -392,7 +392,7 @@ valeur de l'eqLogic → défaut global ici → défaut codé en dur) :
   observés sur l'Hyper 2000, sans cause identifiée côté plugin (probablement le
   firmware ou le WiFi de l'appareil). L'alerte, le secours BLE et le redémarrage
   forcé par prise sont là pour cela. Vérifiez aussi la stabilité de votre WiFi
-  (une boucle de reconnexion « Lock to AP » a été observée avec des bornes UniFi).
+  (certains systèmes WiFi multi-bornes peuvent provoquer des reconnexions en boucle).
 - **Callbacks en erreur HTTP 500** dans le log du démon : Jeedom lui-même est
   indisponible (base de données, PHP). Le plugin n'est pas en cause.
 - **Sauvegarde Jeedom** : pendant la sauvegarde nocturne, le démon peut signaler

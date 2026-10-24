@@ -23,7 +23,7 @@ sendVarToJS([
     // filtre côté JS sur cette liste -- ~230 commandes existent par eqLogic
     // (curées + télémétrie brute auto-créée par callback.php), mais la table
     // native (une ligne complète par commande, cf. plugin.template.js) n'est
-    // pas exploitable avec un tel volume (constaté 2026-07-26). Seules les
+    // pas exploitable avec un tel volume. Seules les
     // commandes "curées" (celles que le plugin utilise réellement) restent
     // affichées ici ; le brut (packData*, debug...) reste accessible via le
     // bouton "Capture télémétrie complète" (onglet Comportement), qui couvre
@@ -306,7 +306,7 @@ $eqLogics = eqLogic::byType($plugin->getId());
                     // aux autres lignes de cet onglet, cf. renderSourceRow) : nécessaire pour
                     // les pinces bipince non-directionnelles (magnitude seule, ex. power_b)
                     // qu'il faut signer avec un champ "sens" séparé (ex. energy_flow_b ==
-                    // "producing") -- incident du 30/09, cf. getConfiguredSourceValue() côté
+                    // "producing") -- incident, cf. getConfiguredSourceValue côté
                     // PHP. Même bouton d'aide à la saisie que les autres lignes (garde le
                     // sélecteur "Choisir une commande"), mais il INSÈRE la référence au
                     // curseur (classe dédiée listCmdInfoInsert, cf. script plus bas) au lieu
@@ -680,7 +680,7 @@ $eqLogics = eqLogic::byType($plugin->getId());
                             </div>
                         </div>
                         <div class="col-sm-7">
-                            <span class="help-block" style="margin-top:8px;">{{La cible visait pile le besoin médian estimé, sans coussin -- une conso un peu au-dessus de d'habitude suffisait à vider la batterie avant le relais solaire (constaté le 15/08 et le 24/08). Ce pourcentage majore le besoin en kWh avant conversion en % de charge.}}</span>
+                            <span class="help-block" style="margin-top:8px;">{{La cible visait pile le besoin médian estimé, sans coussin -- une conso un peu au-dessus de d'habitude suffisait à vider la batterie avant le relais solaire. Ce pourcentage majore le besoin en kWh avant conversion en % de charge.}}</span>
                         </div>
                     </div>
                     <div class="form-group">
@@ -1201,8 +1201,8 @@ $(function () {
 <script>
 // Onglet "Commandes" : table standard Jeedom (core/js/plugin.template.js),
 // même mécanisme que Zigbee/Monitoring/SSH -- remplace l'ancienne table
-// "Télémétrie" maison en lecture seule (2026-07-26, demande explicite :
-// "il faut partir sur l'option standard Jeedom"). addCmdToTable() est
+// "Télémétrie" maison en lecture seule, au profit de l'option standard Jeedom).
+// addCmdToTable() est
 // appelé par le framework pour chaque commande de l'eqLogic sélectionné
 // (cf. jeeFrontEnd.pluginTemplate, plugin.template.js ~L126/710/744) --
 // sans cette fonction (même vide), la table #table_cmd ne se peuple jamais.
@@ -1212,7 +1212,7 @@ $(function () {
 //
 // Filtre sur curatedCmdLogicalIds (cf. sendVarToJS() en tête de fichier) :
 // ~230 commandes existent par eqLogic (curées + télémétrie brute), la table
-// native n'est pas exploitable avec un tel volume (signalé 2026-07-26,
+// native n'est pas exploitable avec un tel volume (
 // "ce n'est pas exploitable en l'état"). Seules les commandes réellement
 // utilisées par le plugin restent affichées ; le brut reste accessible via
 // "Capture télémétrie complète" (onglet Comportement).

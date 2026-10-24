@@ -1,6 +1,6 @@
 """Profil SuperBase V4600 -- dérivé de SuperBaseV4600.charge()/discharge()
 dans Zendure/Zendure-HA (custom_components/zendure_ha/devices/superbasev4600.py,
-récupéré le 2026-08-04). PAS testé en conditions réelles sur ce projet (aucun
+récupéré ). PAS testé en conditions réelles sur ce projet (aucun
 SuperBase V4600 possédé) -- à valider avant tout usage en production.
 
 Différence confirmée par la source face au Hyper 2000 : la charge utilise

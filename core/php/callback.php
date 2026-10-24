@@ -29,8 +29,8 @@ try {
         // ex. mail -- pas seulement un log) -- ex. reconnexions MQTT en rafale
         // (cf. transport/mqtt_transport.py).
         //
-        // Horodatage dans le logicalId (bug 2026-08-21, signalé par l'utilisateur
-        // "j'aurais dû recevoir un mail") : message::add() ne déclenche
+        // Horodatage dans le logicalId (sinon les alertes ne seraient plus notifiées
+        // après la première) : message::add ne déclenche
         // actionOnMessage (mail/push/scenario) qu'à la toute PREMIÈRE création
         // d'un logicalId donné -- toute répétition ultérieure du même logicalId
         // se contente d'incrémenter son compteur d'occurrences EN SILENCE, sans
@@ -39,9 +39,7 @@ try {
         // déjà "edge-triggered" côté démon -- appelées une seule fois par vraie
         // transition d'état, jamais en boucle -- donc pas besoin d'un
         // dédoublonnage "pour toujours" ici : au contraire, il rendait muette
-        // toute réapparition du problème après la toute première fois (constaté
-        // le 2026-08-21 : alerte de mi-juillet jamais retombée en mail malgré
-        // l'épisode de la nuit du 20 au 21 août). L'horodatage à la seconde
+        // toute réapparition du problème après la toute première fois. L'horodatage à la seconde
         // suffit à garantir un logicalId neuf par transition réelle, sans
         // risquer de doublon (callback_client.py::send_alert() ne retry pas).
         //
@@ -102,11 +100,11 @@ try {
             $cmd->setName($logicalId);
             $cmd->setSubType(is_numeric($value) ? 'numeric' : 'string');
             // Pas d'historisation par défaut : une trame peut porter des dizaines
-            // de clés à un rythme élevé (cf. échange sur la fréquence MQTT), on ne
+            // de clés à un rythme élevé, on ne
             // veut pas gonfler `history` pour des champs jamais réellement utilisés.
             // L'utilisateur peut l'activer au cas par cas depuis la commande.
             //
-            // Exception 'socLimit' (cf. 2026-08-24) : plancher batterie dynamique
+            // Exception 'socLimit' : plancher batterie dynamique
             // du BMS, désormais lu par zendure::kwhSocTarget() pour la stratégie
             // nuit -- ce n'est plus un champ brut jamais utilisé, sa variation
             // (ex. avec la température) est justement ce qu'on veut pouvoir

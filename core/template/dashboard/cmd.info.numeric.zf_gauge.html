@@ -1,5 +1,5 @@
 <!--
-Test 2026-07-24 (page Design) : jauge d'intensité (arc + aiguille SVG,
+(page Design) : jauge d'intensité (arc + aiguille SVG,
 valeur + marge) autonome, même habillage/logique que le widget Flux mais
 en widget de commande indépendant -- cf. commentaire équivalent dans
 cmd.info.string.zf_tempo_pill.html. Cas le plus exigeant des 3 templates de
@@ -18,12 +18,12 @@ desktop/js/plan.js pour insérer un widget `type=cmd` sur une page Design)
 prend le PREMIER élément avec balise (hors commentaires et <script>) comme
 racine du widget et met tout le reste dedans -- si ce premier élément est un
 <style>, notre <div> de contenu se retrouve ajouté COMME ENFANT du <style>,
-qui ne s'affiche jamais (constaté 2026-07-25 : widget invisible sur une page
+qui ne s'affiche jamais (: widget invisible sur une page
 Design alors que cmd::toHtml() produit un HTML valide côté serveur). Sur le
 dashboard normal ce bug ne se voit pas (autre chemin de rendu, cf.
 jeedom.eqLogic.toHtml), d'où le fait qu'il soit passé inaperçu longtemps.
 
-IMPORTANT #2 -- attributs de la racine (constaté 2026-07-25, une fois le
+IMPORTANT #2 -- attributs de la racine (une fois le
 widget enfin visible : impossible de le déplacer/redimensionner en mode
 édition, alors que d'autres commandes (ex. cmd.info.numeric.line.html natif)
 le sont). Comparaison avec le HTML réellement rendu d'une commande native

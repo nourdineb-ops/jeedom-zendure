@@ -5,7 +5,7 @@ CHAQUE appel, changement ou pas, dès qu'une commande est historisée (vérifié
 dans core/class/cmd.class.php::addHistoryValue) — avec la fréquence réelle de
 l'appareil (~1-2s en activité), ça remplit `history` pour rien.
 
-Règle (demande explicite, affinée après un premier test en conditions
+Règle (choix de conception, affinée après un premier test en conditions
 réelles) :
 - une clé n'est renvoyée que si sa valeur a "changé" depuis le dernier envoi —
   pour les valeurs numériques, "changé" veut dire un écart supérieur à

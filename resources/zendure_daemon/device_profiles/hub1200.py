@@ -1,6 +1,6 @@
 """Profil Hub1200 -- dérivé de Hub1200.charge()/discharge() dans
 Zendure/Zendure-HA (custom_components/zendure_ha/devices/hub1200.py,
-récupéré le 2026-08-04). PAS testé en conditions réelles sur ce projet
+récupéré ). PAS testé en conditions réelles sur ce projet
 (aucun Hub1200 possédé) -- à valider avant tout usage en production.
 
 Différences confirmées par la source face au Hyper 2000 :

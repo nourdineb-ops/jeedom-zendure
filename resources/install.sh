@@ -32,5 +32,13 @@ progress 50 "Installation des paquets Python du démon"
 "$DIR/venv/bin/pip" install --upgrade pip
 "$DIR/venv/bin/pip" install -r "$DIR/zendure_daemon/requirements.txt"
 
+# Le script tourne en root (lancé par Jeedom) : le venv doit appartenir au même
+# utilisateur que le plugin (www-data), sinon Jeedom ne peut pas le supprimer
+# proprement à la désinstallation (son repli « sudo rm -rf » ne protège pas les
+# chemins contenant des espaces ou des parenthèses, comme le gabarit setuptools
+# « script (dev).tmpl », inutile ici).
+find "$DIR/venv" -name '* *' -type f -delete 2>/dev/null || true
+chown -R --reference="$DIR" "$DIR/venv" 2>/dev/null || true
+
 progress 100 "Installation terminée"
 rm -f "$PROGRESS_FILE" 2>/dev/null || true

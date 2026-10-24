@@ -24,7 +24,7 @@ try {
     // renvoie la dernière valeur connue en base SANS son âge -- le widget la
     // recevait comme une preuve de vie "à l'instant", masquant une coupure déjà
     // ancienne pendant tout un cycle de seuil après chaque rechargement de page
-    // (signalé : badge "Hors ligne" absent alors que le device était réellement
+    // (badge "Hors ligne" absent alors que le device était réellement
     // muet depuis 40+ minutes). Un seul appel réseau au chargement suffit : la
     // suite de la détection reste 100% locale (pushes live via addUpdateFunction).
     if (init('action') == 'lastSeen') {
@@ -109,7 +109,7 @@ try {
     }
 
     // Bouton "Désactiver le mode intelligent" (config, onglet Comportement) :
-    // incident réel du 2026-07-22 -- l'appli mobile avait basculé l'appareil en
+    // incident réel -- l'appli mobile avait basculé l'appareil en
     // "Mode intelligent" (smartMode), qui fait alors ignorer nos commandes
     // deviceAutomation manuelles (charge/décharge) sans aucune erreur ni retour
     // visible -- juste un plafond de sortie qui ne bouge jamais. Jusqu'ici

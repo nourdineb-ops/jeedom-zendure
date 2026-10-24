@@ -67,12 +67,12 @@ fichier reste correct si on le replace un jour en `type=cmd`.
     align-items: center;
     margin-bottom: 0;
 }
-/* Indicateur "dernière télémétrie / dernière action" (demande explicite du
-   16/08) : très discret par construction -- petit, atténué, pas de fond ni
+/* Indicateur "dernière télémétrie / dernière action" (choix de conception) :
+    très discret par construction -- petit, atténué, pas de fond ni
    de bordure comme les badges. Simple texte d'horodatage, avec le détail
    complet (date + heure) en title (tooltip natif) pour ne pas encombrer
-   l'espace en permanence. Déplacé le 18/08 sous le losange (dans le même
-   cadre, cf. .zf-diagram-card) -- demande explicite, l'en-tête était jugé
+   l'espace en permanence. Déplacé sous le losange (dans le même
+   cadre, cf. .zf-diagram-card) -- choix de conception, l'en-tête était jugé
    trop chargé avec les badges. */
 .zendure-flux .zf-lastseen { font-size: 9.5px; color: var(--zf-text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: center; padding: 2px 8px 5px; }
 .zendure-flux .zf-lastseen-sep { margin: 0 5px; opacity: 0.5; }
@@ -83,14 +83,14 @@ fichier reste correct si on le replace un jour en `type=cmd`.
     border-radius: 20px;
     background: var(--zf-surface-2);
 }
-/* Icône seule, sans fond ni couleur Tempo (demande explicite 2026-07-25,
+/* Icône seule, sans fond ni couleur Tempo (choix de conception,
    même simplification que le badge compact cmd.info.string.zf_periode_badge.html). */
 .zendure-flux .zf-badge-tarif { background: transparent; padding: 3px 4px; font-size: 15px; }
 .zendure-flux .zf-badge-tarif .fa-sun { color: #FBC02D; }
 .zendure-flux .zf-badge-tarif .fa-moon { color: #90A4AE; }
 
 /* Cadre englobant losange + indicateur télémétrie/action (cf. .zf-lastseen,
-   déplacé ici le 18/08) : porte le fond/la bordure, .zf-diagram ne garde que
+   déplacé ici) : porte le fond/la bordure, .zf-diagram ne garde que
    ce qui est nécessaire au calcul de géométrie SVG (cf. computeGeom(), qui
    lit .zf-diagram spécifiquement -- ne pas fusionner les deux niveaux). */
 .zendure-flux .zf-diagram-card {
@@ -112,10 +112,10 @@ fichier reste correct si on le replace un jour en `type=cmd`.
        pixels réels (cf. <svg> plus bas) reste aligné 1:1 avec les noeuds
        positionnés en %, sans jamais recourir à un étirement non uniforme
        (preserveAspectRatio="none") qui faussait l'épaisseur des traits sous
-       vector-effect="non-scaling-stroke" (signalé : traits trop épais, ne
+       vector-effect="non-scaling-stroke" (traits trop épais, ne
        s'arrêtant pas net à l'entrée des cercles — comportement non uniforme non
        garanti par la spec SVG). 400:320 (plutôt que l'ancien 460:250, trop
-       plat) : signalé que les 4 cercles doivent être équidistants du hub --
+       plat) : constat : les 4 cercles doivent être équidistants du hub
        avec le hub centré (50%,50%), une même distance R en pixels dans les 4
        directions a besoin d'un espace vertical comparable à l'horizontal, ce
        qu'un ratio trop large-et-plat ne permet pas. */
@@ -124,7 +124,7 @@ fichier reste correct si on le replace un jour en `type=cmd`.
     overflow: visible;
 }
 /* z-index explicite plutôt que de compter sur l'ordre du DOM (svg avant les
-   noeuds) : signalé que les traits dépassaient visuellement des cercles —
+   noeuds) : constat : les traits dépassaient visuellement des cercles —
    un empilement implicite est trop fragile (toute future réorganisation du
    markup le casserait silencieusement). Les cercles (opaques) doivent
    toujours peindre par-dessus les traits pour masquer leurs extrémités. */
@@ -157,7 +157,7 @@ fichier reste correct si on le replace un jour en `type=cmd`.
 .zendure-flux .zf-node i { font-size: 13px; }
 /* Les 4 noeuds sont équidistants du hub (rayon R=100px, hub centré à 50%/50% de
    .zf-diagram 400x320, cf. commentaire de .zf-diagram) -- pas un simple "20%/
-   80%" arbitraire par axe : signalé que le hub devait être visuellement à
+   80%" arbitraire par axe : constat : le hub devait être visuellement à
    égale distance des 4 cercles, ce qu'un décalage en % différent par axe
    (largeur vs hauteur du diagramme) ne garantit pas. 100/400=25% en
    horizontal, 100/320=31.25% en vertical -- valeurs différentes en %, mais
@@ -215,12 +215,12 @@ fichier reste correct si on le replace un jour en `type=cmd`.
 .zendure-flux .zf-money-gain { background: rgba(76, 217, 100, 0.12); }
 .zendure-flux .zf-money-gain .zf-money-label, .zendure-flux .zf-money-gain .zf-money-value { color: #3B6D11; }
 
-/* Demande explicite du 2026-07-24 : garder jauge/Tempo/gains visibles partout
+/* Choix de conception : garder jauge/Tempo/gains visibles partout
    (contrairement à un premier essai trop large qui les avait masqués aussi,
    annulé). Pilotage par curseurs : masqué UNIQUEMENT sur une page Design
    (cf. .zf-design-context, même mécanisme que .zf-row3 .zf-money plus haut)
-   -- corrigé 2026-07-26, cette règle masquait le pilotage PARTOUT y compris
-   le dashboard normal par erreur (signalé : "a disparu du dashboard alors
+   -- corrigé, cette règle masquait le pilotage PARTOUT y compris
+   le dashboard normal par erreur ("a disparu du dashboard alors
    qu'il ne devait être masqué que sur le design"). Masquage CSS, pas
    suppression : le JS continue de le mettre à jour sans erreur. */
 .zendure-flux.zf-design-context .zf-pilotage { display: none; }
@@ -249,7 +249,7 @@ fichier reste correct si on le replace un jour en `type=cmd`.
 .zendure-flux.zf-offline .zf-badge-offline { display: inline-flex; align-items: center; gap: 4px; }
 .zendure-flux.zf-offline .zf-diagram { opacity: 0.55; }
 
-/* Contexte "page Design" (2026-07-24) : demande explicite de masquer les
+/* Contexte "page Design" : choix de conception de masquer les
    cartes Dépense veille/jour et de rendre le fond transparent UNIQUEMENT sur
    le Design, jamais sur le dashboard normal qui utilise ce même template.
    Un premier essai via le mécanisme per-objet de plan.js (display.cssApplyOn
@@ -279,24 +279,24 @@ fichier reste correct si on le replace un jour en `type=cmd`.
              PAS en unités abstraites 0-100 étirées via preserveAspectRatio="none" comme
              avant : cet étirement non uniforme faussait l'épaisseur de vector-effect=
              "non-scaling-stroke" et déformait les particules circulaires en ellipses
-             (comportement non garanti par la spec SVG sous scale non uniforme — signalé
+             (comportement non garanti par la spec SVG sous scale non uniforme — constaté
              en usage réel : traits trop épais, ne s'arrêtant pas net à l'entrée des
              cercles). Avec .zf-diagram verrouillé au même ratio 400:320 à toute largeur,
              le scale appliqué au SVG est TOUJOURS uniforme, donc fiable.
 
              Les tracés ci-dessous s'arrêtent au BORD de chaque cercle (centre ∓ rayon),
-             pas à son centre (signalé : même avec l'empilement z-index correct, les
+             pas à son centre (même avec l'empilement z-index correct, les
              cercles ont un fond translucide -- rgba(...,0.16), cf. --zf-surface-2 -- donc
              un trait qui court jusqu'au centre reste visible PAR TRANSPARENCE ; le seul
              masquage fiable est de ne jamais dessiner de trait sous l'empreinte d'un
-             cercle). Rayons (2026-07-24, cercles réduits puis réajustés à mi-chemin) :
+             cercle). Rayons :
              noeuds standards 36 (72px / 2), noeud Maison 40 (80px / 2, cf. .zf-node-lg),
              hub 15 (30px / 2). Ces coordonnées ne servent plus que de repli avant le
              premier layout : computeGeom() (cf. <script> plus bas) recalcule les 4
              tracés depuis la position RÉELLE des cercles dans le DOM dès que le widget
              est affiché (et au resize), donc ils restent "aimantés" même si le
              conteneur hôte (page Design, etc.) ne respecte pas exactement le ratio
-             400:320. Centres nominaux, tous à distance R=100px du hub (signalé : les 4
+             400:320. Centres nominaux, tous à distance R=100px du hub (les 4
              cercles doivent être équidistants, cf. positions % de
              .zf-top/.zf-left/.zf-right/.zf-bottom/.zf-hub) : Solaire (200,60), Réseau
              (100,160), Maison (300,160), Batterie (200,260), Hub (200,160). Le "d" de
@@ -521,7 +521,7 @@ fichier reste correct si on le replace un jour en `type=cmd`.
 
     // Géométrie des traits calculée depuis les positions RÉELLES des cercles
     // dans le DOM (getBoundingClientRect), pas depuis des coordonnées fixes
-    // dans le viewBox 400x320 : signalé que les traits ne touchaient pas
+    // dans le viewBox 400x320 : constat : les traits ne touchaient pas
     // toujours le bord des cercles ("aimantés") -- les coordonnées fixes ne
     // sont exactes que si le conteneur .zf-diagram respecte pile le ratio
     // 400:320 (cf. commentaire plus haut sur aspect-ratio) ; dans un contexte
@@ -610,7 +610,7 @@ fichier reste correct si on le replace un jour en `type=cmd`.
 
     // Comme fmtEuro, mais préfixe "+ " seulement si positif/nul -- un gain
     // négatif porte déjà son signe via toFixed(2), pas besoin (et pas question)
-    // de lui coller un "+" devant (bug 2026-08-19 : "+ -0.04 €").
+    // de lui coller un "+" devant.
     function fmtEuroSigned(v) {
         var n = parseFloat(v);
         if (isNaN(n)) n = 0;
@@ -624,7 +624,7 @@ fichier reste correct si on le replace un jour en `type=cmd`.
         // Signée (grid + injected), PAS Math.abs(injected) : "Maison" = ce qui est
         // prélevé au réseau + ce que Zendure envoie (décharge, positif, s'ajoute à
         // la fourniture) ou consomme (charge, négatif, vient en déduction) --
-        // demande explicite. Avec abs(), une charge alimentée depuis le réseau
+        // choix de conception. Avec abs(), une charge alimentée depuis le réseau
         // était comptée deux fois : une fois dans la hausse de "grid" mesurée par
         // la pince, une deuxième fois rajoutée par-dessus, gonflant la
         // consommation maison affichée pendant toute charge sur secteur.
@@ -633,7 +633,7 @@ fichier reste correct si on le replace un jour en `type=cmd`.
 
         // Réseau / Intensité (cf. teleinfo/pince externe, PAS Zendure) : toujours
         // recalculés en direct ici, jamais gelés par isOffline ci-dessous --
-        // demande explicite ("ce qui vient du réseau doit rester"). "Maison" en
+        // choix de conception : la mesure réseau reste affichée. "Maison" en
         // dépend directement (cf. formule ci-dessus) donc reste également à jour,
         // même si la contribution Zendure qu'elle contient est figée sur sa
         // dernière valeur connue pendant une coupure (pas de meilleure estimation
@@ -652,7 +652,7 @@ fichier reste correct si on le replace un jour en `type=cmd`.
         // Flux batterie (cercle "Batterie" uniquement) : PAS "injected"
         // (outputHomePower) -- ce champ n'est QUE "puissance vers la maison",
         // toujours >= 0 côté appareil, jamais négatif même en charge (bug
-        // signalé 2026-07-25 : les billes n'allaient jamais vers la batterie,
+        // : les billes n'allaient jamais vers la batterie,
         // ce champ ne peut structurellement pas coder un sens de charge).
         // Deux champs bruts séparés donnent le vrai sens : outputPackPower
         // (puissance VERS le pack = charge, cf. packChargeId) et
@@ -692,8 +692,8 @@ fichier reste correct si on le replace un jour en `type=cmd`.
             setActive('gBat', false);
         } else {
             setText('solarW', Math.round(solar) + ' W');
-            // Flèche masquée si aucun flux réel batterie (demande explicite
-            // 2026-07-25) : sous le seuil de bruit (cfg.flowThresholdW,
+            // Flèche masquée si aucun flux réel batterie (choix de conception
+            // : sous le seuil de bruit (cfg.flowThresholdW,
             // même seuil que l'activation de l'animation des particules), un
             // "↑"/"↓" est trompeur -- rien ne circule vraiment.
             var battFlowing = Math.abs(battNet) >= cfg.flowThresholdW;
@@ -711,10 +711,10 @@ fichier reste correct si on le replace un jour en `type=cmd`.
         // demain de la carte Tempo (celles-là gardent leur couleur, demande
         // distincte) -- SEUL le badge période n'en dépend plus (cf. juste
         // après : plus de texte "HPJB"/"HCJB" ni de couleur liée à Tempo du
-        // jour sur CE badge, demande explicite 2026-07-25, "pas d'information
-        // autour de la couleur du jour"). Retirer "var tt = ..." ici cassait
+        // jour sur CE badge, choix de conception : pas d'information
+        // autour de la couleur du jour). Retirer "var tt = ..." ici cassait
         // tout le recompute() (ReferenceError sur tt plus bas, à chaque
-        // poussée de valeur -- constaté 2026-07-25, flood de notifications
+        // poussée de valeur -- flood de notifications
         // d'erreur core/ajax/cmd.ajax.php).
         var tt = tempoColorInfo(state.tempoToday);
         // Badge période : uniquement l'icône (soleil HP / lune HC). Le code
@@ -805,7 +805,7 @@ fichier reste correct si on le replace un jour en `type=cmd`.
     // Seules ces grandeurs sont de la VRAIE télémétrie Zendure (solaire, batterie,
     // SOC, mode) : seules elles doivent (a) prouver que le démon est vivant et (b)
     // être gelées en coupure. Réseau/Intensité viennent d'une source externe
-    // (teleinfo/pince, cf. retour "ce qui vient du réseau doit rester") : leurs
+    // (teleinfo/pince, mesure du réseau à conserver) : leurs
     // poussées mettent à jour l'affichage comme d'habitude (cf. recompute()) mais
     // ne doivent ni faire repartir le chrono, ni faire disparaître le badge --
     // sinon une simple mise à jour Réseau masquerait à tort une vraie coupure
@@ -920,7 +920,7 @@ fichier reste correct si on le replace un jour en `type=cmd`.
     // d'initApplyValue()) ET à chaque retour de visibilité de l'onglet (cf.
     // listener visibilitychange plus bas) -- pas un polling continu, la
     // détection reste 100% locale (pushes live) entre ces deux déclencheurs.
-    // Rappel ajouté le 18/08 (signalé : widget resté bloqué sur "Hors ligne"
+    // Rappel ajouté (widget resté bloqué sur "Hors ligne"
     // après une perte de focus prolongée, correction uniquement par F5) --
     // deux causes cumulées : (a) le navigateur suspend/dégrade le canal de
     // pushes live d'un onglet en arrière-plan, donc plus aucune valeur
@@ -973,7 +973,7 @@ fichier reste correct si on le replace un jour en `type=cmd`.
     // .zf-debug-on, cf. CSS -- le panneau est alors juste display:none dans le
     // DOM, jamais interrogé). Polling simple (pas de websocket/SSE : un aperçu
     // "très synthétique" toutes les 3s suffit largement pour du diagnostic ---
-    // demande explicite, à désactiver une fois le diagnostic terminé).
+    // choix de conception, à désactiver une fois le diagnostic terminé).
     function escapeHtml(s) {
         var div = document.createElement('div');
         div.textContent = String(s == null ? '' : s);
@@ -1008,7 +1008,7 @@ fichier reste correct si on le replace un jour en `type=cmd`.
     // is_json(init('value'), array())) : une valeur brute ("20") est un JSON
     // scalaire valide mais PAS un tableau, donc systématiquement rejetée au
     // profit du tableau vide -- zendureCmd::execute() ne trouvait alors jamais
-    // 'slider'/'select' et envoyait toujours null au démon (signalé : les
+    // 'slider'/'select' et envoyait toujours null au démon (les
     // curseurs bougeaient visuellement sans jamais rien commander au boîtier,
     // cf. warning démon "valeur invalide pour set_soc_min : None"). Il faut
     // explicitement {slider: ...} ou {select: ...} (même convention que

@@ -1,6 +1,6 @@
 """Profil SuperBase V6400 -- dérivé de SuperBaseV6400.charge()/discharge()
 dans Zendure/Zendure-HA (custom_components/zendure_ha/devices/superbasev6400.py,
-récupéré le 2026-08-04). PAS testé en conditions réelles sur ce projet (aucun
+récupéré ). PAS testé en conditions réelles sur ce projet (aucun
 SuperBase V6400 possédé) -- à valider avant tout usage en production.
 
 Mécanisme identique à SuperBase V4600 dans la source (même forme de payload,

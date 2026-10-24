@@ -1,5 +1,5 @@
 <!--
-Template "Résumé" (ex-"Historique", cf. échange utilisateur 2026-08-06) :
+Template "Résumé" :
 digest du jour en gros chiffres (gain/dépense/SOC), pas des courbes -- la
 page Analyse native de Jeedom (Outils > Analyse > Historique) fait déjà très
 bien les graphiques multi-courbes/formules calculées, inutile de la
@@ -8,10 +8,10 @@ Condensé/Flux avec ce qu'ils n'affichent pas : la comparaison jour/veille et
 le détail brut/coût du gain (cf. commentaire de COMPUTED_COMMANDS dans
 zendure.class.php pour le modèle -- gain net = ce que Zendure a fourni à la
 maison MOINS ce qu'il a dû tirer du réseau pour recharger la batterie,
-remplace le 18/08 l'ancien découpage solaire/batterie, qui double-comptait).
+remplace l'ancien découpage solaire/batterie, qui double-comptait).
 
 Mêmes conventions que condense.html pour le CSS inline/pas de JS. Fond blanc
-(pas transparent comme condense.html) : demande explicite le 2026-08-06 --
+(pas transparent comme condense.html) : choix de conception
 sans lui, la tuile Résumé restait plus petite que la cellule allouée par
 Jeedom (héritée du gabarit précédent si l'équipement changeait de template
 sans redimensionner sa tuile), laissant apparaître le fond de la page

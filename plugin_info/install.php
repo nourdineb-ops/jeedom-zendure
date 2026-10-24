@@ -12,21 +12,20 @@ require_once dirname(__FILE__) . '/../../../core/php/core.inc.php';
 // Appelée par le cœur à l'activation du plugin.
 function zendure_install()
 {
-    zendure::ensureCronRegistered();
 }
 
 // Appelée par le cœur après une mise à jour : chaque équipement est resauvegardé
 // pour que postSave() réenregistre commandes, listeners et crons de la nouvelle version.
 function zendure_update()
 {
+    zendure::removeLegacyCrons();
     foreach (eqLogic::byType('zendure') as $eqLogic) {
         $eqLogic->save();
     }
-    zendure::ensureCronRegistered();
 }
 
 // Appelée par le cœur à la désactivation / désinstallation du plugin.
 function zendure_remove()
 {
-    zendure::removeCrons();
+    zendure::removeLegacyCrons();
 }

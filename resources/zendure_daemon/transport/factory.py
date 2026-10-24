@@ -33,7 +33,7 @@ def build_transport(eq_config: dict) -> Transport:
             "port": eq_config.get("cloud_port", 1883),
             "tls": eq_config.get("cloud_tls", False),
             # Certificat auto-signé générique EMQX confirmé sur le port 8883 du cloud
-            # Zendure (2026-09-07) -- même situation que le certificat local de Chemin
+            # Zendure -- même situation que le certificat local de Chemin
             # B, cette option existe donc aussi côté cloud (pas seulement local comme
             # avant cette date). Sans effet tant que cloud_tls est faux (la config
             # d'origine, 1883 sans TLS, reste le défaut qui a toujours fonctionné).

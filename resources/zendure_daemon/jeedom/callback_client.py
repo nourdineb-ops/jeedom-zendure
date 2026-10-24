@@ -32,7 +32,7 @@ class JeedomCallbackClient:
     def send_alert(self, eq_id: int, alert_id: str, message: str) -> None:
         """Alerte utilisateur via le centre de notifications interne de Jeedom
         (message::add côté PHP), pas juste une ligne de log -- cf. brief utilisateur
-        du 2026-07-22 (rester notifié en cas de perte de connexion/MQTT en boucle,
+         (rester notifié en cas de perte de connexion/MQTT en boucle,
         pas seulement le découvrir a posteriori dans les logs)."""
         payload = {"apikey": self._apikey, "eq_id": eq_id, "alert_id": alert_id, "message": message}
         try:

@@ -2,8 +2,7 @@
 
 But : faire tourner exactement le même code en aval (régulateur anti-injection,
 throttle télémétrie, dashboard, calcul de gain, cf. device.py) qu'en conditions
-réelles, pour observer le comportement sans matériel Zendure ni broker MQTT
-(demande utilisateur 2026-08-03 : "voir le comportement"). Seule cette classe
+réelles, pour observer le comportement sans matériel Zendure ni broker MQTT. Seule cette classe
 change par rapport à MqttTransport -- tout le reste du démon l'ignore.
 
 Modèle volontairement simple, pas une simulation physique fidèle : un scénario
@@ -155,7 +154,7 @@ class SimulatedTransport(Transport):
         # (max(0, load-solar)) -- plafonner ainsi rendrait grid_w structurellement
         # toujours >= 0 : le régulateur ne verrait alors plus jamais de risque
         # d'injection à corriger, l'anti-injection deviendrait invisible en
-        # simulation (piège trouvé le 2026-08-04 lors d'une première tentative de
+        # simulation (piège trouvé lors d'une première tentative de
         # correction). C'est au contraire cet écart transitoire entre ce que
         # Zendure délivre (output_limit, décidé au tick précédent) et le besoin réel
         # du moment qui crée le risque d'injection que la boucle rapide doit

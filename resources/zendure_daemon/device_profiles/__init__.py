@@ -3,7 +3,7 @@ l'autre dans le mécanisme de pilotage (deviceAutomation).
 
 Confirmé par lecture directe du code source de plusieurs classes de device
 dans `Zendure/Zendure-HA` (hyper2000.py, hub1200.py, hub2000.py, aio2400.py,
-superbasev4600.py, superbasev6400.py, ace1500.py, 2026-07-30 puis 2026-08-04)
+superbasev4600.py, superbasev6400.py, ace1500.py,  puis)
 -- pas une supposition, une différence réelle et documentée :
 - La famille Hub (Hub1200, Hub2000) et l'AIO2400 n'ont **aucune capacité de
   charge AC** -- leur `charge()` met l'appareil en idle, quel que soit ce
@@ -19,7 +19,7 @@ superbasev4600.py, superbasev6400.py, ace1500.py, 2026-07-30 puis 2026-08-04)
 
 Deux familles de modèles Zendure PAS couvertes par cette abstraction, à ne
 pas tenter d'ajouter comme un profil de plus sans travail préalable côté
-transport (cf. `Zendure/Zendure-HA`, récupéré le 2026-08-04) :
+transport :
 - **ACE1500** : mode par défaut ("paired") nécessite un vrai Hub Zendure qui
   émette un battement périodique -- sans lui, deviceAutomation ne fait rien.
   Le mode "standalone" utilisable sans Hub ne passe PAS par deviceAutomation

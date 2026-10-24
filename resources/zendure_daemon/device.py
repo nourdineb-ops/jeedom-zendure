@@ -23,14 +23,14 @@ DEBUG_CAPTURE_DURATION_S = 3600.0
 # Silence total de télémétrie (aucune trame reçue, throttle ou pas -- cf.
 # _on_telemetry) au-delà de ce délai malgré une connexion MQTT propre côté démon
 # (transport_connected=True, pas de flapping) : signale que l'APPAREIL lui-même ne
-# répond plus (WiFi du boîtier instable, constaté en réel le 2026-07-22 -- 23+ min
+# répond plus (WiFi du boîtier instable, constaté en réel -- 23+ min
 # de silence pendant qu'un redémarrage du démon + un getAll explicite n'ont rien
 # rapporté), pas un problème du démon/transport. Alerte distincte du flapping MQTT
 # (cf. mqtt_transport.py) : la connexion peut très bien être stable pendant que
 # l'appareil, lui, est injoignable.
 #
 # Valeur par défaut seulement : l'utilisateur trouvait ça encore trop bavard en
-# mail malgré ce délai (échange du 2026-09-03) -- ce seuil est donc désormais
+# mail malgré ce délai -- ce seuil est donc désormais
 # piloté par la config (alert_delay_s, onglet Comportement), self._alert_delay_s
 # ci-dessous. Sert aussi de délai pour l'alerte ping (cf. check_lan_reachability),
 # un seul réglage utilisateur pour les deux plutôt que deux seuils à régler
@@ -40,17 +40,17 @@ DEFAULT_ALERT_DELAY_S = 300.0
 # Durée max d'une session de secours BLE (connexion + handshake + lecture),
 # cf. transport/ble_fallback.py -- bornée volontairement courte pour limiter la
 # contention avec le scan passif d'un autre consommateur du même adaptateur
-# Bluetooth (TheengsGateway, relevés de température, cf. échange utilisateur
-# 2026-07-22).
+# Bluetooth (une passerelle BLE tierce, relevés de température
+# .
 BLE_FAILOVER_TIMEOUT_S = 20.0
 
 # Dernier recours : redémarrage forcé de l'appareil (coupure/relance secteur via une
-# prise pilotée, ex. Zigbee/Z2M -- cf. onglet Config avancée "Redémarrage forcé",
+# prise pilotée, ex. Zigbee/Z2M -- cf. section « Redémarrage forcé » de l'onglet Comportement,
 # zendure.class.php::executePowerCycle()) quand le temps
 # laissé à l'alerte humaine n'a pas suffi à faire revenir la télémétrie -- signature
 # d'un vrai blocage (freeze) de l'appareil, pas d'un simple accroc réseau.
 #
-# Choix explicite de l'utilisateur (2026-09-06) : privilégier la réactivité plutôt
+# Choix explicite de l'utilisateur : privilégier la réactivité plutôt
 # qu'un délai très prudent, quitte à ce que ça se déclenche parfois sur un simple
 # accroc réseau plutôt qu'un vrai freeze -- l'anti-répétition (cf.
 # DEFAULT_POWER_CYCLE_COOLDOWN_S) est le vrai garde-fou contre l'acharnement, pas ce
@@ -66,8 +66,8 @@ BLE_FAILOVER_TIMEOUT_S = 20.0
 # config cohérente pour rester vrai.
 DEFAULT_POWER_CYCLE_STALE_S = 600.0
 
-# Durée de coupure secteur avant relance : choix explicite de l'utilisateur
-# (2026-09-06, "20 sec c'est long aussi, 5 sec suffisent") -- suffisant pour une
+# Durée de coupure secteur avant relance : choix de l'utilisateur
+# -- suffisant pour une
 # vraie coupure secteur (contrairement à un simple cycle WiFi, déjà tenté
 # par ailleurs), sans prolonger l'interruption de puissance vers la maison plus que
 # nécessaire.
@@ -107,7 +107,7 @@ class Device:
         # donc par la télémétrie MQTT normale ET le secours BLE (contrairement à
         # self._last_telemetry_at, spécifique à la fraîcheur MQTT
         # check_telemetry_staleness()). Sert à ne jamais faire tourner
-        # l'anti-injection sur une valeur périmée -- incident réel du 2026-07-28 :
+        # l'anti-injection sur une valeur périmée -- incident réel :
         # pendant une coupure WiFi de l'appareil, `grid` (PAPP externe, jamais
         # affecté par le WiFi Zendure) restait frais pendant qu'`injected_power`
         # restait figé, faussant la cible calculée par la formule sans que rien
@@ -124,8 +124,8 @@ class Device:
         self._ble_address: str = str(eq_config.get("ble_address") or "")
         self._lan_ping_active: bool = bool(eq_config.get("lan_ping_active", False))
         self._device_ip: str = str(eq_config.get("device_ip") or "")
-        # Interrupteur + délai des alertes humaines (mail/push), demande utilisateur
-        # du 2026-09-03 ("trop d'alerte mail") -- cf. _maybe_send_alert(). Coupe
+        # Interrupteur + délai des alertes humaines (mail/push), choix de conception
+        # ("trop d'alerte mail") -- cf. _maybe_send_alert. Coupe
         # tout (y compris les *_resolu) quand désactivé ; les événements restent
         # visibles dans les logs Jeedom (log::add(), cf. callback.php) quoi qu'il
         # arrive, seule la notification humaine est concernée.
@@ -180,7 +180,7 @@ class Device:
     def stop(self) -> None:
         # Repasse smartMode à 0 avant de couper : sinon l'app mobile reste
         # indéfiniment sur "Mode intelligent" alors que plus personne ne pilote
-        # l'appareil (cf. échange avec l'utilisateur sur ce comportement).
+        # l'appareil.
         try:
             self._transport.set_smart_mode(False)
         except Exception:
@@ -194,7 +194,7 @@ class Device:
         """Republie l'état de connexion (cf. _on_connection_change) à chaque tour de
         boucle périodique, plutôt que seulement sur un changement détecté par
         mqtt_transport.py (_on_connect/_on_disconnect). Corrige un cas réel constaté
-        le 2026-09-10 : la commande Jeedom transport_connected est restée bloquée à
+         : la commande Jeedom transport_connected est restée bloquée à
         vide (donc affichée "Hors ligne" en permanence, cf. zendure.class.php --
         '' == 1 vaut false en PHP) après un unique événement de déconnexion tombé
         dans un angle mort de logging (fenêtre trop tôt pour incidents.log), sans
@@ -214,7 +214,7 @@ class Device:
         alert_mail_active (config, onglet Comportement). Couvre aussi les
         résolutions (*_resolu) : si les alertes sont coupées, inutile de
         notifier le retour à la normale de quelque chose qui n'a jamais été
-        signalé. L'événement reste tout de même loggé côté démon (log.warning/
+        constaté . L'événement reste tout de même loggé côté démon (log.warning/
         log.info juste avant chaque appel) et côté Jeedom (log::add()
         callback.php) -- seule la notification humaine est supprimée."""
         if not self._alert_mail_active:
@@ -224,8 +224,7 @@ class Device:
     def check_telemetry_staleness(self) -> None:
         """Appelé depuis la boucle périodique du démon (cf. zendure_daemon.py,
         même cadence que le ping request_telemetry()) : détecte un appareil qui ne
-        répond plus (WiFi du boîtier instable, cf. échange avec l'utilisateur
-        2026-07-22) alors que NOTRE connexion MQTT au broker est propre -- un cas
+        répond plus (WiFi du boîtier instable) alors que NOTRE connexion MQTT au broker est propre -- un cas
         que le flapping détecté côté transport (mqtt_transport.py) ne couvre pas,
         puisque la connexion peut très bien rester stable pendant que l'appareil
         lui-même ne pousse plus rien.
@@ -266,7 +265,7 @@ class Device:
                 message = (
                     "Aucune télémétrie Zendure reçue depuis %d minutes (connexion MQTT pourtant "
                     "stable) -- probable WiFi instable côté boîtier (ping réseau local non "
-                    "configuré, diagnostic non confirmable -- cf. onglet Config avancée)." % minutes
+                    "configuré, diagnostic non confirmable -- cf. onglet Comportement)." % minutes
                 )
             self._maybe_send_alert("telemetry_stale", message)
         elif elapsed < self._alert_delay_s and self._telemetry_stale:
@@ -321,7 +320,7 @@ class Device:
         """Appelé depuis la boucle périodique du démon, à la cadence du cron HP
         (5 min, cf. zendure_daemon.py::BLE_FAILOVER_INTERVAL_S -- demande
         explicite de l'utilisateur : pas de connexion BLE permanente, pour ne
-        pas monopoliser l'adaptateur partagé avec TheengsGateway
+        pas monopoliser l'adaptateur partagé avec une passerelle BLE tierce
         transport/ble_fallback.py). Secours, pas un canal principal : ne fait
         rien tant que la télémétrie MQTT n'est pas confirmée muette
         (self._telemetry_stale, cf. check_telemetry_staleness()) et que
@@ -344,8 +343,8 @@ class Device:
         # Ne met PAS à jour self._last_telemetry_at : l'alerte "télémétrie MQTT
         # muette" reste active tant que le WiFi du boîtier n'est pas vraiment
         # rétabli -- le secours BLE comble le manque d'information, il ne
-        # doit pas masquer le vrai problème sous-jacent (cf. échange
-        # utilisateur du 2026-07-22).
+        # doit pas masquer le vrai problème sous-jacent
+        # utilisateur).
         self._push_values(translate_properties({"properties": properties, "packData": pack_data}))
 
     def check_lan_reachability(self) -> None:
@@ -359,15 +358,14 @@ class Device:
         bien présent sur le LAN mais dont seul le cloud Zendure est injoignable
         (ping OK, silence MQTT persistant) -- jusqu'ici indiscernable l'un de
         l'autre depuis le silence télémétrie seul. Désactivé par défaut, nécessite
-        device_ip (onglet Config avancée) : pas d'IP fixe garantie sans réservation
+        device_ip (onglet Comportement) : pas d'IP fixe garantie sans réservation
         DHCP côté routeur, mieux vaut que l'utilisateur l'active explicitement une
         fois cette réservation faite plutôt qu'un ping silencieusement dans le vide.
 
         L'état (self._lan_reachable, cmd lan_ping_online/lan_ping_ms) est mis à
         jour à CHAQUE cycle (60s), sans délai -- consommé immédiatement par
         check_telemetry_staleness(). Seule l'ALERTE humaine
-        (mail/push) est différée jusqu'à self._alert_delay_s : signalé par
-        l'utilisateur le 2026-08-24 après 3 coupures WiFi courtes (~1 min,
+        (mail/push) est différée jusqu'à self._alert_delay_s : constaté après 3 coupures WiFi courtes (~1 min,
         connues/attendues) ayant chacune
         généré un mail immédiat -- même délai réglable, et même interrupteur
         (_maybe_send_alert), que check_telemetry_staleness() : une coupure qui
@@ -482,7 +480,7 @@ class Device:
         "set_soc_min": "set_soc_min",
         "set_soc_max": "set_soc_max",
         "set_mode": "set_mode",
-        # Exposé côté Jeedom le 2026-07-22 : jusqu'ici set_smart_mode n'était
+        # Exposé côté Jeedom : jusqu'ici set_smart_mode n'était
         # appelé qu'en interne (stop(), repli à 0 sur arrêt propre du démon) --
         # l'utilisateur a besoin de pouvoir le couper manuellement depuis Jeedom
         # (constaté : "Mode intelligent" actif côté app empêchait nos commandes
@@ -540,7 +538,7 @@ class Device:
         # sans action de notre part, cf. README "Points ouverts") -- si on
         # attendait cet écho, le curseur "Limite sortie AC" du widget restait
         # visuellement figé pendant que la boucle rapide agissait réellement
-        # (signalé). On connaît la valeur avec certitude ici, on la publie donc
+        #. On connaît la valeur avec certitude ici, on la publie donc
         # nous-même plutôt que de dépendre du device pour se la confirmer.
         self._callback.send_event(self.eq_id, {"output_limit": action.power_w})
 

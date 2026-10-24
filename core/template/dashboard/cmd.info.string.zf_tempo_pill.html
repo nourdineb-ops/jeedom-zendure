@@ -1,5 +1,5 @@
 <!--
-Test 2026-07-24 (page Design) : pastille Tempo autonome, même habillage que
+(page Design) : pastille Tempo autonome, même habillage que
 le widget Flux (.zf-pill + tempoColorInfo()) mais découpée en widget de
 commande indépendant, léger, sans le losange -- pour vérifier qu'un template
 custom simple (pas de <script> lourd, pas de SVG animé) s'affiche
@@ -28,8 +28,8 @@ racine du widget et rend tout le contenu réel invisible en placement
     color: var(--txt-color, #333);
     display: inline-block;
 }
-/* Etat "pas de donnée" (2026-07-25, ex. Tempo J+1 pas encore connu) :
-   hachures plutôt qu'un simple gris uni -- demande explicite, pour
+/* Etat "pas de donnée" :
+   hachures plutôt qu'un simple gris uni -- choix de conception, pour
    distinguer visuellement "valeur inconnue" de "Bleu" (les deux étaient un
    gris trop proche l'un de l'autre pour trancher au premier coup d'oeil). */
 .zf-mini-pill-nodata {
@@ -60,7 +60,7 @@ racine du widget et rend tout le contenu réel invisible en placement
     // 4e élément = true si "pas de donnée" (jamais alimenté / valeur brute
     // inattendue) -- cf. .zf-mini-pill-nodata plus haut. Manquait le check
     // 'undefined'/'unknown' présent dans la version flux_widget.html
-    // d'origine (constaté 2026-07-25 : la commande source, avant sa toute
+    // d'origine (: la commande source, avant sa toute
     // première valeur réelle -- ex. Tempo J+1 pas encore connu de Solcast/
     // RTE -- renvoie littéralement la CHAÎNE "undefined", pas JS undefined ;
     // sans ce check elle finissait affichée telle quelle à l'écran).

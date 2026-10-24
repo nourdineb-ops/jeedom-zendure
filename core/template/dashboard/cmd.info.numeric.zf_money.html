@@ -1,5 +1,5 @@
 <!--
-Test 2026-07-24 (page Design) : carte "argent" autonome, même habillage que
+(page Design) : carte "argent" autonome, même habillage que
 le widget Flux (.zf-money / .zf-money-gain) mais en widget de commande
 indépendant -- cf. commentaire équivalent dans cmd.info.string.zf_tempo_pill.html.
 
@@ -45,7 +45,7 @@ racine du widget et rend tout le contenu réel invisible en placement
         var n = parseFloat(value);
         if (isNaN(n)) n = 0;
         // Préfixe "+ " seulement si positif/nul -- un gain négatif porte déjà
-        // son signe via toFixed(2) (bug 2026-08-19 : "+ -0.04 €").
+        // son signe via toFixed(2).
         var prefix = (isGain && n >= 0) ? '+ ' : '';
         el.textContent = prefix + n.toFixed(2);
     }
