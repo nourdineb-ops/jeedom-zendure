@@ -1,8 +1,24 @@
-# Documentation utilisateur — plugin Zendure
+# Plugin Zendure pour Jeedom
 
 Pilotage direct d'une batterie **Zendure Hyper 2000** depuis Jeedom, sans passer par
 Home Assistant, avec une boucle de régulation rapide qui évite d'injecter dans le
 réseau public (anti-injection).
+
+> **Statut : bêta.** Développé et validé sur un seul Hyper 2000, en mode Cloud.
+> Les autres modèles ne sont pas testés (voir « Limites connues »).
+
+## Installation
+
+1. Installez le plugin depuis le Market (ou depuis un dépôt Git), puis activez-le.
+2. Sur la page du plugin, cliquez sur **Installer les dépendances** : un
+   environnement Python isolé est créé dans `resources/venv/` (aucun impact sur le
+   Python du système). Il nécessite `python3-venv`, installé automatiquement sur
+   Debian/Ubuntu si absent.
+3. Démarrez le **démon** (il est unique et partagé par tous les équipements Zendure).
+4. Créez un équipement Zendure. Pour essayer sans appareil, choisissez le mode de
+   connexion **Simulation**. Pour un vrai appareil, choisissez **Cloud** et suivez
+   « Identifiants appareil et Cloud » ci-dessous.
+5. Onglet **Sources** : renseignez au minimum « Puissance prélevée sur le réseau ».
 
 ## Compatibilité / prérequis
 
@@ -18,13 +34,12 @@ réseau public (anti-injection).
   (appli mobile Zendure → réglages du compte **principal**, pas un compte invité →
   option "token"/"développeur"/"intégration") et cliquez sur "Récupérer via Token" :
   tous ces champs se remplissent automatiquement. Aucune installation Home
-  Assistant requise, malgré ce que suggérait une version précédente de cette doc —
-  ce chemin reproduit simplement l'appel que fait l'intégration HA officielle, pas
-  besoin qu'elle tourne. Si plusieurs appareils sont liés au compte, un sélecteur
-  apparaît pour choisir lequel appliquer à cet équipement. En secours (ou pour
-  comprendre ce que fait ce bouton) : ces mêmes identifiants sont aussi lisibles
-  dans le fichier `.storage/zendure_ha.storage` d'une intégration Home Assistant
-  déjà configurée sur cet appareil, champs `productKey`/`deviceKey`.
+  Assistant requise : ce bouton reproduit l'appel que fait l'intégration
+  Home Assistant officielle `Zendure/Zendure-HA` auprès de l'API Zendure. Si plusieurs appareils sont liés au compte, un sélecteur
+  apparaît pour choisir lequel appliquer à cet équipement.
+  **Avertissement :** l'API Zendure n'est pas documentée publiquement. Le plugin
+  s'y présente comme l'intégration Home Assistant, ce qui peut cesser de fonctionner
+  sans préavis si Zendure modifie son service.
 - **Tarifs (onglet Sources)** : le contrat **Base** fonctionne partout sans
   rien de plus. Les contrats **Heures Pleines/Creuses** et **Tempo** sont des
   spécificités du marché français (EDF/Linky) — ils nécessitent en plus une source
@@ -54,24 +69,14 @@ réseau public (anti-injection).
 ### Connexion (transport)
 
 - **Mode de connexion** :
-  - **Cloud** : le démon se connecte au broker MQTT cloud de Zendure. Seul mode
-    fonctionnel avec un vrai appareil à ce jour (latence télémétrie ~90s côté
-    cloud communautaire).
+  - **Cloud** : le démon se connecte au broker MQTT cloud de Zendure. C'est le seul
+    mode validé avec un vrai appareil.
   - **Simulation** : aucun appareil ni broker requis. Un scénario synthétique de
     consommation/production solaire, généré par le démon, pilote la même boucle
     anti-injection et le même dashboard qu'en conditions réelles — utile pour
     découvrir le plugin ou tester un réglage sans matériel. La capacité batterie
     utilisée par le scénario reprend le champ "Capacité batterie" (onglet
     Comportement, section Stratégie nuit) ; 5 kWh par défaut si ce champ est vide.
-  - Le mode **Local** (Chemin B, broker MQTT sur site) n'apparaît plus dans ce
-    menu — la bascule de l'appareil vers un broker local n'a jamais pu être
-    obtenue par les moyens du plugin lui-même (voir `docs/brief_chemin_b_local.md`
-    pour les tentatives). Le code transport reste en place si une nouvelle
-    piste le rend viable un jour. *(Un fonctionnement local existe en pratique
-    sur cette installation précise, via un montage réseau propre au site —
-    pas une fonctionnalité du plugin, non reproductible sans accès admin au
-    routeur ; hors périmètre de cette doc publique, voir le brief pour le
-    détail.)*
 - **Identifiant appareil (device_id) / Product key** : voir "Compatibilité" ci-dessus.
 - **Modèle d'appareil** : Hyper 2000 (validé), Hub 1200/2000, AIO 2400, SuperBase
   V4600/V6400 (profils dérivés du code source Home Assistant, jamais testés
@@ -83,6 +88,10 @@ réseau public (anti-injection).
   "Client ID MQTT" est optionnel : à laisser vide sauf besoin de diagnostic,
   certains brokers limitent la réception de télémétrie à un clientId précis lié
   au compte.
+- **TLS** / **TLS sans vérification du certificat** : le port 8883 du cloud Zendure
+  répond en TLS avec un certificat auto-signé générique. Pour l'utiliser, cochez
+  les deux cases et renseignez le port 8883. Par défaut (port 1883, sans TLS), rien
+  à cocher : c'est la configuration qui a toujours fonctionné.
 
 ## Onglet Sources
 
@@ -99,6 +108,12 @@ usage donné (ex. `outputHomePower`), vous pouvez la sélectionner ici aussi.
 Regroupées par usage :
 
 ### Pilotage
+
+La source réseau accepte une commande Jeedom, ou une **formule** combinant
+plusieurs commandes, par exemple `#[Maison][Pince][Puissance]#` ou une expression
+comme `#[A][Etat][Mode]# == "producing" ? -1 * #[A][Pince][Valeur]# : #[A][Pince][Valeur]#`.
+Utile avec une pince qui ne remonte que la valeur absolue de la puissance et un
+second indicateur donnant le sens. Convention : positif = import, négatif = injection.
 
 | Source | Valeur par défaut si vide |
 |---|---|
@@ -183,9 +198,9 @@ bascule jamais en charge — la charge programmée reste une décision distincte
 (stratégie nuit HC, hors périmètre de cette boucle).
 
 - **Connexion active** : décochez pour couper complètement la connexion du démon
-  vers ce boîtier — utile pour cohabiter avec un autre pilote du même compte cloud
-  (ex. Home Assistant) : deux clients connectés simultanément avec les mêmes
-  identifiants se coupent mutuellement la session.
+  vers ce boîtier. À faire si un autre pilote utilise le même compte cloud (par
+  exemple Home Assistant) : deux clients connectés avec les mêmes identifiants se
+  coupent mutuellement la session.
 - **Anti-injection active** : décochez pour couper la boucle rapide ET le cron HP
   (mais pas la connexion elle-même) — le plugin continue de recevoir la
   télémétrie et d'afficher le dashboard, mais ne commande plus jamais la limite de
@@ -228,6 +243,47 @@ Cadencé sur le cron HP (5 min), pas une connexion permanente : volontairement
 occasionnel pour ne pas monopoliser un adaptateur Bluetooth déjà utilisé par
 ailleurs. Ne se déclenche de toute façon que si la télémétrie est déjà confirmée
 muette, jamais en fonctionnement normal.
+
+### Ping réseau local
+
+Désactivé par défaut. Renseignez l'adresse IP de l'appareil (une **réservation DHCP**
+sur votre box ou routeur est conseillée pour qu'elle ne change pas) et cochez
+« Ping local actif ». Le démon envoie un ping (ICMP) toutes les minutes et crée deux
+commandes : `lan_ping_online` et `lan_ping_ms`. C'est un diagnostic passif, il ne
+pilote rien : il permet de distinguer une coupure WiFi totale de l'appareil
+(plus de ping) d'un simple problème de liaison MQTT/cloud (ping OK, télémétrie
+muette). Le message d'alerte s'adapte en conséquence.
+
+### Alertes mail / push
+
+- **Alerte mail/push active** : interrupteur général des alertes de ce plugin pour
+  l'équipement. Les événements restent visibles dans les logs même si la case est
+  décochée.
+- **Délai avant alerte (s)** : défaut 300 s. Une coupure qui se résout avant ce délai
+  ne génère aucune notification.
+
+Les alertes passent par le centre de messages Jeedom : pour recevoir un mail ou un
+push, configurez l'action sur message dans Réglages → Système → Configuration →
+Logs → Messages. Alertes émises : télémétrie muette puis rétablie, reconnexions MQTT
+en rafale, ping local hors ligne, démon injoignable, redémarrage forcé.
+
+### Redémarrage forcé (dernier recours)
+
+Désactivé par défaut. Si la télémétrie reste muette bien après l'alerte, le plugin
+peut couper puis rallumer l'appareil via une **prise commandable** (Zigbee, Z-Wave,
+etc.) que vous désignez : commande « Éteindre » et commande « Allumer » (sélecteur
+de commande Jeedom).
+
+- **Coupure avant relance (s)** : défaut 5 s.
+- **Délai avant déclenchement (s)** : défaut 600 s, toujours relevé automatiquement
+  au-dessus du délai d'alerte + 60 s.
+- **Anti-répétition (s)** : défaut 3600 s, pour ne pas couper l'appareil en boucle
+  si le problème est matériel.
+
+Attention : l'appareil perd son alimentation secteur pendant la coupure. La
+batterie interne le maintient en partie, il peut donc ne pas redémarrer sur une
+coupure brève ; ajustez la durée si besoin. Chaque déclenchement est tracé dans les
+logs, le centre de messages et la commande `power_cycle_last_at`.
 
 ### Stratégie nuit
 
@@ -307,8 +363,8 @@ valeurs par défaut reprises par chaque nouvel équipement (repli en cascade :
 valeur de l'eqLogic → défaut global ici → défaut codé en dur) :
 
 - **Port du socket local** (PHP → démon) : 55071 par défaut, à ne changer qu'en
-  cas de conflit de port sur la machine.
-- **Défauts Chemin A (Cloud)** : hôte/port du broker cloud repris par tout
+  cas de conflit de port sur la machine ; redémarrez le démon après modification.
+- **Défauts connexion Cloud** : hôte/port du broker cloud repris par tout
   nouvel équipement.
 - **Tarifs (€/kWh) communs** : prix HP/HC et Tempo Bleu/Blanc/Rouge par défaut —
   spécificités du marché français, voir "Compatibilité" en tête de doc.
@@ -316,3 +372,49 @@ valeur de l'eqLogic → défaut global ici → défaut codé en dur) :
   équipement.
 - **Défauts fréquence de mise à jour** : intervalle minimum et tolérance de
   bruit repris par tout nouvel équipement.
+
+## Journaux et dépannage
+
+- **Logs** : `zendure` (plugin) et `zendure_daemon` (démon), dans Analyse → Logs.
+  Passez le niveau en Debug pour un diagnostic détaillé. Le panneau debug du widget
+  Flux (onglet IHM) affiche les dernières lignes sans quitter le dashboard.
+- **Journal d'incidents** : les avertissements et erreurs du démon sont aussi
+  conservés dans `data/zendure/incidents.log` (dossier `data` de Jeedom, inclus dans
+  les sauvegardes, avec rotation automatique).
+- **« Transport connecté » = oui mais plus de données** : cet indicateur ne reflète
+  que la liaison entre le démon et le broker, pas l'état de l'appareil. Vérifiez la
+  fraîcheur de la télémétrie ; activez le ping local pour savoir si l'appareil est
+  encore sur le réseau.
+- **Commandes « abandonnée après N tentatives sans accusé de réception »** : un
+  accusé manquant occasionnel est normal (liaison MQTT intermittente). À surveiller
+  seulement si cela dure ou s'accompagne d'alertes de télémétrie muette.
+- **Appareil qui ne remonte plus rien pendant des heures** : des blocages ont été
+  observés sur l'Hyper 2000, sans cause identifiée côté plugin (probablement le
+  firmware ou le WiFi de l'appareil). L'alerte, le secours BLE et le redémarrage
+  forcé par prise sont là pour cela. Vérifiez aussi la stabilité de votre WiFi
+  (certains systèmes WiFi multi-bornes peuvent provoquer des reconnexions en boucle).
+- **Callbacks en erreur HTTP 500** dans le log du démon : Jeedom lui-même est
+  indisponible (base de données, PHP). Le plugin n'est pas en cause.
+- **Sauvegarde Jeedom** : pendant la sauvegarde nocturne, le démon peut signaler
+  quelques délais dépassés (« ReadTimeout »). C'est sans conséquence.
+
+## Limites connues
+
+- Seul l'**Hyper 2000** est validé sur matériel réel. Les profils Hub 1200/2000,
+  AIO 2400 et SuperBase V4600/V6400 viennent du code d'une intégration
+  communautaire et n'ont jamais été testés ; ACE1500 et la famille SolarFlow ne
+  sont pas supportés.
+- Le pilotage passe uniquement par le **cloud Zendure** : il dépend de la
+  disponibilité de ce service et de son API non documentée.
+- Deux Zendure partageant la même mesure réseau ne se répartissent pas la
+  correction anti-injection.
+- Les tarifs Heures Pleines/Creuses et Tempo, ainsi que la mise à jour automatique
+  des prix, concernent le marché français.
+- Interface disponible en français uniquement.
+
+## Crédits
+
+Le protocole Zendure n'étant pas documenté publiquement, ce plugin s'appuie sur le
+travail de la communauté, notamment `Zendure/Zendure-HA` (licence MIT),
+`iobroker.zendure-solarflow`, `solarflow-control` et `epicRE/zendure_ble`. Ce
+plugin n'est ni affilié ni approuvé par Zendure.

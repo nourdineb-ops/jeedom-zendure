@@ -6,26 +6,25 @@ en agissant sur la limite de sortie Zendure (setDeviceAutomationInOutLimit, pas 
 flash). "Jamais" est borné au cycle de reporting de la pince, pas un vrai zéro
 continu (cf. reformulation §12) : la marge absorbe l'écart entre deux échantillons.
 
-Historique (jusqu'au 2026-07-28) : cette boucle ne réagissait QUE côté
+Historique : cette boucle ne réagissait QUE côté
 injection (`grid_power_w < marge_w`) — repris trait pour trait de la branche
 FAST du scénario Jeedom historique (scenarioSubElement_id=1534, vérifié ligne
-à ligne le 2026-07-11), qui délègue toute correction "à la hausse" (import
+à ligne ), qui délègue toute correction "à la hausse" (import
 excessif) au cron HP périodique (5 min à l'époque, cf. `zendure::cronOptimisationHP()`
 côté PHP). Une version antérieure réagissait déjà dans les deux sens et
 "a coïncidé avec une oscillation réseau plus sévère en conditions réelles"
-(cause exacte jamais tranchée). Incident réel du 2026-07-28 (remonté par
-l'utilisateur) : un pic PAPP aberrant (-1683W, quasi certainement un glitch
+(cause exacte jamais tranchée). Incident réel  (constaté) : un pic PAPP aberrant (-1683W, quasi certainement un glitch
 de mesure) a déclenché une coupure d'urgence à 0W ; le sens import étant
 totalement muet, `output_limit` est resté bloqué à 0W pendant les 5 minutes
 complètes jusqu'au cron suivant, pendant que tout le solaire partait charger
 la batterie et que la maison tournait entièrement sur le réseau.
 
-**Corrigé le 2026-07-28** : la boucle réagit maintenant aussi côté import,
+**Corrigé** : la boucle réagit maintenant aussi côté import,
 mais avec deux garde-fous distincts du sens injection pour ne pas reproduire
 l'oscillation historique :
 - `cooldown_import_s` (défaut 15s, pas `cooldown_s`) : plus lent que côté
   injection, calé sur le temps de stabilisation réel de l'appareil observé le
-  2026-07-28 (grid retombé ~10-15s après une nouvelle commande) -- laisse le
+   (grid retombé ~10-15s après une nouvelle commande) -- laisse le
   temps à la commande précédente de faire effet avant d'en recalculer une
   autre par-dessus, plutôt que de réagir à une mesure qui n'a pas encore
   rattrapé la dernière action.
@@ -37,11 +36,11 @@ l'oscillation historique :
 Repris du reste de la logique de référence :
     target = clamp(0, limit_max_w, grid_power_w + injected_power_w - marge_w)
         recalculé en absolu à chaque fois depuis la télémétrie réelle, jamais
-        depuis un état interne mémorisé (cf. incident du 2026-07-11 : notre
+        depuis un état interne mémorisé (cf. incident  : notre
         compteur interne grimpait à 1200W pendant que la limite réellement
         appliquée par l'appareil restait bloquée à 285W).
 
-Pas d'hystérésis côté injection (retirée le 2026-07-11) : le scénario de
+Pas d'hystérésis côté injection : le scénario de
 référence n'en a aucune, il renvoie la commande à chaque exécution qui passe
 le cooldown, même si la valeur ne change presque pas. C'est justement
 l'interaction hystérésis + silence prolongé qui avait causé un incident réel
@@ -66,7 +65,7 @@ from typing import Optional
 @dataclass
 class AntiInjectionConfig:
     # Coupure complète de la boucle rapide (config équipement, cf. "enabled" ->
-    # anti_injection_active côté PHP) : demande explicite pour permettre de
+    # anti_injection_active côté PHP) : choix de conception pour permettre de
     # cohabiter avec un autre pilote du même appareil (ex. Home Assistant) sans
     # que ce démon ne continue à envoyer des limites de sortie en parallèle.
     # True par défaut : ne change rien au comportement des installs existantes.
@@ -127,7 +126,7 @@ class AntiInjectionRegulator:
             # Import, pas de risque d'injection immédiat : cadence dédiée
             # (cooldown_import_s) + zone morte (import_tolerance_pct), cf.
             # docstring de tête de fichier -- corrige l'incident du
-            # 2026-07-28 (output_limit resté bloqué 5 min après une coupure
+            # (output_limit resté bloqué 5 min après une coupure
             # d'urgence) sans reproduire l'oscillation d'une tentative
             # antérieure qui réagissait aussi vite que côté injection.
             if (now - self._last_sent_import_at) < cfg.cooldown_import_s:

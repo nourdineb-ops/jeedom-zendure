@@ -1,7 +1,7 @@
 """Traduction d'une trame Zendure brute (topic properties/report) -> dict plat
 {logicalId: valeur} consommé par callback.php.
 
-Changement de stratégie (échange avec l'utilisateur) : on ne filtre plus sur une
+Changement de stratégie : on ne filtre plus sur une
 liste figée de clés connues. La trame complète est aplatie (properties, packData,
 cluster, wifiName/mac/ip... tout ce qui n'est pas de la plomberie protocole) et
 CHAQUE clé devient une commande "info" (créée à la volée côté callback.php si elle
@@ -35,7 +35,7 @@ CURATED_ALIASES = {
     # socStatus : 0=normal, 1=auto-calibration en cours (confirmé dans les
     # traductions de Zendure/Zendure-HA : "SoC Calibration State" / "Auto-
     # Calibration") -- pur affichage informatif, aucune action ne s'y
-    # raccroche. Suivi demandé par l'utilisateur le 16/08 après avoir noté
+    # raccroche. Suivi après avoir noté
     # que la stratégie nuit vise des cibles basses qui pourraient ne jamais
     # remonter la batterie à 100%, or c'est ce qui déclenche la calibration
     # côté firmware (cf. zendure_ha device.py : nextCalibration relancé

@@ -13,7 +13,7 @@ from typing import Optional
 from regulation.anti_injection import AntiInjectionConfig, AntiInjectionRegulator
 from telemetry_map import translate_properties
 from telemetry_throttle import TelemetryThrottle
-from lan_ping import ping_once, kill_zombie_connection
+from lan_ping import ping_once
 from transport.ble_fallback import fetch_ble_snapshot
 from transport.base import TelemetryFrame, Transport
 from transport.factory import build_transport
@@ -23,67 +23,53 @@ DEBUG_CAPTURE_DURATION_S = 3600.0
 # Silence total de télémétrie (aucune trame reçue, throttle ou pas -- cf.
 # _on_telemetry) au-delà de ce délai malgré une connexion MQTT propre côté démon
 # (transport_connected=True, pas de flapping) : signale que l'APPAREIL lui-même ne
-# répond plus (WiFi du boîtier instable, constaté en réel le 2026-07-22 -- 23+ min
+# répond plus (WiFi du boîtier instable, constaté en réel -- 23+ min
 # de silence pendant qu'un redémarrage du démon + un getAll explicite n'ont rien
 # rapporté), pas un problème du démon/transport. Alerte distincte du flapping MQTT
 # (cf. mqtt_transport.py) : la connexion peut très bien être stable pendant que
 # l'appareil, lui, est injoignable.
 #
 # Valeur par défaut seulement : l'utilisateur trouvait ça encore trop bavard en
-# mail malgré ce délai (échange du 2026-09-03) -- ce seuil est donc désormais
+# mail malgré ce délai -- ce seuil est donc désormais
 # piloté par la config (alert_delay_s, onglet Comportement), self._alert_delay_s
 # ci-dessous. Sert aussi de délai pour l'alerte ping (cf. check_lan_reachability),
 # un seul réglage utilisateur pour les deux plutôt que deux seuils à régler
 # séparément pour un même besoin ("moins de mails").
 DEFAULT_ALERT_DELAY_S = 300.0
 
-# Seuil distinct, plus court, pour la tentative d'auto-heal (ss -K sur une
-# connexion zombie, cf. lan_ping.py::kill_zombie_connection, incident
-# 2026-08-24) -- volontairement PAS le même seuil que l'alerte humaine
-# (self._alert_delay_s) : cette dernière doit rester prudente pour ne pas
-# spammer sur un simple accroc, alors qu'un ss -K sur une connexion qui n'était
-# pas réellement zombie ne coûte presque rien (une reconnexion propre de plus,
-# ~1-2s, testé en réel). Pas rendu configurable comme alert_delay_s : ce n'est
-# pas un canal de notification (rien n'est envoyé à l'utilisateur), juste un
-# détail de plomberie interne. Le plancher à respecter est plutôt le cycle de
-# sollicitation actif du démon (TELEMETRY_POLL_S = 60s côté zendure_daemon.py,
-# le `getAll` périodique) : en dessous d'environ 1.5-2x ce cycle, un silence
-# peut juste être une réponse un peu lente au poll normal, pas une vraie panne.
-AUTO_HEAL_STALE_S = 120.0
-
 # Durée max d'une session de secours BLE (connexion + handshake + lecture),
 # cf. transport/ble_fallback.py -- bornée volontairement courte pour limiter la
 # contention avec le scan passif d'un autre consommateur du même adaptateur
-# Bluetooth (TheengsGateway, relevés de température, cf. échange utilisateur
-# 2026-07-22).
+# Bluetooth (une passerelle BLE tierce, relevés de température
+# .
 BLE_FAILOVER_TIMEOUT_S = 20.0
 
 # Dernier recours : redémarrage forcé de l'appareil (coupure/relance secteur via une
-# prise pilotée, ex. Zigbee/Z2M -- cf. onglet Config avancée "Redémarrage forcé",
-# zendure.class.php::executePowerCycle()) quand ni l'auto-heal (ss -K) ni le temps
-# laissé à l'alerte humaine n'ont suffi à faire revenir la télémétrie -- signature
+# prise pilotée, ex. Zigbee/Z2M -- cf. section « Redémarrage forcé » de l'onglet Comportement,
+# zendure.class.php::executePowerCycle()) quand le temps
+# laissé à l'alerte humaine n'a pas suffi à faire revenir la télémétrie -- signature
 # d'un vrai blocage (freeze) de l'appareil, pas d'un simple accroc réseau.
 #
-# Choix explicite de l'utilisateur (2026-09-06) : privilégier la réactivité plutôt
+# Choix explicite de l'utilisateur : privilégier la réactivité plutôt
 # qu'un délai très prudent, quitte à ce que ça se déclenche parfois sur un simple
 # accroc réseau plutôt qu'un vrai freeze -- l'anti-répétition (cf.
 # DEFAULT_POWER_CYCLE_COOLDOWN_S) est le vrai garde-fou contre l'acharnement, pas ce
-# délai. Reste nettement au-dessus de AUTO_HEAL_STALE_S (120s) et du délai d'alerte
+# délai. Reste nettement au-dessus du délai d'alerte
 # par défaut (300s) : à noter que le pire épisode de WiFi instable confirmé à ce jour
-# a duré 23+ minutes sans être un vrai freeze (cf. project_device_wifi_instability) --
+# a duré 23+ minutes sans être un vrai freeze --
 # avec ce seuil, un épisode de cette ampleur DÉCLENCHERAIT le redémarrage forcé
-# (accepté sciemment : la coupure elle-même est courte, cf.
+# (accepté sciemment : la coupure elle-même est courte
 # DEFAULT_POWER_CYCLE_OFF_DURATION_S). Reste configurable (power_cycle_stale_s), mais
-# toujours CLAMPÉ au-dessus de l'auto-heal et de l'alerte dans reload_config()/
+# toujours CLAMPÉ au-dessus de l'alerte dans reload_config()/
 # __init__ ci-dessous, quelle que soit la valeur saisie par l'utilisateur : le principe
 # "dernier recours, après échec des autres stratégies" ne doit jamais dépendre d'une
 # config cohérente pour rester vrai.
 DEFAULT_POWER_CYCLE_STALE_S = 600.0
 
-# Durée de coupure secteur avant relance : choix explicite de l'utilisateur
-# (2026-09-06, "20 sec c'est long aussi, 5 sec suffisent") -- suffisant pour une
-# vraie coupure secteur (contrairement à un simple cycle WiFi, déjà tenté par
-# l'auto-heal), sans prolonger l'interruption de puissance vers la maison plus que
+# Durée de coupure secteur avant relance : choix de l'utilisateur
+# -- suffisant pour une
+# vraie coupure secteur (contrairement à un simple cycle WiFi, déjà tenté
+# par ailleurs), sans prolonger l'interruption de puissance vers la maison plus que
 # nécessaire.
 DEFAULT_POWER_CYCLE_OFF_DURATION_S = 5.0
 
@@ -93,7 +79,7 @@ DEFAULT_POWER_CYCLE_OFF_DURATION_S = 5.0
 # nouveau franchissement du seuil -- ça n'aiderait pas et userait la prise/l'appareil
 # pour rien. Compteur en mémoire (self._power_cycle_last_attempt_at, monotonic) :
 # remis à zéro à un redémarrage du démon, comme le reste de l'état d'escalade
-# (_auto_heal_attempted, _telemetry_stale) -- acceptable, un redémarrage du démon
+# (_telemetry_stale, _power_cycle_attempted) -- acceptable, un redémarrage du démon
 # est lui-même un signal que quelqu'un est déjà en train d'intervenir.
 DEFAULT_POWER_CYCLE_COOLDOWN_S = 3600.0
 
@@ -119,9 +105,9 @@ class Device:
         self._last_injected_w: float = 0.0
         # Horodatage de cette dernière valeur -- mis à jour par _push_values(),
         # donc par la télémétrie MQTT normale ET le secours BLE (contrairement à
-        # self._last_telemetry_at, spécifique à la fraîcheur MQTT, cf.
+        # self._last_telemetry_at, spécifique à la fraîcheur MQTT
         # check_telemetry_staleness()). Sert à ne jamais faire tourner
-        # l'anti-injection sur une valeur périmée -- incident réel du 2026-07-28 :
+        # l'anti-injection sur une valeur périmée -- incident réel :
         # pendant une coupure WiFi de l'appareil, `grid` (PAPP externe, jamais
         # affecté par le WiFi Zendure) restait frais pendant qu'`injected_power`
         # restait figé, faussant la cible calculée par la formule sans que rien
@@ -134,26 +120,21 @@ class Device:
         self._injected_stale_after_s: float = 2 * float(eq_config.get("telemetry_min_interval_s", 300))
         self._last_telemetry_at: float = time.monotonic()
         self._telemetry_stale: bool = False
-        # Distinct de _telemetry_stale : s'arme à AUTO_HEAL_STALE_S (plus court),
-        # une seule tentative de ss -K par épisode de silence -- cf. son usage
-        # dans check_telemetry_staleness().
-        self._auto_heal_attempted: bool = False
         self._ble_failover_active: bool = bool(eq_config.get("ble_failover_active", False))
         self._ble_address: str = str(eq_config.get("ble_address") or "")
         self._lan_ping_active: bool = bool(eq_config.get("lan_ping_active", False))
         self._device_ip: str = str(eq_config.get("device_ip") or "")
-        self._auto_heal_active: bool = bool(eq_config.get("auto_heal_active", False))
-        # Interrupteur + délai des alertes humaines (mail/push), demande utilisateur
-        # du 2026-09-03 ("trop d'alerte mail") -- cf. _maybe_send_alert(). Coupe
+        # Interrupteur + délai des alertes humaines (mail/push), choix de conception
+        # ("trop d'alerte mail") -- cf. _maybe_send_alert. Coupe
         # tout (y compris les *_resolu) quand désactivé ; les événements restent
         # visibles dans les logs Jeedom (log::add(), cf. callback.php) quoi qu'il
         # arrive, seule la notification humaine est concernée.
         self._alert_mail_active: bool = bool(eq_config.get("alert_mail_active", True))
         self._alert_delay_s: float = float(eq_config.get("alert_delay_s", DEFAULT_ALERT_DELAY_S))
-        # Dernier recours (redémarrage forcé, cf. AUTO_HEAL_STALE_S/DEFAULT_POWER_CYCLE_STALE_S
+        # Dernier recours (redémarrage forcé, cf. DEFAULT_POWER_CYCLE_STALE_S
         # ci-dessus) : self._power_cycle_stale_s est calculé (pas juste lu) via
         # _clamp_power_cycle_stale_s() -- garantit qu'il reste toujours au-dessus de
-        # l'auto-heal ET de l'alerte, même si l'utilisateur configure une valeur plus
+        # l'alerte, même si l'utilisateur configure une valeur plus
         # courte par erreur (cf. commentaire de DEFAULT_POWER_CYCLE_STALE_S).
         self._power_cycle_active: bool = bool(eq_config.get("power_cycle_active", False))
         self._power_cycle_stale_s: float = self._clamp_power_cycle_stale_s(eq_config)
@@ -163,9 +144,9 @@ class Device:
         self._power_cycle_cooldown_s: float = float(
             eq_config.get("power_cycle_cooldown_s", DEFAULT_POWER_CYCLE_COOLDOWN_S)
         )
-        # Distinct de _telemetry_stale/_auto_heal_attempted : s'arme au seuil le plus
+        # Distinct de _telemetry_stale : s'arme au seuil le plus
         # long, une seule tentative par épisode de silence (edge-triggered, même
-        # convention que les deux autres tiers de check_telemetry_staleness()).
+        # convention que l'alerte de check_telemetry_staleness()).
         self._power_cycle_attempted: bool = False
         # Monotonic, None tant qu'aucune tentative n'a jamais eu lieu -- cf.
         # DEFAULT_POWER_CYCLE_COOLDOWN_S pour pourquoi cet état n'a pas besoin de
@@ -199,7 +180,7 @@ class Device:
     def stop(self) -> None:
         # Repasse smartMode à 0 avant de couper : sinon l'app mobile reste
         # indéfiniment sur "Mode intelligent" alors que plus personne ne pilote
-        # l'appareil (cf. échange avec l'utilisateur sur ce comportement).
+        # l'appareil.
         try:
             self._transport.set_smart_mode(False)
         except Exception:
@@ -213,7 +194,7 @@ class Device:
         """Republie l'état de connexion (cf. _on_connection_change) à chaque tour de
         boucle périodique, plutôt que seulement sur un changement détecté par
         mqtt_transport.py (_on_connect/_on_disconnect). Corrige un cas réel constaté
-        le 2026-09-10 : la commande Jeedom transport_connected est restée bloquée à
+         : la commande Jeedom transport_connected est restée bloquée à
         vide (donc affichée "Hors ligne" en permanence, cf. zendure.class.php --
         '' == 1 vaut false en PHP) après un unique événement de déconnexion tombé
         dans un angle mort de logging (fenêtre trop tôt pour incidents.log), sans
@@ -228,13 +209,13 @@ class Device:
         self._on_connection_change(self._transport.is_connected)
 
     def _maybe_send_alert(self, alert_id: str, message: str) -> None:
-        """Point de passage unique pour toute alerte humaine (mail/push, cf.
+        """Point de passage unique pour toute alerte humaine (mail/push
         callback_client.py::send_alert) -- respecte l'interrupteur
         alert_mail_active (config, onglet Comportement). Couvre aussi les
         résolutions (*_resolu) : si les alertes sont coupées, inutile de
         notifier le retour à la normale de quelque chose qui n'a jamais été
-        signalé. L'événement reste tout de même loggé côté démon (log.warning/
-        log.info juste avant chaque appel) et côté Jeedom (log::add(), cf.
+        constaté . L'événement reste tout de même loggé côté démon (log.warning/
+        log.info juste avant chaque appel) et côté Jeedom (log::add()
         callback.php) -- seule la notification humaine est supprimée."""
         if not self._alert_mail_active:
             return
@@ -243,56 +224,27 @@ class Device:
     def check_telemetry_staleness(self) -> None:
         """Appelé depuis la boucle périodique du démon (cf. zendure_daemon.py,
         même cadence que le ping request_telemetry()) : détecte un appareil qui ne
-        répond plus (WiFi du boîtier instable, cf. échange avec l'utilisateur
-        2026-07-22) alors que NOTRE connexion MQTT au broker est propre -- un cas
+        répond plus (WiFi du boîtier instable) alors que NOTRE connexion MQTT au broker est propre -- un cas
         que le flapping détecté côté transport (mqtt_transport.py) ne couvre pas,
         puisque la connexion peut très bien rester stable pendant que l'appareil
         lui-même ne pousse plus rien.
 
         Appelée APRÈS check_lan_reachability() dans la boucle (cf. zendure_daemon.py)
         pour que self._lan_reachable soit frais du même cycle : sert à affiner le
-        diagnostic du message -- incident réel du 2026-08-24 où ce message
-        générique a fait conclure à tort à un WiFi instable côté boîtier, alors que
-        l'appareil répondait très bien au ping (cause réelle : listener TLS local
-        disparu après un redémarrage du VM, cf. project_local_mqtt_chemin_b). Avec
+        diagnostic du message -- un silence télémétrie ne prouve pas à lui seul
+        un WiFi instable côté boîtier (l'appareil peut répondre au ping). Avec
         le ping actif, on peut désormais distinguer les deux cas au lieu de
         toujours supposer le même coupable.
 
-        Trois seuils distincts, volontairement pas le même délai (cf.
-        AUTO_HEAL_STALE_S, DEFAULT_POWER_CYCLE_STALE_S) : l'auto-heal (ss -K, sans
-        risque réel) s'arme bien avant l'alerte humaine (mail/push, qui doit rester
-        prudente -- délai réglable par l'utilisateur, self._alert_delay_s), elle-même
-        bien avant le redémarrage forcé (coupure physique via une prise pilotée,
-        dernier recours -- self._power_cycle_stale_s, toujours clampé au-dessus des
-        deux autres)."""
+        Deux seuils distincts (cf. DEFAULT_POWER_CYCLE_STALE_S) : l'alerte humaine
+        (mail/push, qui doit rester prudente -- délai réglable par l'utilisateur,
+        self._alert_delay_s) s'arme bien avant le redémarrage forcé (coupure
+        physique via une prise pilotée, dernier recours -- self._power_cycle_stale_s,
+        toujours clampé au-dessus de l'alerte)."""
         elapsed = time.monotonic() - self._last_telemetry_at
         minutes = elapsed // 60
 
-        # -- Auto-heal (seuil court) ------------------------------------------
-        if elapsed >= AUTO_HEAL_STALE_S and not self._auto_heal_attempted:
-            self._auto_heal_attempted = True
-            # Ping OK + télémétrie muette = signature du zombie TCP découvert le
-            # 2026-08-24 (connexion ESTABLISHED côté noyau, jamais nettoyée avant
-            # ~15 min faute d'erreur détectée par personne -- ni le boîtier, ni
-            # Mosquitto, ni notre transport). Une seule tentative par épisode de
-            # silence (edge-triggered, comme _telemetry_stale plus bas). Si
-            # l'appareil n'a en fait aucun souci réel, tuer une connexion déjà
-            # morte/absente ne fait rien de nuisible.
-            if (
-                self._auto_heal_active
-                and self._lan_ping_active
-                and self._device_ip
-                and self._lan_reachable is True
-            ):
-                log.warning(
-                    "eq_id=%s aucune télémétrie depuis %ds, ping OK -- tentative auto-heal",
-                    self.eq_id, int(elapsed),
-                )
-                kill_zombie_connection(self._device_ip)
-        elif elapsed < AUTO_HEAL_STALE_S and self._auto_heal_attempted:
-            self._auto_heal_attempted = False
-
-        # -- Alerte humaine (seuil long, réglable) ------------------------------
+        # -- Alerte humaine (seuil réglable) ------------------------------
         if elapsed >= self._alert_delay_s and not self._telemetry_stale:
             self._telemetry_stale = True
             log.warning("eq_id=%s aucune télémétrie depuis %ds", self.eq_id, int(elapsed))
@@ -300,15 +252,9 @@ class Device:
                 message = (
                     "Aucune télémétrie Zendure reçue depuis %d minutes, mais le boîtier "
                     "répond bien au ping (%s) -- la coupure ne vient donc probablement PAS "
-                    "de son WiFi. Vérifier la chaîne MQTT locale (listener TLS 8883 sur le "
-                    "broker local, override DNS, transport_connected)." % (minutes, self._device_ip)
+                    "de son WiFi. Vérifier la connexion MQTT (état transport_connected, "
+                    "compte/identifiants Zendure)." % (minutes, self._device_ip)
                 )
-                if self._auto_heal_active:
-                    message += (
-                        " Une tentative de reconnexion forcée automatique (auto-heal) a déjà "
-                        "eu lieu à %ds sans suffire -- investigation manuelle nécessaire."
-                        % int(AUTO_HEAL_STALE_S)
-                    )
             elif self._lan_ping_active and self._device_ip and self._lan_reachable is False:
                 message = (
                     "Aucune télémétrie Zendure reçue depuis %d minutes -- le boîtier ne répond "
@@ -319,7 +265,7 @@ class Device:
                 message = (
                     "Aucune télémétrie Zendure reçue depuis %d minutes (connexion MQTT pourtant "
                     "stable) -- probable WiFi instable côté boîtier (ping réseau local non "
-                    "configuré, diagnostic non confirmable -- cf. onglet Config avancée)." % minutes
+                    "configuré, diagnostic non confirmable -- cf. onglet Comportement)." % minutes
                 )
             self._maybe_send_alert("telemetry_stale", message)
         elif elapsed < self._alert_delay_s and self._telemetry_stale:
@@ -328,9 +274,8 @@ class Device:
             self._maybe_send_alert("telemetry_stale_resolu", "Télémétrie Zendure de retour.")
 
         # -- Redémarrage forcé (dernier recours, seuil le plus long) ------------
-        # Toujours > AUTO_HEAL_STALE_S et > self._alert_delay_s par construction
-        # (cf. _clamp_power_cycle_stale_s()) : à ce stade, l'auto-heal a déjà eu sa
-        # chance ET l'utilisateur a déjà été alerté -- ne reste que la coupure
+        # Toujours > self._alert_delay_s par construction
+        # (cf. _clamp_power_cycle_stale_s()) : à ce stade, l'utilisateur a déjà été alerté -- ne reste que la coupure
         # physique comme prochaine étape possible.
         if elapsed >= self._power_cycle_stale_s and not self._power_cycle_attempted:
             self._power_cycle_attempted = True
@@ -349,8 +294,8 @@ class Device:
             else:
                 self._power_cycle_last_attempt_at = time.monotonic()
                 reason = (
-                    "Aucune télémétrie Zendure reçue depuis %d minutes malgré l'auto-heal et "
-                    "l'alerte déjà déclenchés" % minutes
+                    "Aucune télémétrie Zendure reçue depuis %d minutes malgré "
+                    "l'alerte déjà déclenchée" % minutes
                 )
                 log.warning("eq_id=%s %s -- déclenchement du redémarrage forcé", self.eq_id, reason)
                 ok = self._callback.send_power_cycle_request(
@@ -375,7 +320,7 @@ class Device:
         """Appelé depuis la boucle périodique du démon, à la cadence du cron HP
         (5 min, cf. zendure_daemon.py::BLE_FAILOVER_INTERVAL_S -- demande
         explicite de l'utilisateur : pas de connexion BLE permanente, pour ne
-        pas monopoliser l'adaptateur partagé avec TheengsGateway, cf.
+        pas monopoliser l'adaptateur partagé avec une passerelle BLE tierce
         transport/ble_fallback.py). Secours, pas un canal principal : ne fait
         rien tant que la télémétrie MQTT n'est pas confirmée muette
         (self._telemetry_stale, cf. check_telemetry_staleness()) et que
@@ -398,8 +343,8 @@ class Device:
         # Ne met PAS à jour self._last_telemetry_at : l'alerte "télémétrie MQTT
         # muette" reste active tant que le WiFi du boîtier n'est pas vraiment
         # rétabli -- le secours BLE comble le manque d'information, il ne
-        # doit pas masquer le vrai problème sous-jacent (cf. échange
-        # utilisateur du 2026-07-22).
+        # doit pas masquer le vrai problème sous-jacent
+        # utilisateur).
         self._push_values(translate_properties({"properties": properties, "packData": pack_data}))
 
     def check_lan_reachability(self) -> None:
@@ -413,16 +358,15 @@ class Device:
         bien présent sur le LAN mais dont seul le cloud Zendure est injoignable
         (ping OK, silence MQTT persistant) -- jusqu'ici indiscernable l'un de
         l'autre depuis le silence télémétrie seul. Désactivé par défaut, nécessite
-        device_ip (onglet Config avancée) : pas d'IP fixe garantie sans réservation
+        device_ip (onglet Comportement) : pas d'IP fixe garantie sans réservation
         DHCP côté routeur, mieux vaut que l'utilisateur l'active explicitement une
         fois cette réservation faite plutôt qu'un ping silencieusement dans le vide.
 
         L'état (self._lan_reachable, cmd lan_ping_online/lan_ping_ms) est mis à
         jour à CHAQUE cycle (60s), sans délai -- consommé immédiatement par
-        check_telemetry_staleness()/l'auto-heal. Seule l'ALERTE humaine
-        (mail/push) est différée jusqu'à self._alert_delay_s : signalé par
-        l'utilisateur le 2026-08-24 après 3 coupures WiFi courtes (~1 min,
-        connues/attendues, cf. project_device_wifi_instability) ayant chacune
+        check_telemetry_staleness(). Seule l'ALERTE humaine
+        (mail/push) est différée jusqu'à self._alert_delay_s : constaté après 3 coupures WiFi courtes (~1 min,
+        connues/attendues) ayant chacune
         généré un mail immédiat -- même délai réglable, et même interrupteur
         (_maybe_send_alert), que check_telemetry_staleness() : une coupure qui
         se résout d'elle-même sous ce délai ne mérite pas de déranger
@@ -481,12 +425,6 @@ class Device:
         "cloud_username",
         "cloud_auth_key",
         "cloud_client_id",
-        "local_host",
-        "local_port",
-        "local_tls",
-        "local_tls_insecure",
-        "local_username",
-        "local_password",
     )
 
     def reload_config(self, eq_config: dict) -> None:
@@ -501,7 +439,6 @@ class Device:
         self._ble_address = str(eq_config.get("ble_address") or "")
         self._lan_ping_active = bool(eq_config.get("lan_ping_active", False))
         self._device_ip = str(eq_config.get("device_ip") or "")
-        self._auto_heal_active = bool(eq_config.get("auto_heal_active", False))
         self._alert_mail_active = bool(eq_config.get("alert_mail_active", True))
         self._alert_delay_s = float(eq_config.get("alert_delay_s", DEFAULT_ALERT_DELAY_S))
         self._power_cycle_active = bool(eq_config.get("power_cycle_active", False))
@@ -524,18 +461,16 @@ class Device:
             self._transport.connect()
 
     def _clamp_power_cycle_stale_s(self, eq_config: dict) -> float:
-        """Lit power_cycle_stale_s en le remontant si besoin au-dessus de l'auto-heal
-        ET du délai d'alerte (self._alert_delay_s, déjà à jour à l'appel -- lu APRÈS
+        """Lit power_cycle_stale_s en le remontant si besoin au-dessus du délai d'alerte (self._alert_delay_s, déjà à jour à l'appel -- lu APRÈS
         dans __init__/reload_config) : le redémarrage forcé est un DERNIER recours,
-        censé n'intervenir qu'après que l'auto-heal a eu sa chance et que l'utilisateur
-        a déjà été prévenu. Sans ce clamp, une config incohérente (ex. valeur par
+        censé n'intervenir qu'après que l'utilisateur a déjà été prévenu. Sans ce clamp, une config incohérente (ex. valeur par
         erreur plus courte que le délai d'alerte) romprait cette garantie silencieusement
         -- ici elle reste vraie par construction, quoi que l'utilisateur saisisse.
-        Marge de 60s (pas juste `>`) : laisse le temps aux deux autres tiers de
+        Marge de 60s (pas juste `>`) : laisse le temps à l'alerte de
         réellement s'exécuter sur un cycle du démon avant que celui-ci n'entre en jeu,
         plutôt qu'un simple ex-aequo d'arrondi."""
         configured = float(eq_config.get("power_cycle_stale_s", DEFAULT_POWER_CYCLE_STALE_S))
-        floor = max(AUTO_HEAL_STALE_S, self._alert_delay_s) + 60.0
+        floor = self._alert_delay_s + 60.0
         return max(configured, floor)
 
     # logicalId (cf. zendure::ACTION_COMMANDS côté PHP) -> méthode Transport.
@@ -545,7 +480,7 @@ class Device:
         "set_soc_min": "set_soc_min",
         "set_soc_max": "set_soc_max",
         "set_mode": "set_mode",
-        # Exposé côté Jeedom le 2026-07-22 : jusqu'ici set_smart_mode n'était
+        # Exposé côté Jeedom : jusqu'ici set_smart_mode n'était
         # appelé qu'en interne (stop(), repli à 0 sur arrêt propre du démon) --
         # l'utilisateur a besoin de pouvoir le couper manuellement depuis Jeedom
         # (constaté : "Mode intelligent" actif côté app empêchait nos commandes
@@ -603,7 +538,7 @@ class Device:
         # sans action de notre part, cf. README "Points ouverts") -- si on
         # attendait cet écho, le curseur "Limite sortie AC" du widget restait
         # visuellement figé pendant que la boucle rapide agissait réellement
-        # (signalé). On connaît la valeur avec certitude ici, on la publie donc
+        #. On connaît la valeur avec certitude ici, on la publie donc
         # nous-même plutôt que de dépendre du device pour se la confirmer.
         self._callback.send_event(self.eq_id, {"output_limit": action.power_w})
 

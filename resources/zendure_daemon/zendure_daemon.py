@@ -40,10 +40,10 @@ INCIDENT_LOG_BACKUP_COUNT = 5
 TELEMETRY_POLL_S = 60
 
 # Cadence du secours BLE (cf. device.py::maybe_ble_failover, transport/ble_fallback.py) :
-# demande explicite de l'utilisateur -- alignée sur le cron HP côté PHP (5 min),
+# choix de conception -- alignée sur le cron HP côté PHP (5 min),
 # pas sur TELEMETRY_POLL_S, pour rester une vérification occasionnelle et ne pas
 # créer de contention avec le scan passif d'un autre consommateur du même
-# adaptateur Bluetooth (TheengsGateway).
+# adaptateur Bluetooth (une passerelle BLE tierce).
 BLE_FAILOVER_POLL_S = 300
 
 
@@ -83,7 +83,7 @@ class ZendureDaemon:
         # (ex. transport mal configuré, host MQTT vide le temps d'une sauvegarde
         # partielle depuis l'onglet équipement) ne doit jamais empêcher les
         # équipements suivants de la liste d'être (re)chargés ou arrêtés dans la
-        # même passe -- constaté le 2026-07-27 en testant un 2e équipement de test
+        # même passe -- constaté en testant un 2e équipement de test
         # mal configuré : l'exception levée dans device.start() remontait hors de
         # reload_config() entière, sautant le traitement de tout ce qui suivait
         # dans la boucle. L'équipement en échec se rattrapait de lui-même au
@@ -157,7 +157,7 @@ class ZendureDaemon:
                     device.check_lan_reachability()
                     device.check_telemetry_staleness()
                     # Republie transport_connected à chaque tour (cf. son docstring,
-                    # bug du 2026-09-10) : auto-corrige une valeur Jeedom restée
+                    # bug) : auto-corrige une valeur Jeedom restée
                     # figée/vide suite à un événement de (dé)connexion jamais
                     # correctement repoussé.
                     device.refresh_transport_status()
@@ -183,8 +183,8 @@ def parse_args() -> argparse.Namespace:
 
 def _setup_incident_log(config_path: str, incident_log: str | None = None) -> None:
     """Ajoute un 2e handler (WARNING+ seulement) vers un fichier séparé, avec SA
-    PROPRE rotation (backups gardés) -- ajouté 2026-09-07 après une analyse
-    d'incident (2 blocages de l'appareil le 06/09) rendue difficile par la
+    PROPRE rotation (backups gardés) -- ajouté pour faciliter l'analyse
+    d'incident, rendue difficile par la
     découverte que le log principal (`--loglevel debug`, `log::getPathToLog(
     'zendure_daemon')` côté PHP, cf. deamon_start()) est VIDÉ SANS AUCUNE
     SAUVEGARDE par le cœur Jeedom dès qu'il dépasse `maxSizeLog` (5 Mo par
@@ -206,7 +206,7 @@ def _setup_incident_log(config_path: str, incident_log: str | None = None) -> No
     zendure::incidentLogPath()). Repli à côté de daemon_config.json sinon --
     mais ce dossier (jeedom::getTmpFolder) est VIDÉ à chaque redémarrage de la
     VM, contrairement à ce qui avait été supposé ici à l'origine (historique
-    perdu au reboot du 2026-10-02)."""
+    perdu au reboot du)."""
     if incident_log:
         incident_path = Path(incident_log)
     else:

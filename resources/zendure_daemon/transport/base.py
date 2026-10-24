@@ -1,4 +1,4 @@
-"""Interface de transport commune (Chemin A cloud / Chemin B local).
+"""Interface de transport commune (cloud / simulation).
 
 Les deux chemins parlent le même protocole (MQTT, mêmes topics/charges utiles côté
 appareil Zendure) : seule la connexion change (broker, auth). Voir MqttTransport,

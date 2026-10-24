@@ -23,7 +23,7 @@ sendVarToJS([
     // filtre côté JS sur cette liste -- ~230 commandes existent par eqLogic
     // (curées + télémétrie brute auto-créée par callback.php), mais la table
     // native (une ligne complète par commande, cf. plugin.template.js) n'est
-    // pas exploitable avec un tel volume (constaté 2026-07-26). Seules les
+    // pas exploitable avec un tel volume. Seules les
     // commandes "curées" (celles que le plugin utilise réellement) restent
     // affichées ici ; le brut (packData*, debug...) reste accessible via le
     // bouton "Capture télémétrie complète" (onglet Comportement), qui couvre
@@ -197,7 +197,6 @@ $eqLogics = eqLogic::byType($plugin->getId());
                                 <div class="col-sm-8">
                                     <select id="sel_mode_connexion" class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="mode_connexion">
                                         <option value="cloud">{{Cloud}}</option>
-                                        <option value="local">{{Local (expérimental)}}</option>
                                         <option value="simulation">{{Simulation (aucun appareil requis)}}</option>
                                     </select>
                                 </div>
@@ -271,48 +270,6 @@ $eqLogics = eqLogic::byType($plugin->getId());
                                 </div>
                             </fieldset>
                         </div>
-                        <div id="bloc_local">
-                            <legend><i class="fas fa-network-wired"></i> {{Identifiants Local}}</legend>
-                            <fieldset>
-                                <div class="form-group">
-                                    <label class="col-sm-4 control-label">{{Broker local}}</label>
-                                    <div class="col-sm-8">
-                                        <input class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="local_host" placeholder="192.168.1.10" />
-                                    </div>
-                                </div>
-                                <div class="form-group">
-                                    <label class="col-sm-4 control-label">{{Port}}</label>
-                                    <div class="col-sm-8">
-                                        <input type="number" class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="local_port" placeholder="1883" />
-                                    </div>
-                                </div>
-                                <div class="form-group">
-                                    <label class="col-sm-4 control-label">{{TLS}}</label>
-                                    <div class="col-sm-2">
-                                        <input type="checkbox" id="chk_local_tls" class="eqLogicAttr" data-l1key="configuration" data-l2key="local_tls" />
-                                    </div>
-                                    <label class="col-sm-3 control-label">{{Ignorer le certificat}}</label>
-                                    <div class="col-sm-2">
-                                        <input type="checkbox" class="eqLogicAttr" data-l1key="configuration" data-l2key="local_tls_insecure" />
-                                    </div>
-                                    <div class="col-sm-12">
-                                        <span class="help-block" style="margin-top:4px;">{{"Ignorer le certificat" : pour un broker local avec certificat auto-signé (ex. Chemin B) -- jamais à cocher pour une connexion cloud.}}</span>
-                                    </div>
-                                </div>
-                                <div class="form-group">
-                                    <label class="col-sm-4 control-label">{{Nom d'utilisateur MQTT}}</label>
-                                    <div class="col-sm-8">
-                                        <input class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="local_username" placeholder="{{vide = accès anonyme}}" />
-                                    </div>
-                                </div>
-                                <div class="form-group">
-                                    <label class="col-sm-4 control-label">{{Mot de passe}}</label>
-                                    <div class="col-sm-8">
-                                        <input type="password" class="eqLogicAttr inputPassword form-control" data-l1key="configuration" data-l2key="local_password" />
-                                    </div>
-                                </div>
-                            </fieldset>
-                        </div>
                     </div>
                 </div>
             </div>
@@ -349,7 +306,7 @@ $eqLogics = eqLogic::byType($plugin->getId());
                     // aux autres lignes de cet onglet, cf. renderSourceRow) : nécessaire pour
                     // les pinces bipince non-directionnelles (magnitude seule, ex. power_b)
                     // qu'il faut signer avec un champ "sens" séparé (ex. energy_flow_b ==
-                    // "producing") -- incident du 30/09, cf. getConfiguredSourceValue() côté
+                    // "producing") -- incident, cf. getConfiguredSourceValue côté
                     // PHP. Même bouton d'aide à la saisie que les autres lignes (garde le
                     // sélecteur "Choisir une commande"), mais il INSÈRE la référence au
                     // curseur (classe dédiée listCmdInfoInsert, cf. script plus bas) au lieu
@@ -602,17 +559,6 @@ $eqLogics = eqLogic::byType($plugin->getId());
                             <span class="help-block">{{Vérifie si le boîtier répond encore sur le réseau local (ICMP), indépendamment du MQTT/cloud -- utile pour distinguer une coupure WiFi totale d'un simple problème côté cloud. Réservation DHCP conseillée pour que l'IP ne change pas.}}</span>
                         </div>
                     </div>
-                    <div class="form-group">
-                        <label class="col-sm-3 control-label">{{Auto-guérison connexion zombie}}</label>
-                        <div class="col-sm-2">
-                            <input type="checkbox" class="eqLogicAttr" data-l1key="configuration" data-l2key="auto_heal_active" />
-                        </div>
-                    </div>
-                    <div class="form-group">
-                        <div class="col-sm-9 col-sm-offset-3">
-                            <span class="help-block">{{Si ping OK mais télémétrie muette (5 min), force la coupure de la connexion TCP bloquée pour provoquer une reconnexion immédiate. Nécessite un script + une règle sudo provisionnés à la main sur ce serveur (pas fait automatiquement) -- sans ça, cette option n'a aucun effet.}}</span>
-                        </div>
-                    </div>
                 </fieldset>
                 <fieldset>
                     <legend><i class="fas fa-plug"></i> {{Redémarrage forcé (dernier recours)}}</legend>
@@ -662,7 +608,7 @@ $eqLogics = eqLogic::byType($plugin->getId());
                     </div>
                     <div class="form-group">
                         <div class="col-sm-9 col-sm-offset-3">
-                            <span class="help-block">{{Dernier recours quand l'auto-guérison ci-dessus (et le secours BLE) ne suffisent pas : coupe puis rallume l'appareil via une prise pilotée (ex. Zigbee) après ce délai de télémétrie muette, pour sortir d'un blocage (freeze) que rien d'autre ne résout. Le délai est automatiquement remonté si besoin pour rester après l'auto-guérison et l'alerte -- ne se déclenche jamais avant elles, mais peut rester assez court pour réagir sur un vrai freeze sans attendre trop longtemps (au prix, assumé, d'un déclenchement occasionnel sur un simple accroc réseau prolongé -- l'anti-répétition ci-dessous est le vrai garde-fou contre l'acharnement, pas ce délai). Une seule tentative par épisode, espacées d'au moins le délai anti-répétition. Chaque déclenchement est tracé dans les logs Jeedom, le centre de notifications, et l'horodatage "Dernier redémarrage forcé" (onglet Commandes).}}</span>
+                            <span class="help-block">{{Dernier recours quand le secours BLE et l'alerte ne suffisent pas : coupe puis rallume l'appareil via une prise pilotée (ex. Zigbee) après ce délai de télémétrie muette, pour sortir d'un blocage (freeze) que rien d'autre ne résout. Le délai est automatiquement remonté si besoin pour rester après l'alerte -- ne se déclenche jamais avant elle, mais peut rester assez court pour réagir sur un vrai freeze sans attendre trop longtemps (au prix, assumé, d'un déclenchement occasionnel sur un simple accroc réseau prolongé -- l'anti-répétition ci-dessous est le vrai garde-fou contre l'acharnement, pas ce délai). Une seule tentative par épisode, espacées d'au moins le délai anti-répétition. Chaque déclenchement est tracé dans les logs Jeedom, le centre de notifications, et l'horodatage "Dernier redémarrage forcé" (onglet Commandes).}}</span>
                         </div>
                     </div>
                 </fieldset>
@@ -734,7 +680,7 @@ $eqLogics = eqLogic::byType($plugin->getId());
                             </div>
                         </div>
                         <div class="col-sm-7">
-                            <span class="help-block" style="margin-top:8px;">{{La cible visait pile le besoin médian estimé, sans coussin -- une conso un peu au-dessus de d'habitude suffisait à vider la batterie avant le relais solaire (constaté le 15/08 et le 24/08). Ce pourcentage majore le besoin en kWh avant conversion en % de charge.}}</span>
+                            <span class="help-block" style="margin-top:8px;">{{La cible visait pile le besoin médian estimé, sans coussin -- une conso un peu au-dessus de d'habitude suffisait à vider la batterie avant le relais solaire. Ce pourcentage majore le besoin en kWh avant conversion en % de charge.}}</span>
                         </div>
                     </div>
                     <div class="form-group">
@@ -1085,7 +1031,6 @@ $(function () {
     $('#sel_mode_connexion').on('change', function () {
         var mode = $(this).val();
         $('#bloc_cloud').toggle(mode == 'cloud');
-        $('#bloc_local').toggle(mode == 'local');
     }).trigger('change');
 
     $('#sel_type_contrat').on('change', function () {
@@ -1119,7 +1064,7 @@ $(function () {
     });
 
     // Même pattern que .listCmdInfo ci-dessus, mais pour les commandes ACTION de la
-    // prise pilotée (onglet Config avancée, "Redémarrage forcé") -- resolveSourceCmd()
+    // prise pilotée (section « Redémarrage forcé » de l'onglet Comportement) -- resolveSourceCmd()
     // côté PHP est de toute façon agnostique du type (cmd::byString()), seul ce
     // sélecteur a besoin de filtrer sur type:'action' pour ne proposer que les
     // commandes pertinentes (ex. "Éteindre"/"Allumer" d'une prise Zigbee/Z2M).
@@ -1256,8 +1201,8 @@ $(function () {
 <script>
 // Onglet "Commandes" : table standard Jeedom (core/js/plugin.template.js),
 // même mécanisme que Zigbee/Monitoring/SSH -- remplace l'ancienne table
-// "Télémétrie" maison en lecture seule (2026-07-26, demande explicite :
-// "il faut partir sur l'option standard Jeedom"). addCmdToTable() est
+// "Télémétrie" maison en lecture seule, au profit de l'option standard Jeedom).
+// addCmdToTable() est
 // appelé par le framework pour chaque commande de l'eqLogic sélectionné
 // (cf. jeeFrontEnd.pluginTemplate, plugin.template.js ~L126/710/744) --
 // sans cette fonction (même vide), la table #table_cmd ne se peuple jamais.
@@ -1267,7 +1212,7 @@ $(function () {
 //
 // Filtre sur curatedCmdLogicalIds (cf. sendVarToJS() en tête de fichier) :
 // ~230 commandes existent par eqLogic (curées + télémétrie brute), la table
-// native n'est pas exploitable avec un tel volume (signalé 2026-07-26,
+// native n'est pas exploitable avec un tel volume (
 // "ce n'est pas exploitable en l'état"). Seules les commandes réellement
 // utilisées par le plugin restent affichées ; le brut reste accessible via
 // "Capture télémétrie complète" (onglet Comportement).

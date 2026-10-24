@@ -12,14 +12,14 @@ template de dashboard custom (convention maison, pas native -- cf. README
 différents (dashboard normal, tuile "compact", app mobile...) qui ne
 chargent pas forcément les mêmes assets. L'inline garantit que le style
 voyage toujours avec le HTML, quel que soit l'endroit où Jeedom l'affiche
--- constaté en réel le 2026-07-22 : sans ça, le cercle SOC s'affiche comme
+-- constaté en réel : sans ça, le cercle SOC s'affiche comme
 un disque plein noir (fill SVG par défaut) et les libellés/valeurs collent
 sans espace (justify-content: space-between jamais appliqué).
 
 Fond transparent (pas de background ici) : ce toHtml() personnalisé remplace
 entièrement le rendu, mais Jeedom habille déjà chaque objet du dashboard
 d'un conteneur avec son propre fond -- une couleur en dur ici double ce fond
-au lieu de s'y fondre (signalé le 2026-07-22 : boîte visuellement détachée
+au lieu de s'y fondre (boîte visuellement détachée
 du reste du dashboard, contrairement aux autres tuiles). Titre cliquable
 (##EQ_LINK##, cf. eqLogic::getLinkToConfiguration()) : même comportement que
 le rendu standard Jeedom (core/template/dashboard/eqLogic.html), qu'on
@@ -32,12 +32,12 @@ perd sinon en remplaçant tout le HTML.
         border-radius: 10px;
         padding: 10px 14px;
         /* var(--txt-color, #333) : même variable/fallback que flux_widget.html et
-           zf_gauge/zf_money (validés en réel le 2026-07-25) -- l'ancien
+           zf_gauge/zf_money -- l'ancien
            var(--text-widget, #eee) référençait une variable CSS qui n'existe nulle
            part dans Jeedom (grep core/css/*.css : aucune occurrence), le fallback
            #eee (quasi blanc, pensé pour un fond sombre) s'appliquait donc toujours
            et rendait le texte illisible sur le thème clair par défaut (constaté par
-           l'utilisateur le 2026-08-04, capture d'écran à l'appui). */
+           l'utilisateur, capture d'écran à l'appui). */
         color: var(--txt-color, #333);
         font-size: 13px;
         box-sizing: border-box;

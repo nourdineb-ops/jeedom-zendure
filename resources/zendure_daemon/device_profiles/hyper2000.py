@@ -1,6 +1,6 @@
 """Profil Hyper 2000 -- reprend exactement la logique historique de ce plugin,
 inchangée par ce refactor. Charge confirmée avec effet réel en conditions
-réelles le 2026-07-28 ; décharge (anti-injection) en usage continu depuis le
+réelles  ; décharge (anti-injection) en usage continu depuis le
 début du projet. Cf. Hyper2000.charge()/discharge() dans Zendure/Zendure-HA
 pour la même forme de payload côté intégration officielle."""
 

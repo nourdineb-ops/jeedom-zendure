@@ -1,26 +1,24 @@
 """Secours BLE local, optionnel (config `ble_failover_active` + `ble_address`,
 cf. desktop/php/zendure.php) : quand la télémétrie MQTT/cloud devient muette
-(WiFi du boîtier instable, cf. échange utilisateur 2026-07-22 -- voir aussi
+(WiFi du boîtier instable -- voir aussi
 device.py::check_telemetry_staleness), on tente une lecture ponctuelle en direct par
 Bluetooth plutôt que de rester aveugle.
 
 Volontairement PAS une connexion permanente : un second consommateur de
-`hci0` (TheengsGateway, scan passif pour les thermomètres BLE existants,
-cf. échange utilisateur) tourne déjà sur cette VM. Une connexion GATT
+`hci0` (une passerelle BLE tierce, scan passif pour les thermomètres BLE existants)
+tourne déjà sur la même machine. Une connexion GATT
 occasionnelle et bornée dans le temps, calée sur la cadence du cron HP
 (5 min, cf. zendure_daemon.py::BLE_FAILOVER_INTERVAL_S), minimise la
 contention sur le radio -- pas de connexion permanente qui monopoliserait
 le temps d'écoute du scan passif.
 
-Protocole confirmé en direct contre un Hyper 2000 le 2026-07-22 (cf.
-ble_probe.py, qui réutilise ce module) et documenté par la communauté
+Protocole confirmé en direct contre un Hyper 2000 et documenté par la communauté
 (`epicRE/zendure_ble`) : mêmes UUID GATT et même format JSON que le
 protocole MQTT déjà géré par ce plugin (telemetry_map.translate_properties()
 sait donc directement interpréter ce qu'on récupère ici).
 
 Ne fait AUCUNE écriture : lecture seule tant que le mécanisme d'écriture
-sans flash n'est pas confirmé côté BLE (cf. commentaire ble_probe.py) --
-un secours qui rendrait la télémétrie visible pendant une panne WiFi n'a
+sans flash n'est pas confirmé côté BLE -- un secours qui rendrait la télémétrie visible pendant une panne WiFi n'a
 pas besoin d'écrire quoi que ce soit sur l'appareil.
 """
 

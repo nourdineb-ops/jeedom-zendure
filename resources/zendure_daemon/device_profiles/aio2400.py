@@ -1,6 +1,6 @@
 """Profil AIO 2400 -- dérivé de AIO2400.charge()/discharge() dans
 Zendure/Zendure-HA (custom_components/zendure_ha/devices/aio2400.py,
-récupéré le 2026-08-04). PAS testé en conditions réelles sur ce projet
+récupéré ). PAS testé en conditions réelles sur ce projet
 (aucun AIO2400 possédé) -- à valider avant tout usage en production.
 
 Décharge : même forme d'`autoModelValue` imbriqué que le Hyper 2000

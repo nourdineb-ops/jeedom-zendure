@@ -1,6 +1,6 @@
 """Profil Hub2000 -- dérivé de Hub2000.charge()/discharge() dans
 Zendure/Zendure-HA (custom_components/zendure_ha/devices/hub2000.py,
-récupéré le 2026-08-04). PAS testé en conditions réelles sur ce projet
+récupéré ). PAS testé en conditions réelles sur ce projet
 (aucun Hub2000 possédé) -- à valider avant tout usage en production.
 
 Même mécanisme que Hub1200 (cf. hub1200.py) : pas de charge AC, autoModelValue

@@ -41,7 +41,7 @@ près du matériel.
   Solcast. Sans lui, la stratégie nuit retombe sur une logique dégradée à seuils
   fixes.
 
-Détail complet de chaque réglage : [`docs/documentation_utilisateur.md`](docs/documentation_utilisateur.md).
+Détail complet de chaque réglage : [`docs/fr_FR/index.md`](docs/fr_FR/index.md).
 
 ## Installation
 
@@ -56,7 +56,7 @@ Détail complet de chaque réglage : [`docs/documentation_utilisateur.md`](docs/
    principal) dans le bloc "Récupération assistée" et cliquer sur "Récupérer
    via Token" — `device_id`/`product_key`/identifiants MQTT se remplissent
    automatiquement (aucune installation Home Assistant requise ; détail dans
-   [Compatibilité](docs/documentation_utilisateur.md#compatibilité--prérequis)).
+   [Compatibilité](docs/fr_FR/index.md#compatibilité--prérequis)).
 4. Configurer au minimum une source "Puissance prélevée sur le réseau" (onglet
    Sources, groupe Pilotage) — idéalement une pince/compteur dédié, plus fiable
    qu'un Téléinfo pour mesurer l'injection réelle. C'est l'entrée de la boucle
@@ -84,19 +84,12 @@ pince (Zigbee/Zwave) --> listener PHP --> socket local --> démon Python
   l'appareil (jamais d'écriture flash) — c'est la garantie zéro-injection.
 - **Boucle lente** (cron Jeedom quotidien) : stratégie économique (SOC cible
   nocturne selon le tarif du lendemain, prévision solaire).
-- **Transport** : trois modes configurables par équipement (`mode_connexion`),
-  cf. `resources/zendure_daemon/transport/` :
+- **Transport** : deux modes par équipement (`mode_connexion`), cf.
+  `resources/zendure_daemon/transport/` :
   - **Cloud** : broker MQTT cloud Zendure + identifiants de session. Mode de
     référence, seul validé contre du matériel réel à ce jour.
   - **Simulation** : aucun réseau, un scénario synthétique conso/PV pilote la
     même boucle anti-injection/dashboard/calcul de gain.
-  - **Local** (mode local via un broker Mosquitto sur site) : code présent mais
-    **jamais utilisé en pratique** — sur cette installation, le pilotage local
-    tourne bel et bien depuis le 16/08, mais via un détournement DNS du
-    hostname cloud (l'eqLogic reste en mode `Cloud`), pas via ce mode
-    `local` dédié. Voir [`docs/brief_chemin_b_local.md`](docs/brief_chemin_b_local.md)
-    pour l'historique complet et le détail du montage réellement utilisé
-    avant d'y retoucher.
 
 ## Configuration (« configuration over code »)
 
@@ -110,7 +103,7 @@ descend de la config Jeedom, sur trois étages :
    tarifs, seuils de jauge.
 
 Le démon relit sa config à chaud sur signal (pas de redémarrage nécessaire pour
-changer un seuil). Détail onglet par onglet : [`docs/documentation_utilisateur.md`](docs/documentation_utilisateur.md).
+changer un seuil). Détail onglet par onglet : [`docs/fr_FR/index.md`](docs/fr_FR/index.md).
 
 ## Structure du dépôt
 
@@ -120,23 +113,18 @@ core/class/zendure.class.php   eqLogic + cmd, listener pince, dashboards
 core/ajax/zendure.ajax.php     sélecteur de commande (cmdList)
 core/php/callback.php          canal retour démon -> Jeedom (télémétrie)
 core/template/dashboard/       templates dashboard (Condensé, Flux)
-desktop/php/config.php         config plugin globale (défauts)
+plugin_info/configuration.php  config plugin globale (défauts)
+plugin_info/install.php        hooks d'installation / mise à jour
 desktop/php/zendure.php        config par équipement (3 étages)
 resources/zendure_daemon/      démon Python (transport, régulation, socket, callback)
 resources/install.sh           venv + pip install (appelé par Jeedom)
-docs/documentation_utilisateur.md   documentation utilisateur complète
-docs/brief_*.md                 notes de conception techniques (historique)
+docs/fr_FR/index.md            documentation utilisateur complète
+docs/fr_FR/changelog.md        historique des versions
 ```
 
 ## Limitations connues
 
-- Le mode de connexion `Local` du plugin (broker MQTT sur site, sélectionnable
-  par équipement) n'a jamais été rendu fonctionnel — code présent, jamais
-  emprunté par un appareil réel. Sur cette installation, le pilotage local
-  fonctionne quand même en pratique depuis le 16/08, mais par un montage
-  d'infrastructure hors plugin (détournement DNS du hostname cloud vers un
-  broker local, eqLogic laissé en mode `Cloud`), pas via ce mode dédié —
-  détail complet dans [`docs/brief_chemin_b_local.md`](docs/brief_chemin_b_local.md).
+- Pilotage via le cloud Zendure uniquement (API non documentée, susceptible de changer).
 - Seul le Hyper 2000 est validé contre un appareil réel — les autres profils
   (Hub 1200/2000, AIO 2400, SuperBase V4600/V6400) n'ont jamais été testés.
   ACE1500 et la famille SolarFlow ne sont pas supportés du tout.

@@ -1,7 +1,7 @@
-"""Construit le transport MQTT à partir de la config eqLogic (mode_connexion = cloud|local).
+"""Construit le transport MQTT à partir de la config eqLogic (mode_connexion = cloud|simulation).
 
 Aiguillage par config, pas par déploiement (brief §4/§11) : c'est le seul endroit
-où "cloud" et "local" divergent, sur les paramètres de connexion uniquement.
+où "cloud" et "simulation" divergent, sur les paramètres de connexion uniquement.
 """
 
 from .base import Transport
@@ -33,7 +33,7 @@ def build_transport(eq_config: dict) -> Transport:
             "port": eq_config.get("cloud_port", 1883),
             "tls": eq_config.get("cloud_tls", False),
             # Certificat auto-signé générique EMQX confirmé sur le port 8883 du cloud
-            # Zendure (2026-09-07) -- même situation que le certificat local de Chemin
+            # Zendure -- même situation que le certificat local de Chemin
             # B, cette option existe donc aussi côté cloud (pas seulement local comme
             # avant cette date). Sans effet tant que cloud_tls est faux (la config
             # d'origine, 1883 sans TLS, reste le défaut qui a toujours fonctionné).
@@ -41,21 +41,8 @@ def build_transport(eq_config: dict) -> Transport:
             "username": eq_config.get("cloud_username"),
             "password": eq_config.get("cloud_auth_key"),  # Clé Cloud d'Autorisation
         }
-    elif mode == "local":
-        conn = {
-            "host": eq_config["local_host"],
-            "port": eq_config.get("local_port", 1883),
-            "tls": eq_config.get("local_tls", False),
-            # Certificat non vérifié : pensé à l'origine pour un broker local avec un
-            # certificat auto-signé (Chemin B, cf. brief_chemin_b_local.md) -- le cloud
-            # a sa propre clé équivalente (cloud_tls_insecure) depuis le 2026-09-07,
-            # ce n'est donc plus "jamais côté cloud" comme précédemment documenté ici.
-            "tls_insecure": eq_config.get("local_tls_insecure", False),
-            "username": eq_config.get("local_username") or None,
-            "password": eq_config.get("local_password") or None,
-        }
     else:
-        raise ValueError(f"mode_connexion inconnu : {mode!r} (attendu cloud|local)")
+        raise ValueError(f"mode_connexion inconnu : {mode!r} (attendu cloud|simulation)")
 
     conn.update(
         {
