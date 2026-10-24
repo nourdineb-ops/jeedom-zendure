@@ -3,7 +3,7 @@
   "name": "Zendure",
   "description": "Pilotage direct d'une batterie Zendure Hyper 2000 depuis Jeedom (sans Home Assistant) : anti-injection en boucle rapide, stratégie de charge nocturne, calcul de gain, dashboards.",
   "installation": "Après installation, lancer l'installation des dépendances depuis la page du plugin, puis créer un équipement (mode Cloud avec le token ZendureApp, ou mode Simulation pour essayer sans appareil).",
-  "licence": "GPL",
+  "license": "GPL",
   "author": "nourdineb",
   "require": "4.4",
   "category": "energy",
