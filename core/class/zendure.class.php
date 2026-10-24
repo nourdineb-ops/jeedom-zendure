@@ -1037,12 +1037,27 @@ class zendure extends eqLogic
      * coché) : logue ce qu'il ferait sans jamais toucher à l'appareil, le
      * temps de valider le comportement en conditions réelles avant activation.
      */
-    private static function ensureCronRegistered()
+    public static function ensureCronRegistered()
     {
         self::ensureCron('cronOptimisationHP', '*/1 * * * *', 'Cron cronOptimisationHP enregistré (*/1 * * * *, mode simulation par défaut)');
         self::ensureCron('cronRolloverMinuit', '0 0 * * *', 'Cron cronRolloverMinuit enregistré (0 0 * * *, bascule jour -> veille)');
         self::ensureCron('cronRecupererTarifs', '0 3 1 * *', 'Cron cronRecupererTarifs enregistré (0 3 1 * *, récupération mensuelle des tarifs)');
         self::ensureCron('cronStrategieNuit', '0 0 * * *', 'Cron cronStrategieNuit enregistré (0 0 * * *, mode simulation par défaut)');
+    }
+
+    /**
+     * Supprime les crons enregistrés par ensureCronRegistered() : appelé à la
+     * désinstallation/désactivation du plugin (plugin_info/install.php), sinon Jeedom
+     * continuerait à lancer des fonctions d'une classe qui n'existe plus.
+     */
+    public static function removeCrons()
+    {
+        foreach (array('cronOptimisationHP', 'cronRolloverMinuit', 'cronRecupererTarifs', 'cronStrategieNuit') as $function) {
+            $cron = cron::byClassAndFunction('zendure', $function);
+            if (is_object($cron)) {
+                $cron->remove();
+            }
+        }
     }
 
     private static function ensureCron($function, $schedule, $logMessage)
