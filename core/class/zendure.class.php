@@ -2550,6 +2550,33 @@ class zendure extends eqLogic
         );
         $cmd->setDisplay('parameters', $parameters);
         $cmd->save();
+
+        // Variantes de style « bulles » du même widget, pour les pages Design :
+        // trois commandes hôtes supplémentaires, masquées du dashboard (le
+        // widget « Flux » ci-dessus reste le seul visible, inchangé), à placer
+        // sur un Design au choix. Mêmes paramètres, même script : seul l'habillage
+        // diffère (cf. cmd.info.string.flux_bulles_*.html).
+        foreach (array(
+            'flux_widget_bulles_a' => array('Flux · bulles A (recoloré)', 'flux_bulles_a'),
+            'flux_widget_bulles_b' => array('Flux · bulles B (anneau)', 'flux_bulles_b'),
+            'flux_widget_bulles_c' => array('Flux · bulles C (compact)', 'flux_bulles_c'),
+        ) as $logicalId => $conf) {
+            $skinCmd = $this->getCmd(null, $logicalId);
+            if (!is_object($skinCmd)) {
+                $skinCmd = new zendureCmd();
+                $skinCmd->setLogicalId($logicalId);
+                $skinCmd->setEqLogic_id($this->getId());
+                $skinCmd->setType('info');
+            }
+            $skinCmd->setName($conf[0]);
+            $skinCmd->setSubType('string');
+            $skinCmd->setIsHistorized(0);
+            $skinCmd->setIsVisible(0);
+            $skinCmd->setTemplate('dashboard', 'zendure::' . $conf[1]);
+            $skinCmd->setTemplate('mobile', 'core::default');
+            $skinCmd->setDisplay('parameters', $parameters);
+            $skinCmd->save();
+        }
     }
 
     /**

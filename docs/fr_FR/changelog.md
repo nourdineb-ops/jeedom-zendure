@@ -1,5 +1,10 @@
 # Changelog — plugin Zendure
 
+## À venir
+
+- Trois styles « bulles » (A, B, C) du widget Flux, utilisables sur les pages Design,
+  sans effet sur le widget Flux du dashboard.
+
 ## 0.1.0-beta
 
 Première version publiée.

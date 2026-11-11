@@ -325,6 +325,11 @@ sont configurées, sinon la logique retombe sur un mode dégradé — voir
   - **Flux** : losange animé Solaire/Réseau/Maison/Batterie, jauge d'intensité,
     Tempo J/J+1, indicateurs financiers et curseurs de pilotage (limite de sortie
     AC, SOC minimum).
+  - **Flux · bulles A / B / C** : trois habillages du widget Flux pour les pages
+    **Design** (fond sombre, couleurs unies). Ce sont trois commandes masquées du
+    dashboard (« Flux · bulles A (recoloré) », « B (anneau) », « C (compact) »),
+    à placer sur un Design comme n'importe quelle commande. Elles affichent le
+    losange et le gain du jour ; le widget Flux du dashboard reste inchangé.
   - **Résumé** : digest du jour en gros chiffres (gain aujourd'hui/veille,
     répartition solaire/batterie, dépense jour/veille, SOC) — pas des courbes.
     Pour ça, la page **Analyse** native de Jeedom (Outils → Analyse →
