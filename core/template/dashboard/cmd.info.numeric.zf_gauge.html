@@ -44,13 +44,13 @@ remplit et change de couleur (vert, orange à partir de 70 % de l'intensité
 maximale, rouge à partir de 90 % -- mêmes défauts que seuil_intensite_ambre /
 seuil_intensite_rouge et que les zones de l'ancien arc), le chiffre en grand
 et « sur N A ». Plus d'aiguille, de marge ni de libellé. Taille fixée ici
-(96 x 106) : sur une page Design le cœur n'applique ni largeur ni hauteur à
+(96 x 82, hauteur réduite le 11/11 : le rectangle de 106 était jugé trop haut) : sur une page Design le cœur n'applique ni largeur ni hauteur à
 un élément de type cmd. Pas de `gap` (vieux WebView de la tablette), JS ES5.
 -->
 <div class="cmd cmd-widget zf-mini-gauge" data-type="info" data-subtype="numeric" data-template="zf_gauge" data-cmd_id="#id#" data-cmd_uid="#uid#" data-version="#version#" data-eqLogic_id="#eqLogic_id#" id="zf-gauge-#id#">
 <style>
 .zf-mini-gauge {
-    box-sizing: border-box; width: 96px; height: 106px; padding: 0; margin: 0;
+    box-sizing: border-box; width: 96px; height: 82px; padding: 0; margin: 0;
     display: flex; flex-direction: column; align-items: center; justify-content: center;
     background: rgba(17, 24, 39, 0.9); border: 1.5px solid rgba(255, 255, 255, 0.22); border-radius: 12px;
     color: #F9FAFB; font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -60,7 +60,7 @@ un élément de type cmd. Pas de `gap` (vieux WebView de la tablette), JS ES5.
 .zf-mini-gauge svg { display: block; width: 84px; height: 48px; flex: 0 0 auto; }
 .zf-mini-gauge-value { margin-top: -22px; font-size: 22px; font-weight: 700; color: #F9FAFB; }
 .zf-mini-gauge-value .zf-mini-gauge-unit { font-size: 13px; font-weight: 600; opacity: 0.75; margin-left: 2px; }
-.zf-mini-gauge-label { margin-top: 5px; font-size: 11px; color: #9CA3AF; }
+.zf-mini-gauge-label { margin-top: 4px; font-size: 11px; color: #9CA3AF; }
 </style>
     <svg viewBox="0 0 84 48" aria-hidden="true">
         <path d="M8,44 A34,34 0 0 1 76,44" fill="none" stroke="rgba(255,255,255,0.14)" stroke-width="7" stroke-linecap="round" />
