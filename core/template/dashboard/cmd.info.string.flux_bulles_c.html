@@ -271,12 +271,14 @@ fichier reste correct si on le replace un jour en `type=cmd`.
    répercuter les évolutions de flux_widget.html. */
 
 .zendure-flux.zf-skin-c{padding:0;max-width:none;width:100%;box-sizing:border-box;font-family:-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:#F3F4F6}
-/* Page Design : Jeedom n'applique pas width/height aux cmd, largeur fixe (280px) */
-.zendure-flux.zf-skin-c.zf-design-context{width:280px}
+/* Page Design : Jeedom n'applique pas width/height aux cmd, largeur fixe (216px) */
+.zendure-flux.zf-skin-c.zf-design-context{width:216px}
 .zendure-flux.zf-skin-c .zf-badge-tarif{display:none!important}
 .zendure-flux.zf-skin-c .zf-header{position:absolute;top:4px;right:6px;z-index:5;margin:0}
-.zendure-flux.zf-skin-c .zf-diagram{height:242px}
-@supports (aspect-ratio: 400 / 320){.zendure-flux.zf-skin-c .zf-diagram{height:auto}}
+.zendure-flux.zf-skin-c .zf-diagram{aspect-ratio:auto;height:236px}
+/* Marges resserrées autour des bulles : noeuds repoussés vers les bords (positions en % de 244x236) */
+.zendure-flux.zf-skin-c .zf-top{left:50%;top:16.1%}.zendure-flux.zf-skin-c .zf-left{left:18.85%;top:50%}
+.zendure-flux.zf-skin-c .zf-right{left:81.15%;top:50%}.zendure-flux.zf-skin-c .zf-bottom{left:50%;top:83.9%}
 .zendure-flux.zf-skin-c .zf-diagram-card{background:transparent;border:0;max-width:none}
 .zendure-flux.zf-skin-c .zf-row2,.zendure-flux.zf-skin-c .zf-pilotage{display:none!important}
 .zendure-flux.zf-skin-c .zf-lastseen{display:none}
@@ -293,8 +295,9 @@ fichier reste correct si on le replace un jour en `type=cmd`.
 .zendure-flux.zf-skin-c .zf-label{color:rgba(243,244,246,.7)}
 .zendure-flux.zf-skin-c .zf-row3{display:none!important}
 
-.zendure-flux.zf-skin-c .zf-diagram{aspect-ratio:auto;height:196px}
-@supports (aspect-ratio: 400 / 320){.zendure-flux.zf-skin-c .zf-diagram{height:196px}}
+.zendure-flux.zf-skin-c .zf-diagram{aspect-ratio:auto;height:172px}
+.zendure-flux.zf-skin-c .zf-top{left:50%;top:17.4%}.zendure-flux.zf-skin-c .zf-left{left:16.7%;top:50%}
+.zendure-flux.zf-skin-c .zf-right{left:83.3%;top:50%}.zendure-flux.zf-skin-c .zf-bottom{left:50%;top:82.6%}
 .zendure-flux.zf-skin-c .zf-node{width:64px;height:56px;border-radius:12px;background:rgba(17,24,39,.9);border:1px solid rgba(255,255,255,.22)}
 .zendure-flux.zf-skin-c .zf-node-lg{width:64px;height:56px}
 .zendure-flux.zf-skin-c .zf-node i{font-size:11px}
