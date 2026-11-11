@@ -304,6 +304,12 @@ fichier reste correct si on le replace un jour en `type=cmd`.
 .zendure-flux.zf-skin-b .zf-node i{font-size:11px}
 .zendure-flux.zf-skin-b .zf-value{font-size:14px;font-weight:700}
 .zendure-flux.zf-skin-b .zf-value-sm{font-size:10.5px}
+/* Lisibilité sur la tablette (11/11/2026) : la flèche du réseau passe à côté de l'icône, pour que
+   « 3081 W » (et jusqu'à cinq chiffres) tienne dans le cercle ; libellés et puissance batterie agrandis. */
+.zendure-flux.zf-skin-b .zf-left [id^="zf-gridArrow-"]{position:absolute;top:9px;left:50%;margin-left:7px;font-size:12px;line-height:12px}
+.zendure-flux.zf-skin-b .zf-left>i{margin-right:12px}
+.zendure-flux.zf-skin-b .zf-label{font-size:10px}
+.zendure-flux.zf-skin-b .zf-value-sm{font-size:11px}
 
 </style>
     <div class="zf-header">
